@@ -113,7 +113,7 @@ export class MobManager {
       facing: rand(0, TAU), atkT: rand(0.3, 1), wind: 0, windKind: null, rangedT: rand(0.5, 2),
       slowT: 0, slow: 0, rootT: 0, burnT: 0, burnDps: 0, burnTick: 0, flash: 0, spawnT: 0,
       dead: false, deathT: 0, phase: rand(0, TAU), zoneSlow: 0, fear: false, armor: o.def.armor ?? 0,
-      height: 1.8 * (o.scale ?? 1),
+      height: (o.def.h ?? 1.8) * (o.scale ?? 1),
     };
     this.list.push(m);
     return m;
@@ -271,7 +271,8 @@ export class MobManager {
         m.wind -= dt;
         if (m.wind <= 0) {
           if (m.windKind === 'melee') {
-            if (Math.hypot(p.x - m.x, p.z - m.z) <= touch + (m.def.reach ?? 0.5) + 0.4) run.hurtPlayer(m.dmg, m);
+            // short mobs can't reach you on top of a car; fliers and grown-ups can reach a bit up
+            if (Math.hypot(p.x - m.x, p.z - m.z) <= touch + (m.def.reach ?? 0.5) + 0.4 && p.y <= m.height * 0.85 + (m.def.fly ?? 0)) run.hurtPlayer(m.dmg, m);
           } else if (m.windKind === 'ranged') {
             this.fireRanged(m);
           }
@@ -318,7 +319,7 @@ export class MobManager {
       const dx = m.x - p.x, dz = m.z - p.z;
       const d = Math.hypot(dx, dz) || 0.01;
       const min = m.radius + p.radius;
-      if (d < min) {
+      if (d < min && p.y < m.height * 0.7) {
         m.x = p.x + (dx / d) * min;
         m.z = p.z + (dz / d) * min;
       }

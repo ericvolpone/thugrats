@@ -250,3 +250,31 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .roster-mini button { width: 30px; height: 30px; font-size: 15px; }
   #boss-bars { width: 44vw; }
 }
+
+#jump-btn { position: fixed; right: calc(18px + var(--sar)); bottom: calc(86px + var(--sab)); width: 76px; height: 76px; border-radius: 50%; z-index: 21;
+  border: 2px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.35); color: #fff; font: 15px 'Lilita One'; letter-spacing: 0.05em; touch-action: none; display: none; }
+#jump-btn.on { background: rgba(242,192,55,0.5); }
+body.touch #jump-btn:not(.hidden) { display: block; }
+#cam-hint { position: absolute; left: 50%; bottom: calc(64px + var(--sab)); transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.55); white-space: nowrap; }
+
+.rep-chip { background: rgba(0,0,0,0.45); border: 1px solid rgba(242,192,55,0.4); color: var(--gold); border-radius: 999px; padding: 6px 14px; font: 16px 'Lilita One'; white-space: nowrap; }
+.rep-group { color: var(--muted); font-size: 15px; margin: 14px 0 8px; }
+.rep-row { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.03); }
+.rep-row.locked { opacity: 0.5; }
+.rep-row .ic { font-size: 24px; width: 30px; text-align: center; flex: none; }
+.rep-row .tx { flex: 1; min-width: 0; }
+.rep-row .ds { font-size: 12px; color: var(--muted); }
+.rep-row .ds.nx { opacity: 0.75; }
+.rep-row .btn { flex: none; min-width: 60px; padding: 6px 10px; font-size: 14px; }
+.rep-row .tx b { font-size: 14px; }
+.pips { display: flex; gap: 3px; margin: 4px 0; }
+.pips i { width: 14px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.12); }
+.pips i.on { background: var(--gold); }
+@media (max-width: 640px) { .rep-chip { font-size: 13px; padding: 4px 10px; } .tabs button { font-size: 13px; } }
+
+/* controller focus */
+button:focus { outline: none; }
+body.padnav button:focus, body.padnav [data-nav]:focus { outline: 3px solid var(--gold); outline-offset: 2px; box-shadow: 0 0 18px rgba(242,192,55,0.55); }
+body.padnav .card:focus { transform: translateY(-4px); }
+.pad-hint { display: none; color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
+body.padnav .pad-hint { display: block; }

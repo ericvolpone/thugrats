@@ -6,6 +6,7 @@ import { MAPS, DIFFICULTIES } from '../data/maps.js';
 import { TIERS, tierColor } from '../data/tiers.js';
 import { Save, heroXpToNext, HERO_MAX_LEVEL } from '../save.js';
 import { BOSSES } from '../data/mobs.js';
+import { ACCOUNT_UPGRADES } from '../data/account.js';
 import { paint, C, el } from '../util.js';
 import { sfx } from '../audio.js';
 
@@ -114,7 +115,7 @@ export class HomeScreen {
     const pts = Save.talentPoints(h.id);
     const xpNext = heroXpToNext(prof.level);
     this.root.innerHTML = '';
-    const title = el('div', 'home-title', `<h1>THUGRATS</h1><div class="sub">the hideout</div><div class="spacer"></div>`);
+    const title = el('div', 'home-title', `<h1>THUGRATS</h1><div class="sub">the hideout</div><div class="spacer"></div><div class="rep-chip" title="Rep — account-wide, earned by every run">🤝 ${Save.rep} Rep</div>`);
     const mini = el('div', 'roster-mini');
     for (const hh of HEROES) {
       const b = el('button', `${hh.id === this.heroId ? 'sel' : ''} ${hh.locked ? 'locked' : ''}`, hh.locked ? '🔒' : '👶');
@@ -146,7 +147,7 @@ export class HomeScreen {
     // side tabs
     const side = el('div', 'side');
     const tabs = el('div', 'tabs');
-    for (const [id, label] of [['play', 'Play'], ['talents', 'Talents'], ['gear', 'Gear'], ['kit', 'Kit']]) {
+    for (const [id, label] of [['play', 'Play'], ['talents', 'Talents'], ['gear', 'Gear'], ['kit', 'Kit'], ['rep', 'Rep']]) {
       const b = el('button', this.tab === id ? 'on' : '', label + (id === 'talents' && pts.free > 0 ? `<span class="badge">${pts.free}</span>` : ''));
       b.onclick = () => { sfx('click'); this.tab = id; this.render(); };
       tabs.appendChild(b);
@@ -154,11 +155,13 @@ export class HomeScreen {
     side.appendChild(tabs);
     const body = el('div', 'tab-body');
     side.appendChild(body);
+    side.appendChild(el('div', 'pad-hint', 'Ⓐ select · LB / RB switch tabs · D-pad / stick to move'));
     this.root.appendChild(side);
     if (this.tab === 'play') this.renderPlay(body, h);
     if (this.tab === 'talents') this.renderTalents(body, h);
     if (this.tab === 'gear') this.renderGear(body, h);
     if (this.tab === 'kit') this.renderKit(body, h);
+    if (this.tab === 'rep') this.renderRep(body);
     requestAnimationFrame(() => this.resize(innerWidth / innerHeight));
   }
 
@@ -280,6 +283,34 @@ export class HomeScreen {
         <div><div class="nm" style="color:${t >= 0 ? tierColor(t) : 'inherit'}">${g.slot}: ${g.name} ${t >= 0 ? `(${TIERS[t].name})` : ''}</div>
         <div class="ds">${t >= 0 ? g.desc(t) : `Clear ${map.name} to earn it.`}</div>
         ${t >= 0 && t < 4 ? `<div class="ds" style="opacity:0.7">Next: ${g.desc(t + 1)}</div>` : ''}</div>`;
+      body.appendChild(row);
+    }
+  }
+
+  renderRep(body) {
+    body.appendChild(el('div', 'note', `<b style="color:var(--gold);font-size:15px">🤝 ${Save.rep} Rep</b> · Rep is shared by your whole crew. Every run earns some (more for time survived, bosses, titans, clears and harder difficulties).`));
+    let group = null;
+    for (const u of ACCOUNT_UPGRADES) {
+      if (u.group !== group) {
+        group = u.group;
+        body.appendChild(el('h3', 'rep-group', group === 'Pet' ? '🐾 Companion' : '📈 Run Boosts'));
+      }
+      const lvl = Save.acct(u.id);
+      const maxed = lvl >= u.max;
+      const locked = u.requires && !Save.acct(u.requires);
+      const cost = maxed ? 0 : u.cost(lvl);
+      const row = el('div', `rep-row ${locked ? 'locked' : ''}`);
+      const pips = u.max > 1 ? `<div class="pips">${Array.from({ length: u.max }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>` : '';
+      row.innerHTML = `<div class="ic">${u.icon}</div><div class="tx"><b>${u.name}</b>${pips}
+        <div class="ds">${lvl > 0 ? (u.max > 1 ? `Now: ${u.desc(lvl)}` : u.desc(lvl)) : u.desc(u.max > 1 ? 1 : 0)}</div>
+        ${!maxed && lvl > 0 ? `<div class="ds nx">Next: ${u.desc(lvl + 1)}</div>` : ''}
+        ${locked ? '<div class="ds nx">Adopt Biscuit first</div>' : ''}</div>`;
+      const b = el('button', 'btn small', maxed ? 'MAX' : `${cost} 🤝`);
+      b.disabled = maxed || locked || Save.rep < cost;
+      b.onclick = () => {
+        if (Save.buyAcct(u)) { sfx('levelup'); this.render(); }
+      };
+      row.appendChild(b);
       body.appendChild(row);
     }
   }

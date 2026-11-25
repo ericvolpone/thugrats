@@ -188,4 +188,12 @@ registerMob('the_king', () => adult({ shirt: '#f4f4f4', pants: '#f4f4f4', hat: '
 registerMob('big_lou', () => adult({ shirt: '#3a0d0d', pants: '#1a1a1a', tie: '#f2c94c', hat: 'fedora', hatColor: '#f4f4f4', belly: true, girth: 1.7, mustache: true, prop: 'cards' }));
 registerMob('dealer_supreme', () => adult({ shirt: '#f4f4f4', vest: '#0d3a1a', pants: '#111', tie: '#c9a227', hair: '#ddd', collar: '#0d3a1a', prop: 'cards', girth: 1.2 }));
 
+// ── Pets ─────────────────────────────────────────────────────
+registerMob('pet_bulldog', () => {
+  const g = quadruped({ fur: '#c9a27a', belly: '#f1e3cf', ear: '#8a6a4a', size: 0.85, ears: 0.1 });
+  const collar = paint(new THREE.TorusGeometry(0.17, 0.035, 4, 10).rotateY(Math.PI / 2).rotateZ(Math.PI / 2).translate(0, 0.48 * 0.85, 0.3 * 0.85), C('#d6262a'));
+  const tag = paint(new THREE.CylinderGeometry(0.04, 0.04, 0.02, 6).rotateX(Math.PI / 2).translate(0, 0.33 * 0.85, 0.42 * 0.85), C('#f2c037'));
+  return merge([g, collar, tag]);
+});
+
 export { adult, quadruped, bird, at };

@@ -8,8 +8,11 @@ import { Input } from './input.js';
 import { Run } from './game/run.js';
 import { Hud } from './ui/hud.js';
 import { HomeScreen } from './ui/home.js';
+import { PadNav } from './ui/padnav.js';
 import { Save } from './save.js';
 import { IS_TOUCH, LITE } from './device.js';
+
+document.body.classList.toggle('touch', IS_TOUCH);
 
 const renderer = new THREE.WebGLRenderer({ antialias: !LITE, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, LITE ? 1.5 : 2));
@@ -71,6 +74,12 @@ function goHome() {
 let active = 'home';
 home.show();
 
+const padNav = new PadNav({
+  input,
+  onPause: () => { if (active === 'run' && run && !run.ended && !run.choice) hud.togglePause(); },
+  onBack: (layer) => { if (layer === 'pause') hud.togglePause(false); },
+});
+
 function resize() {
   if (!innerWidth || !innerHeight) return;
   renderer.setSize(innerWidth, innerHeight);
@@ -91,6 +100,7 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
   const dt = Math.min(0.05, (now - prev) / 1000);
   prev = now;
+  padNav.update(dt, active === 'run');
   if (active === 'run' && run) {
     run.update(busy ? 0 : dt);
     hud.update(dt);

@@ -15,8 +15,19 @@ npm install
 npm run dev
 ```
 
-Move with **WASD / arrows**, a gamepad stick, or drag anywhere on a touchscreen.
-Abilities fire on their own. **1/2/3** pick cards, **R** rerolls, **Esc** pauses.
+Abilities fire on their own; you move, turn the camera and jump.
+
+| | Keyboard / mouse | Gamepad | Touch |
+| --- | --- | --- | --- |
+| Move | WASD / arrows | left stick | drag on the left part of the screen |
+| Turn camera | Q / E, or drag the mouse | right stick | drag on the right part |
+| Jump | Space | A | JUMP button |
+| Menus & cards | click, 1/2/3, R reroll | D-pad/stick + A, X reroll, B back, LB/RB tabs | tap |
+| Pause | Esc / P | Start | ❚❚ |
+
+Jumping clears ground telegraphs and enemy shots if timed right, and lands you on
+cars, dumpsters, crates, benches and slot machines. Rats and dogs can't reach you up
+there; grown-ups and birds still can. Buildings and shipping containers are too tall.
 
 ## The loop
 
@@ -36,6 +47,10 @@ Abilities fire on their own. **1/2/3** pick cards, **R** rerolls, **Esc** pauses
   conditions are met (reach level X, bribe N gold, kill bosses, kill the other
   titans). Killing the **final titan** clears the map.
 - At **12:00 the Feds arrive**: everything gets nastier every second.
+- **Rep (account-wide):** every run earns Rep (time survived, bosses, titans, clears,
+  difficulty). Spend it in the hideout's **Rep** tab: adopt **Biscuit the Bulldog**,
+  who fetches gems and gold far outside your pickup range (upgrade his leash and
+  speed), and buy up to +50% run XP, +50% run gold and +20% move speed.
 - **After the run:** hero XP → hero levels → talent points. Clearing a map gives that
   map's **gear** for the hero, upgraded one tier per clear, capped by difficulty
   (Normal: green, Hard: purple, Nightmare: orange).

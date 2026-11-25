@@ -143,7 +143,7 @@ export class Combat {
       b.x += b.vx * dt;
       b.z += b.vz * dt;
       b.left -= step;
-      let dead = b.left <= 0 || run.world.solidAt(b.x, b.z);
+      let dead = b.left <= 0 || run.world.solidAt(b.x, b.z, 0, b.y);
       if (!dead) {
         const r = 0.25 * b.size;
         mobs.each(b.x, b.z, r, (m) => {
@@ -191,8 +191,9 @@ export class Combat {
       s.x += s.vx * dt;
       s.z += s.vz * dt;
       s.life -= dt;
-      let dead = s.life <= 0 || run.world.solidAt(s.x, s.z);
-      if (!dead && Math.hypot(s.x - p.x, s.z - p.z) < p.radius + s.size) {
+      let dead = s.life <= 0 || run.world.solidAt(s.x, s.z, 0, s.y);
+      // vertical overlap: jump over shots, but standing on a car doesn't make you safe
+      if (!dead && Math.abs(s.y - (p.y + 0.6)) < 1.1 + s.size && Math.hypot(s.x - p.x, s.z - p.z) < p.radius + s.size) {
         run.hurtPlayer(s.dmg, s.src);
         dead = true;
       }

@@ -17,6 +17,10 @@ export function buildLoadout(hero) {
     flag: (k, v) => { flags[k] = v; },
     flagAdd: (k, v) => { flags[k] = (flags[k] ?? 0) + v; },
   };
+  // account-wide Rep upgrades
+  stats.xpGain += Save.acct('run_xp') * 0.05;
+  stats.goldGain += Save.acct('run_gold') * 0.05;
+  stats.speedPct += Save.acct('move_speed') * 0.02;
   const prof = Save.hero(hero.id);
   for (const t of hero.talents ?? []) {
     const r = prof.talents[t.id] ?? 0;

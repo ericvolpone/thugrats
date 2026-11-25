@@ -51,6 +51,7 @@
     <div id="dmg-layer"></div>
     <div id="touch-zone" class="hidden"></div>
     <div id="stick"><div class="knob"></div></div>
+    <button id="jump-btn" class="hidden" aria-label="Jump">JUMP</button>
 
     <div id="choice" class="hidden overlay">
       <div class="panel wide">
@@ -61,6 +62,7 @@
           <button id="choice-reroll" class="btn ghost">🎲 Reroll</button>
           <button id="choice-skip" class="btn ghost">Skip</button>
         </div>
+        <div class="pad-hint">Ⓐ pick · Ⓧ reroll · D-pad / stick to move</div>
       </div>
     </div>
 
@@ -68,6 +70,7 @@
       <div class="panel wide">
         <h2>Paused</h2>
         <div id="pause-build"></div>
+        <p class="note" style="text-align:center">Move: WASD / left stick / drag left side · Turn camera: Q E / right stick / drag · Jump: Space / Ⓐ / JUMP button</p>
         <div class="row">
           <button class="btn" data-act="resume">Resume</button>
           <button class="btn ghost" data-act="quit">Abandon Run</button>

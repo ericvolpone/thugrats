@@ -4,6 +4,8 @@ import { Player } from './player.js';
 import { MobManager } from './mobs.js';
 import { Combat } from './combat.js';
 import { Pickups } from './pickups.js';
+import { Pet } from './pet.js';
+import { repForRun } from '../data/account.js';
 import { FX } from './fx.js';
 import { Telegraphs } from './telegraphs.js';
 import { buildLoadout, computeStats, AbilityInst } from './stats.js';
@@ -41,6 +43,8 @@ export class Run {
     this.scene.add(sun);
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 200);
     this.camDist = 1;
+    this.camYaw = 0; // 0 = looking north (−Z)
+    this.camY = 0;
     this.shakeAmt = 0;
 
     // state
@@ -78,6 +82,7 @@ export class Run {
     this.mobs.prepare(map.roster.map((r) => r.mob));
     this.combat = new Combat(this);
     this.pickups = new Pickups(this);
+    this.pet = Save.acct('pet') ? new Pet(this) : null;
     this.stats = computeStats(this);
     this.player.hp = this.stats.maxHp;
     this.gold = this.stats.startGold;
@@ -521,7 +526,12 @@ export class Run {
       }
     }
 
-    p.update(dt, p.dead ? { x: 0, y: 0 } : this.input.move());
+    // camera-relative movement: forward = away from the camera
+    this.camYaw += this.input.turn(dt);
+    const mv = p.dead ? { x: 0, y: 0 } : this.input.move();
+    const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
+    p.update(dt, { x: mv.x * cy - mv.y * sy, z: -mv.x * sy - mv.y * cy }, !p.dead && this.input.jump());
+    this.pet?.update(dt);
 
     // buffs
     const fr = this.buffs.frenzy;
@@ -562,8 +572,12 @@ export class Run {
     const k = this.camDist;
     this.shakeAmt = Math.max(0, this.shakeAmt - dt * 1.5);
     const s = this.shakeAmt;
-    this.camera.position.set(p.x + rand(-s, s), 14 * k, p.z + 12.5 * k + rand(-s, s));
-    this.camera.lookAt(p.x, 0.8, p.z - 1.5);
+    // follow the surface you're standing on, not every bit of jump height
+    this.camY += ((p.ground + Math.max(0, p.y - p.ground) * 0.3) - this.camY) * Math.min(1, dt * 6);
+    const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
+    const D = 12.5 * k;
+    this.camera.position.set(p.x + sy * D + rand(-s, s), 14 * k + this.camY, p.z + cy * D + rand(-s, s));
+    this.camera.lookAt(p.x - sy * 1.5, 0.8 + this.camY, p.z - cy * 1.5);
   }
 
   resize(aspect) {
@@ -595,7 +609,9 @@ export class Run {
         gear = { def: gdef, from: cur, to: Math.max(cur, next), capped: next <= cur };
       }
     }
-    this.result = { victory, heroXp, levels, before, after: before + levels, gear, time: this.time, kills: this.kills, level: this.level, gold: Math.round(this.goldTotal), dmgBy: this.dmgBy };
+    const rep = repForRun({ minutes: mins, bossKills: this.bossKills, titanKills: this.titanKills, victory, diffIndex: this.diffIndex });
+    Save.addRep(rep);
+    this.result = { victory, rep, heroXp, levels, before, after: before + levels, gear, time: this.time, kills: this.kills, level: this.level, gold: Math.round(this.goldTotal), dmgBy: this.dmgBy };
     this.ui.showEnd(this.result, this);
   }
 
@@ -606,6 +622,7 @@ export class Run {
     this.fx.dispose();
     this.telegraphs.dispose();
     this.player.dispose();
+    this.pet?.dispose();
     this.world.dispose();
   }
 }

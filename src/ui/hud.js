@@ -209,59 +209,65 @@ export class Hud {
       }
       this.mmBase = c;
     }
+    // the map turns with the camera so "up" on the minimap = forward on screen
+    const yaw = r.camYaw, cs = Math.cos(yaw), sn = Math.sin(yaw), C0 = W / 2;
+    const P = (x, z) => {
+      const dx = X(x) - C0, dz = Z(z) - C0;
+      return [C0 + dx * cs - dz * sn, C0 + dx * sn + dz * cs];
+    };
     ctx.clearRect(0, 0, W, W);
-    ctx.drawImage(this.mmBase, 0, 0);
+    ctx.save();
+    ctx.translate(C0, C0);
+    ctx.rotate(yaw);
+    ctx.drawImage(this.mmBase, -C0, -C0);
+    ctx.restore();
     const t = r.time;
-    // mobs
+    const dot = (x, z, rad, fill) => {
+      const [px, pz] = P(x, z);
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(px, pz, rad, 0, Math.PI * 2);
+      ctx.fill();
+      return [px, pz];
+    };
     ctx.fillStyle = 'rgba(255,80,80,0.75)';
     for (const m of r.mobs.list) {
       if (m.dead || m.tier > 0) continue;
-      ctx.fillRect(X(m.x) - 1, Z(m.z) - 1, 2.5, 2.5);
+      const [px, pz] = P(m.x, m.z);
+      ctx.fillRect(px - 1, pz - 1, 2.5, 2.5);
     }
     for (const m of r.mobs.list) {
       if (m.dead || m.tier === 0) continue;
-      ctx.fillStyle = m.tier === 1 ? '#ffd23f' : m.tier === 2 ? '#ff3030' : '#ff4fd8';
-      const s = m.tier === 1 ? 3 : 6;
-      ctx.beginPath();
-      ctx.arc(X(m.x), Z(m.z), s, 0, Math.PI * 2);
-      ctx.fill();
+      dot(m.x, m.z, m.tier === 1 ? 3 : 6, m.tier === 1 ? '#ffd23f' : m.tier === 2 ? '#ff3030' : '#ff4fd8');
     }
-    // chests
     for (const c of r.pickups.chests) {
+      const [px, pz] = P(c.x, c.z);
       ctx.fillStyle = '#f2c037';
-      ctx.fillRect(X(c.x) - 4, Z(c.z) - 4, 8, 8);
+      ctx.fillRect(px - 4, pz - 4, 8, 8);
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 1;
-      ctx.strokeRect(X(c.x) - 4, Z(c.z) - 4, 8, 8);
+      ctx.strokeRect(px - 4, pz - 4, 8, 8);
     }
-    // titans
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const ti of r.titans) {
-      const x = X(ti.pos[0]), z = Z(ti.pos[1]);
-      ctx.fillStyle = ti.state === 'ready' ? `rgba(255,210,63,${0.6 + Math.sin(t * 5) * 0.4})` : ti.state === 'dead' ? '#555' : ti.state === 'active' ? '#ff4fd8' : '#8a5ac8';
-      ctx.beginPath();
-      ctx.arc(x, z, 9, 0, Math.PI * 2);
-      ctx.fill();
+      const col = ti.state === 'ready' ? `rgba(255,210,63,${0.6 + Math.sin(t * 5) * 0.4})` : ti.state === 'dead' ? '#555' : ti.state === 'active' ? '#ff4fd8' : '#8a5ac8';
+      const [px, pz] = dot(ti.pos[0], ti.pos[1], 9, col);
       ctx.fillStyle = '#000';
-      ctx.fillText(ti.state === 'dead' ? '✕' : 'T', x, z + 1);
+      ctx.fillText(ti.state === 'dead' ? '✕' : 'T', px, pz + 1);
     }
-    // boss incoming
     if (r.bossWarn) {
-      const left = Math.ceil(r.bossWarn.at - t);
-      ctx.fillStyle = `rgba(255,48,48,${0.6 + Math.sin(t * 8) * 0.4})`;
-      ctx.beginPath();
-      ctx.arc(X(r.bossWarn.x), Z(r.bossWarn.z), 10, 0, Math.PI * 2);
-      ctx.fill();
+      const [px, pz] = dot(r.bossWarn.x, r.bossWarn.z, 10, `rgba(255,48,48,${0.6 + Math.sin(t * 8) * 0.4})`);
       ctx.fillStyle = '#fff';
-      ctx.fillText(String(left), X(r.bossWarn.x), Z(r.bossWarn.z) + 1);
+      ctx.fillText(String(Math.ceil(r.bossWarn.at - t)), px, pz + 1);
     }
-    // player
+    if (r.pet) dot(r.pet.x, r.pet.z, 3, '#c9a27a');
     const p = r.player;
+    const [px, pz] = P(p.x, p.z);
     ctx.save();
-    ctx.translate(X(p.x), Z(p.z));
-    ctx.rotate(-p.facing + Math.PI);
+    ctx.translate(px, pz);
+    ctx.rotate(-p.facing + Math.PI + yaw);
     ctx.fillStyle = '#fff';
     ctx.beginPath();
     ctx.moveTo(0, -8);
@@ -270,9 +276,6 @@ export class Hud {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
-    // view box
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.strokeRect(X(p.x - 22), Z(p.z - 16), 44 * k, 32 * k);
   }
 
   // ── choice cards ───────────────────────
@@ -353,9 +356,10 @@ export class Hud {
       <p style="color:var(--muted);margin:0">${res.victory ? `${run.map.name} (${run.diff.name}) belongs to the family now.` : 'Lenny got put in time-out. The family remembers.'}</p></div>
       <div class="end-sum"><div>${fmtTime(res.time)}<span>time</span></div><div>${fmtNum(res.kills)}<span>kills</span></div><div>${res.level}<span>level</span></div><div>${fmtNum(res.gold)}<span>gold</span></div><div>${run.titanKills}/${run.titans.length}<span>titans</span></div></div>
       <div class="reward">⭐ +${res.heroXp} hero XP${lvl}</div>
+      <div class="reward">🤝 +${res.rep} Rep <span style="color:var(--muted);font-size:13px">(account-wide — spend it in the hideout's Rep tab)</span></div>
       ${gear}
       <h3 style="color:var(--gold);margin:12px 0 6px;font-size:16px">Damage by ability</h3>${dmgRows || '<div class="note">No damage dealt.</div>'}
-      <div class="row"><button class="btn" id="end-home">Back to the Hideout</button><button class="btn ghost" id="end-retry">Run it back</button></div>`;
+      <div class="row"><button class="btn" id="end-home" data-default>Back to the Hideout</button><button class="btn ghost" id="end-retry">Run it back</button></div>`;
     this.$('end').classList.remove('hidden');
     this.$('end-home').onclick = () => { sfx('click'); this.cb.onHome(); };
     this.$('end-retry').onclick = () => { sfx('click'); this.cb.onRetry(); };

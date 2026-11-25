@@ -50,7 +50,7 @@ export class World {
     const addBuilding = (x, z, w, d, h, seed) => {
       const col = th.buildings[Math.floor(rnd() * th.buildings.length)];
       bparts.push(PROPS.building(w, d, h, col, seed, windows).translate(x, 0, z));
-      this.rects.push({ x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 });
+      this.rects.push({ x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2, h: 99 });
     };
     // perimeter wall of buildings
     const B = this.half + 6;
@@ -71,14 +71,16 @@ export class World {
         const w = 8 + rnd() * 8, d = 8 + rnd() * 8;
         const x = bx + (rnd() - 0.5) * 10, z = bz + (rnd() - 0.5) * 10;
         if (!clear(x, z, Math.max(w, d) * 0.7)) continue;
-        addBuilding(x, z, w, d, 5 + rnd() * 8, seed++);
+        addBuilding(x, z, w, d, 4 + rnd() * 4, seed++);
       }
     }
     this.group.add(new THREE.Mesh(mergeGeometries(bparts), MATS.flat));
 
     // ── props ──
     const pparts = [];
-    const colliding = { dumpster: [1.2, 0.8], car: [1.1, 2.2], container: [1.6, 3.8], crate: [0.6, 0.6], barrel: [0.45, 0.45], slot: [0.6, 0.55], bench: [1, 0.3] };
+    // [half-width, half-depth, top height] — anything under ~2.1m can be jumped onto
+    const colliding = { dumpster: [1.2, 0.8, 1.4], car: [1.1, 2.2, 1.45], container: [1.6, 3.8, 3], crate: [0.6, 0.6, 1], barrel: [0.45, 0.45, 1.1], slot: [0.6, 0.55, 1.8], bench: [1, 0.3, 0.6] };
+    const thin = { lamp: 4.2, hydrant: 0.85, palm: 4.5, trashcan: 1, bollard: 0.85 };
     for (let i = 0; i < 140; i++) {
       const kind = th.props[Math.floor(rnd() * th.props.length)];
       const x = (rnd() * 2 - 1) * (this.half - 6), z = (rnd() * 2 - 1) * (this.half - 6);
@@ -92,10 +94,10 @@ export class World {
       const c = colliding[kind];
       if (c) {
         const [hw, hd] = rot % Math.PI ? [c[1], c[0]] : c;
-        if (kind === 'car' || kind === 'container' || kind === 'dumpster') this.rects.push({ x0: x - hw, z0: z - hd, x1: x + hw, z1: z + hd });
-        else this.circles.push({ x, z, r: Math.max(hw, hd) });
-      } else if (kind === 'lamp' || kind === 'hydrant' || kind === 'palm' || kind === 'trashcan' || kind === 'bollard') {
-        this.circles.push({ x, z, r: 0.35 });
+        if (kind === 'car' || kind === 'container' || kind === 'dumpster' || kind === 'bench') this.rects.push({ x0: x - hw, z0: z - hd, x1: x + hw, z1: z + hd, h: c[2] });
+        else this.circles.push({ x, z, r: Math.max(hw, hd), h: c[2] });
+      } else if (thin[kind]) {
+        this.circles.push({ x, z, r: 0.35, h: thin[kind] });
       }
     }
     if (pparts.length) this.group.add(new THREE.Mesh(mergeGeometries(pparts), MATS.flat));
@@ -130,16 +132,37 @@ export class World {
   }
 
   /** Is (x,z) inside a building/large prop? pad grows the test. */
-  solidAt(x, z, pad = 0) {
+  solidAt(x, z, pad = 0, y = 0.7) {
     for (const r of this.rects) {
-      if (x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad) return true;
+      if (r.h > y && x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad) return true;
     }
     return false;
   }
 
-  /** Push a circle-bodied entity {x,z,radius} out of all colliders and the arena edge. */
-  collide(e, rad = e.radius) {
+  /**
+   * Height of the surface under (x, z) that something at height y can stand on
+   * (tops up to `step` above y count, so you can land on what you clear).
+   */
+  groundAt(x, z, y = 0, step = 0.25) {
+    let g = 0;
     for (const r of this.rects) {
+      if (r.h > y + step || r.h <= g) continue;
+      if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) g = r.h;
+    }
+    for (const c of this.circles) {
+      if (c.h > y + step || c.h <= g) continue;
+      if ((x - c.x) ** 2 + (z - c.z) ** 2 <= c.r * c.r) g = c.h;
+    }
+    return g;
+  }
+
+  /**
+   * Push a circle-bodied entity {x,z,radius} out of all colliders and the arena
+   * edge. Colliders whose top is below `y` are ignored (you're above them).
+   */
+  collide(e, rad = e.radius, y = 0) {
+    for (const r of this.rects) {
+      if (r.h <= y + 0.05) continue;
       if (e.x < r.x0 - rad || e.x > r.x1 + rad || e.z < r.z0 - rad || e.z > r.z1 + rad) continue;
       const cx = Math.max(r.x0, Math.min(e.x, r.x1));
       const cz = Math.max(r.z0, Math.min(e.z, r.z1));
@@ -156,6 +179,7 @@ export class World {
       }
     }
     for (const c of this.circles) {
+      if (c.h <= y + 0.05) continue;
       const dx = e.x - c.x, dz = e.z - c.z;
       const d = Math.hypot(dx, dz), m = c.r + rad;
       if (d < m && d > 0) { e.x = c.x + (dx / d) * m; e.z = c.z + (dz / d) * m; }

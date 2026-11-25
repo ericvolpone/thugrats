@@ -78,9 +78,9 @@ export class HeroAnimator {
       o.rotation.z = -sw * 0.08 * w + Math.sin(this.t * 0.7) * 0.04 * (1 - w);
       o.rotation.x = -0.1 * w + s.hurt * 0.3;
     });
-    set('legL', (o) => { o.rotation.x = sw * 0.8 * w; });
-    set('legR', (o) => { o.rotation.x = -sw * 0.8 * w; });
-    set('armL', (o, B) => { o.rotation.x = B.r.x - sw * 0.7 * w; o.rotation.z = B.r.z + 0.1; });
+    set('legL', (o) => { o.rotation.x = s.air ? -0.7 : sw * 0.8 * w; });
+    set('legR', (o) => { o.rotation.x = s.air ? 0.4 : -sw * 0.8 * w; });
+    set('armL', (o, B) => { o.rotation.x = B.r.x - sw * 0.7 * w; o.rotation.z = B.r.z + 0.1 + (s.air ? -0.9 : 0); });
 
     this.aimArm = damp(this.aimArm, s.aiming ? 1 : 0, 14, dt);
     set('armR', (o, B) => {

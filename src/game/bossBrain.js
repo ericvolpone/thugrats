@@ -26,7 +26,7 @@ export class BossBrain {
       const d = this.dash;
       d.left -= Math.hypot(d.vx, d.vz) * dt;
       const p = this.run.player;
-      if (!d.hit && Math.hypot(p.x - m.x, p.z - m.z) < m.radius + p.radius + 0.3) {
+      if (!d.hit && p.y < 1.8 && Math.hypot(p.x - m.x, p.z - m.z) < m.radius + p.radius + 0.3) {
         d.hit = true;
         this.run.hurtPlayer(d.dmg, m);
       }
@@ -52,7 +52,7 @@ export class BossBrain {
     const run = this.run;
     const t = run.telegraphs.add(shape, o, delay, (tt) => {
       const p = run.player;
-      if (run.telegraphs.constructor.contains(tt, p.x, p.z, p.radius * 0.6)) run.hurtPlayer(dmg, this.m);
+      if (p.y < 1.6 && run.telegraphs.constructor.contains(tt, p.x, p.z, p.radius * 0.6)) run.hurtPlayer(dmg, this.m);
       run.fx.telegraphPop(tt);
       after?.(tt);
     });

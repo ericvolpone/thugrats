@@ -7,21 +7,21 @@
  * (keep = distance the mob tries to hold) · radius: body size · xp · gold: drop chance
  */
 export const MOBS = {
-  rat: { name: 'Sewer Rat', model: 'rat', speed: 5.2, hp: 9, dmg: 4, atkCd: 0.9, reach: 0.4, radius: 0.45, xp: 1, gold: 0.08 },
+  rat: { name: 'Sewer Rat', h: 0.7, model: 'rat', speed: 5.2, hp: 9, dmg: 4, atkCd: 0.9, reach: 0.4, radius: 0.45, xp: 1, gold: 0.08 },
   mallcop: { name: 'Mall Cop', model: 'mallcop', speed: 3.4, hp: 26, dmg: 8, atkCd: 1.2, reach: 0.6, radius: 0.55, xp: 2, gold: 0.15 },
   crossing_guard: { name: 'Crossing Guard', model: 'crossing_guard', speed: 2.6, hp: 70, dmg: 15, atkCd: 1.8, reach: 1.0, radius: 0.65, xp: 4, gold: 0.25 },
   nanny: { name: 'Nanny', model: 'nanny', speed: 3.0, hp: 22, dmg: 5, atkCd: 1.2, reach: 0.5, radius: 0.55, xp: 3, gold: 0.18,
     ranged: { dmg: 7, range: 11, cd: 2.8, speed: 10, keep: 8, color: '#e8f4ff', size: 0.25 } },
-  k9: { name: 'K-9 Pup', model: 'k9', speed: 6.4, hp: 15, dmg: 6, atkCd: 0.8, reach: 0.5, radius: 0.5, xp: 2, gold: 0.1 },
+  k9: { name: 'K-9 Pup', h: 0.9, model: 'k9', speed: 6.4, hp: 15, dmg: 6, atkCd: 0.8, reach: 0.5, radius: 0.5, xp: 2, gold: 0.1 },
   riot_cop: { name: 'Riot Cop', model: 'riot_cop', speed: 2.4, hp: 140, dmg: 18, atkCd: 1.6, reach: 0.8, radius: 0.7, xp: 6, gold: 0.35, armor: 0.3 },
 
-  seagull: { name: 'Seagull', model: 'seagull', speed: 6.8, hp: 10, dmg: 4, atkCd: 0.8, reach: 0.4, radius: 0.45, xp: 1, gold: 0.08, fly: 1.2 },
+  seagull: { name: 'Seagull', h: 1.0, model: 'seagull', speed: 6.8, hp: 10, dmg: 4, atkCd: 0.8, reach: 0.4, radius: 0.45, xp: 1, gold: 0.08, fly: 1.2 },
   dockworker: { name: 'Dock Worker', model: 'dockworker', speed: 3.0, hp: 85, dmg: 16, atkCd: 1.6, reach: 0.9, radius: 0.75, xp: 5, gold: 0.3 },
   harbor_cop: { name: 'Harbor Patrol', model: 'harbor_cop', speed: 3.6, hp: 32, dmg: 9, atkCd: 1.2, reach: 0.6, radius: 0.55, xp: 2, gold: 0.15 },
   customs_agent: { name: 'Customs Agent', model: 'customs_agent', speed: 3.2, hp: 30, dmg: 6, atkCd: 1.2, reach: 0.5, radius: 0.55, xp: 3, gold: 0.2,
     ranged: { dmg: 10, range: 13, cd: 2.2, speed: 14, keep: 10, color: '#ffe066', size: 0.22 } },
 
-  pigeon: { name: 'Strip Pigeon', model: 'pigeon', speed: 6.0, hp: 11, dmg: 5, atkCd: 0.8, reach: 0.4, radius: 0.45, xp: 1, gold: 0.1, fly: 0.9 },
+  pigeon: { name: 'Strip Pigeon', h: 0.9, model: 'pigeon', speed: 6.0, hp: 11, dmg: 5, atkCd: 0.8, reach: 0.4, radius: 0.45, xp: 1, gold: 0.1, fly: 0.9 },
   bouncer: { name: 'Bouncer', model: 'bouncer', speed: 2.8, hp: 120, dmg: 20, atkCd: 1.7, reach: 0.9, radius: 0.8, xp: 6, gold: 0.35 },
   dealer: { name: 'Card Dealer', model: 'dealer', speed: 3.2, hp: 28, dmg: 6, atkCd: 1.2, reach: 0.5, radius: 0.55, xp: 3, gold: 0.25,
     ranged: { dmg: 6, range: 12, cd: 2.4, speed: 15, keep: 9, color: '#ff4d6d', size: 0.2, spread: 3 } },
