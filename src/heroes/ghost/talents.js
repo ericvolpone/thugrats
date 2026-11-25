@@ -1,0 +1,62 @@
+/** Lucy's talent trees (format: heroes/lenny/talents.js). */
+export const GHOST_TREES = [
+  { id: 'assassin', name: 'Assassin', icon: '🗡️', color: '#ff5a7a', blurb: 'Crits, executes and quiet kills.' },
+  { id: 'shadow', name: 'Shadow', icon: '🌫️', color: '#a0a8ff', blurb: 'Smoke, dodges and slipping away.' },
+  { id: 'gadgets', name: 'Gadgets', icon: '⌚', color: '#7ae0c8', blurb: 'Poisons, traps and toys from Q-tip.' },
+];
+
+export const GHOST_TALENTS = [
+  // ── Assassin ──
+  { id: 'g_aim', tree: 'assassin', row: 0, col: 0, max: 5, name: 'Steady Aim', icon: '🎯',
+    desc: (r) => `+${3 * r}% crit chance.`, apply: (c, r) => c.stat('crit', 0.03 * r) },
+  { id: 'g_vital', tree: 'assassin', row: 0, col: 2, max: 3, name: 'Vital Spots', icon: '💘',
+    desc: (r) => `+${15 * r}% crit damage.`, apply: (c, r) => c.stat('critDmg', 0.15 * r) },
+  { id: 'g_quiet', tree: 'assassin', row: 1, col: 0, max: 3, name: 'Hair Trigger', icon: '⚡',
+    desc: (r) => `Silenced Pistol fires ${6 * r}% faster.`, apply: (c, r) => c.abil('silenced', 'cooldown', 'pct', 6 * r) },
+  { id: 'g_garrote', tree: 'assassin', row: 1, col: 2, max: 3, name: 'Piano Wire', icon: '🧶',
+    desc: (r) => `Garrote executes +${3 * r}% higher.`, apply: (c, r) => c.abil('garrote', 'execute', 'add', 0.03 * r) },
+  { id: 'g_bounce', tree: 'assassin', row: 2, col: 0, max: 1, name: 'Trick Shot', icon: '↩️',
+    desc: () => 'Silenced Pistol bullets bounce to one more thug.', apply: (c) => c.flag('ghostRicochet', true) },
+  { id: 'g_big', tree: 'assassin', row: 2, col: 2, max: 3, name: 'Contract Killer', icon: '📜',
+    desc: (r) => `+${8 * r}% damage to elites, bosses and titans.`, apply: (c, r) => c.stat('bigDmg', 0.08 * r) },
+  { id: 'g_knives', tree: 'assassin', row: 3, col: 1, max: 2, name: 'Knife Collection', icon: '🔪',
+    desc: (r) => `Throwing Knives throw +${2 * r} knives.`, apply: (c, r) => c.abil('knives', 'count', 'add', 2 * r) },
+  { id: 'g_ambush', tree: 'assassin', row: 4, col: 1, max: 1, name: 'Ambush', icon: '🌑', capstone: true,
+    desc: () => 'Smoke Bomb also gives +25% crit chance while it lasts.', apply: (c) => c.flag('ambush', true) },
+
+  // ── Shadow ──
+  { id: 'g_dodge', tree: 'shadow', row: 0, col: 0, max: 5, name: 'Light Feet', icon: '🩰',
+    desc: (r) => `+${2 * r}% dodge.`, apply: (c, r) => c.stat('dodge', 0.02 * r) },
+  { id: 'g_speed', tree: 'shadow', row: 0, col: 2, max: 3, name: 'Sprinter', icon: '👟',
+    desc: (r) => `+${4 * r}% move speed.`, apply: (c, r) => c.stat('speedPct', 0.04 * r) },
+  { id: 'g_smoke', tree: 'shadow', row: 1, col: 0, max: 3, name: 'Thick Smoke', icon: '💨',
+    desc: (r) => `Smoke Bomb lasts ${0.7 * r}s longer.`, apply: (c, r) => c.abil('smoke', 'duration', 'add', 0.7 * r) },
+  { id: 'g_hp', tree: 'shadow', row: 1, col: 2, max: 3, name: 'Snack Stash', icon: '🍪',
+    desc: (r) => `+${10 * r} max HP, +${(0.3 * r).toFixed(1)} HP/s.`, apply: (c, r) => { c.stat('maxHp', 10 * r); c.stat('regen', 0.3 * r); } },
+  { id: 'g_cloak', tree: 'shadow', row: 2, col: 0, max: 3, name: 'Invisible Ink', icon: '🫥',
+    desc: (r) => `Cloak cools down ${8 * r}% faster.`, apply: (c, r) => c.abil('cloak', 'cooldown', 'pct', 8 * r) },
+  { id: 'g_decoy', tree: 'shadow', row: 2, col: 2, max: 2, name: 'Better Cardboard', icon: '🎭',
+    desc: (r) => `Cardboard Decoy explodes for +${40 * r}% damage.`, apply: (c, r) => c.abil('decoy', 'damage', 'pct', 40 * r) },
+  { id: 'g_pickup', tree: 'shadow', row: 3, col: 1, max: 2, name: 'Pickpocket', icon: '👛',
+    desc: (r) => `+${25 * r}% pickup range, +${10 * r}% gold.`, apply: (c, r) => { c.stat('pickupPct', 0.25 * r); c.stat('goldGain', 0.1 * r); } },
+  { id: 'g_ghost', tree: 'shadow', row: 4, col: 1, max: 1, name: 'Ghost Protocol', icon: '👻', capstone: true,
+    desc: () => '+12% dodge and +1 reroll every run.', apply: (c) => { c.stat('dodge', 0.12); c.stat('rerolls', 1); } },
+
+  // ── Gadgets ──
+  { id: 'g_poison', tree: 'gadgets', row: 0, col: 0, max: 5, name: 'Nightshade', icon: '☠️',
+    desc: (r) => `Poisons and burns deal +${10 * r}% damage.`, apply: (c, r) => c.stat('burnDmg', 0.1 * r) },
+  { id: 'g_cd', tree: 'gadgets', row: 0, col: 2, max: 3, name: 'Fresh Batteries', icon: '🔋',
+    desc: (r) => `All abilities cool down ${3 * r}% faster.`, apply: (c, r) => c.stat('haste', 0.03 * r) },
+  { id: 'g_traps', tree: 'gadgets', row: 1, col: 0, max: 2, name: 'Spool of Wire', icon: '🪢',
+    desc: (r) => `+${r} Tripwire.`, apply: (c, r) => c.abil('tripwire', 'count', 'add', r) },
+  { id: 'g_area', tree: 'gadgets', row: 1, col: 2, max: 3, name: 'Wide Spread', icon: '⭕',
+    desc: (r) => `Control abilities have +${8 * r}% area.`, apply: (c, r) => c.abil('#control', 'area', 'pct', 8 * r) },
+  { id: 'g_laser', tree: 'gadgets', row: 2, col: 0, max: 3, name: 'Overclocked', icon: '⌚',
+    desc: (r) => `Laser Watch deals +${20 * r}% damage.`, apply: (c, r) => c.abil('laser_watch', 'damage', 'pct', 20 * r) },
+  { id: 'g_luck', tree: 'gadgets', row: 2, col: 2, max: 3, name: 'Insider Info', icon: '🗂️',
+    desc: (r) => `+${6 * r} luck.`, apply: (c, r) => c.stat('luck', 6 * r) },
+  { id: 'g_xp', tree: 'gadgets', row: 3, col: 1, max: 3, name: 'Debriefing', icon: '📝',
+    desc: (r) => `+${6 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.06 * r) },
+  { id: 'g_tips', tree: 'gadgets', row: 4, col: 1, max: 1, name: 'Poison Tips', icon: '🧪', capstone: true,
+    desc: () => 'Silenced Pistol bullets poison for 60% of their damage over 3s.', apply: (c) => c.flag('poisonTips', true) },
+];

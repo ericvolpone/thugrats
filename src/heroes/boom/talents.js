@@ -1,0 +1,62 @@
+/** Boom-Boom's talent trees (format: heroes/lenny/talents.js). */
+export const BOOM_TREES = [
+  { id: 'bigbang', name: 'Big Bang', icon: '💥', color: '#ffb02e', blurb: 'Bigger blasts, longer chains.' },
+  { id: 'pyro', name: 'Pyro', icon: '🔥', color: '#ff5a3a', blurb: 'Burn it all down.' },
+  { id: 'sapper', name: 'Sapper', icon: '🧰', color: '#9ad87a', blurb: 'Traps, toys and a safe distance.' },
+];
+
+export const BOOM_TALENTS = [
+  // ── Big Bang ──
+  { id: 'b_powder', tree: 'bigbang', row: 0, col: 0, max: 5, name: 'Extra Powder', icon: '🧂',
+    desc: (r) => `Explosive abilities deal +${4 * r}% damage.`, apply: (c, r) => c.abil('#explosive', 'damage', 'pct', 4 * r) },
+  { id: 'b_radius', tree: 'bigbang', row: 0, col: 2, max: 3, name: 'Blast Radius', icon: '⭕',
+    desc: (r) => `Explosive abilities have +${6 * r}% area.`, apply: (c, r) => c.abil('#explosive', 'area', 'pct', 6 * r) },
+  { id: 'b_shrapnel', tree: 'bigbang', row: 1, col: 0, max: 3, name: 'Shrapnel', icon: '🔩',
+    desc: (r) => `Explosions throw ${2 * r} pieces of shrapnel.`, apply: (c, r) => c.flag('shrapnel', 2 * r) },
+  { id: 'b_fuse', tree: 'bigbang', row: 1, col: 2, max: 3, name: 'Short Fuse', icon: '⏱️',
+    desc: (r) => `Explosive abilities cool down ${5 * r}% faster.`, apply: (c, r) => c.abil('#explosive', 'cooldown', 'pct', 5 * r) },
+  { id: 'b_chain', tree: 'bigbang', row: 2, col: 0, max: 3, name: 'Chain Reaction', icon: '⛓️',
+    desc: (r) => `Thugs killed by explosions have a ${10 * r}% chance to explode too.`, apply: (c, r) => c.flag('chainReaction', 0.1 * r) },
+  { id: 'b_sticks', tree: 'bigbang', row: 2, col: 2, max: 1, name: 'Bundle', icon: '🧨',
+    desc: () => 'Stick of Dynamite throws +1 stick.', apply: (c) => c.abil('dynamite_stick', 'count', 'add', 1) },
+  { id: 'b_crit', tree: 'bigbang', row: 3, col: 1, max: 3, name: 'Direct Hit', icon: '🎯',
+    desc: (r) => `+${4 * r}% crit chance.`, apply: (c, r) => c.stat('crit', 0.04 * r) },
+  { id: 'b_megaton', tree: 'bigbang', row: 4, col: 1, max: 1, name: 'Megaton', icon: '☢️', capstone: true,
+    desc: () => 'Every explosion is 25% bigger.', apply: (c) => c.flag('megaton', true) },
+
+  // ── Pyro ──
+  { id: 'b_burn', tree: 'pyro', row: 0, col: 0, max: 5, name: 'Accelerant', icon: '🔥',
+    desc: (r) => `Burns deal +${12 * r}% damage.`, apply: (c, r) => c.stat('burnDmg', 0.12 * r) },
+  { id: 'b_gas', tree: 'pyro', row: 0, col: 2, max: 3, name: 'Leaky Can', icon: '⛽',
+    desc: (r) => `Fire puddles last ${0.5 * r}s longer.`, apply: (c, r) => { c.abil('#fire', 'duration', 'add', 0.5 * r); } },
+  { id: 'b_jar', tree: 'pyro', row: 1, col: 0, max: 3, name: 'Family Recipe', icon: '🫙',
+    desc: (r) => `Napalm Jar puddles are ${10 * r}% bigger.`, apply: (c, r) => c.abil('napalm', 'area', 'pct', 10 * r) },
+  { id: 'b_proof', tree: 'pyro', row: 1, col: 2, max: 3, name: 'Asbestos Onesie', icon: '🧯',
+    desc: (r) => `Take ${4 * r}% less damage.`, apply: (c, r) => c.stat('armor', 0.04 * r) },
+  { id: 'b_hp', tree: 'pyro', row: 2, col: 0, max: 3, name: 'Hot-Blooded', icon: '❤️‍🔥',
+    desc: (r) => `+${12 * r} max HP.`, apply: (c, r) => c.stat('maxHp', 12 * r) },
+  { id: 'b_ignite', tree: 'pyro', row: 2, col: 2, max: 3, name: 'Spark', icon: '✨',
+    desc: (r) => `+${10 * r}% area for fire abilities.`, apply: (c, r) => c.abil('#fire', 'area', 'pct', 10 * r) },
+  { id: 'b_heat', tree: 'pyro', row: 3, col: 1, max: 3, name: 'Heatwave', icon: '🌡️',
+    desc: (r) => `+${4 * r}% damage, +${3 * r}% move speed.`, apply: (c, r) => { c.stat('dmg', 0.04 * r); c.stat('speedPct', 0.03 * r); } },
+  { id: 'b_napalm', tree: 'pyro', row: 4, col: 1, max: 1, name: 'Napalm Blasts', icon: '🌋', capstone: true,
+    desc: () => 'Explosions have a 35% chance to leave a burning puddle.', apply: (c) => c.flag('napalmBlasts', true) },
+
+  // ── Sapper ──
+  { id: 'b_traps', tree: 'sapper', row: 0, col: 0, max: 3, name: 'Well Stocked', icon: '📦',
+    desc: (r) => `C4 Charges: +${r} max charges.`, apply: (c, r) => c.abil('c4', 'count', 'add', r) },
+  { id: 'b_luck', tree: 'sapper', row: 0, col: 2, max: 3, name: 'Lucky Wire', icon: '✂️',
+    desc: (r) => `+${6 * r} luck.`, apply: (c, r) => c.stat('luck', 6 * r) },
+  { id: 'b_pickup', tree: 'sapper', row: 1, col: 0, max: 2, name: 'Magnet Hands', icon: '🧲',
+    desc: (r) => `+${25 * r}% pickup range.`, apply: (c, r) => c.stat('pickupPct', 0.25 * r) },
+  { id: 'b_rc', tree: 'sapper', row: 1, col: 2, max: 3, name: 'Turbo Batteries', icon: '🔋',
+    desc: (r) => `RC Car Bomb and Bottle Rockets deal +${15 * r}% damage.`, apply: (c, r) => { c.abil('rc_car', 'damage', 'pct', 15 * r); c.abil('rockets', 'damage', 'pct', 15 * r); } },
+  { id: 'b_xp', tree: 'sapper', row: 2, col: 0, max: 3, name: 'Night School', icon: '📚',
+    desc: (r) => `+${6 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.06 * r) },
+  { id: 'b_haste', tree: 'sapper', row: 2, col: 2, max: 3, name: 'Busy Hands', icon: '🤲',
+    desc: (r) => `All abilities cool down ${3 * r}% faster.`, apply: (c, r) => c.stat('haste', 0.03 * r) },
+  { id: 'b_reroll', tree: 'sapper', row: 3, col: 1, max: 1, name: 'Blueprints', icon: '📐',
+    desc: () => '+2 rerolls per run.', apply: (c) => c.stat('rerolls', 2) },
+  { id: 'b_mortar', tree: 'sapper', row: 4, col: 1, max: 1, name: 'Artillery Support', icon: '🎯', capstone: true,
+    desc: () => 'Mortar Strike fires 4 more shells and cools down 25% faster.', apply: (c) => { c.abil('mortar', 'count', 'add', 4); c.abil('mortar', 'cooldown', 'pct', 25); } },
+];

@@ -92,6 +92,18 @@ export function buildBaby(o = {}) {
     mesh(head, new THREE.TorusGeometry(0.04, 0.012, 4, 8).translate(0, -0.13, 0.35), C(o.pacifier ?? '#58c4ff'));
   }
 
+  // face accessories
+  if (o.glasses) {
+    for (const sx of [-1, 1]) mesh(head, new THREE.TorusGeometry(0.075, 0.016, 4, 10).translate(sx * 0.12, 0.03, 0.31), C(o.glasses));
+    mesh(head, new THREE.BoxGeometry(0.08, 0.016, 0.016).translate(0, 0.04, 0.32), C(o.glasses));
+  }
+  if (o.shades) mesh(head, new THREE.BoxGeometry(0.36, 0.07, 0.04).translate(0, 0.04, 0.3), C(o.shades));
+  if (o.mask) mesh(head, new THREE.BoxGeometry(0.42, 0.1, 0.05).translate(0, 0.04, 0.28), C(o.mask));
+  if (o.goggles) {
+    mesh(head, new THREE.CylinderGeometry(0.34, 0.34, 0.06, 12).translate(0, 0.14, 0), C('#3a2a1a'));
+    for (const sx of [-1, 1]) mesh(head, new THREE.CylinderGeometry(0.07, 0.07, 0.06, 8).rotateX(Math.PI / 2).translate(sx * 0.11, 0.15, 0.3), C(o.goggles));
+  }
+
   // hat
   const hat = group(head, 'hat', 0, 0.24, -0.01);
   hat.rotation.z = o.hatTilt ?? 0.12;
@@ -103,6 +115,19 @@ export function buildBaby(o = {}) {
   } else if (o.hat === 'beanie') {
     mesh(hat, new THREE.IcosahedronGeometry(0.33, 1).scale(1.02, 0.6, 1.02).translate(0, 0.0, 0), P.hat);
     mesh(hat, new THREE.CylinderGeometry(0.34, 0.34, 0.08, 10).translate(0, -0.08, 0), P.band);
+  } else if (o.hat === 'hardhat') {
+    mesh(hat, new THREE.IcosahedronGeometry(0.34, 1).scale(1.02, 0.62, 1.05).translate(0, 0.02, 0), P.hat);
+    mesh(hat, new THREE.CylinderGeometry(0.4, 0.4, 0.03, 12).translate(0, -0.07, 0.03), P.hat);
+    mesh(hat, new THREE.BoxGeometry(0.06, 0.06, 0.55).translate(0, 0.2, 0), P.band);
+  } else if (o.hat === 'beret') {
+    mesh(hat, new THREE.CylinderGeometry(0.36, 0.33, 0.1, 12).translate(0.05, 0.02, 0), P.hat);
+    mesh(hat, new THREE.CylinderGeometry(0.02, 0.02, 0.07, 4).translate(0.05, 0.1, 0), P.hat);
+  } else if (o.hat === 'brain') {
+    mesh(hat, new THREE.IcosahedronGeometry(0.3, 1).scale(1.05, 0.75, 1.1).translate(0, 0.06, -0.02), P.hat);
+    for (let i = -2; i <= 2; i++) mesh(hat, new THREE.BoxGeometry(0.02, 0.05, 0.5).translate(i * 0.09, 0.2, -0.02), P.band);
+  } else if (o.hat === 'bandana') {
+    mesh(hat, new THREE.IcosahedronGeometry(0.33, 1).scale(1.03, 0.5, 1.03).translate(0, -0.02, 0), P.hat);
+    mesh(hat, new THREE.BoxGeometry(0.06, 0.14, 0.18).translate(0, -0.05, -0.36).rotateX(0.4), P.hat);
   } else if (o.hat === 'cap') {
     mesh(hat, new THREE.IcosahedronGeometry(0.33, 1).scale(1.03, 0.55, 1.03), P.hat);
     mesh(hat, new THREE.CylinderGeometry(0.24, 0.24, 0.03, 10).scale(1, 1, 0.7).translate(0, -0.08, 0.3), P.band);
@@ -126,8 +151,29 @@ export function buildBaby(o = {}) {
   } else if (o.prop === 'bat') {
     mesh(prop, new THREE.CylinderGeometry(0.05, 0.025, 0.55, 6).translate(0, -0.2, 0.02), C('#c48a4c'));
     group(prop, 'muzzle', 0, -0.45, 0.02);
+  } else if (o.prop === 'dynamite') {
+    for (let i = -1; i <= 1; i++) mesh(prop, new THREE.CylinderGeometry(0.035, 0.035, 0.26, 6).translate(i * 0.07, -0.1, 0.02), C('#c8281e'));
+    mesh(prop, new THREE.CylinderGeometry(0.008, 0.008, 0.1, 4).translate(0, -0.27, 0.02), C('#ddd'));
+    group(prop, 'muzzle', 0, -0.32, 0.02);
+  } else if (o.prop === 'rifle') {
+    mesh(prop, new THREE.BoxGeometry(0.06, 0.62, 0.08).translate(0, -0.2, 0.02), P.metal);
+    mesh(prop, new THREE.BoxGeometry(0.07, 0.2, 0.12).translate(0, 0.08, -0.02), P.brown);
+    mesh(prop, new THREE.CylinderGeometry(0.04, 0.04, 0.16, 6).translate(0, -0.12, 0.09), C('#15161a')); // scope
+    group(prop, 'muzzle', 0, -0.52, 0.02);
+  } else if (o.prop === 'silencer') {
+    mesh(prop, new THREE.BoxGeometry(0.05, 0.2, 0.09).translate(0, -0.06, 0.02), C('#202227'));
+    mesh(prop, new THREE.CylinderGeometry(0.03, 0.03, 0.16, 6).translate(0, -0.24, 0.03), C('#15161a'));
+    group(prop, 'muzzle', 0, -0.33, 0.03);
+  } else if (o.prop === 'raygun') {
+    mesh(prop, new THREE.CylinderGeometry(0.06, 0.03, 0.22, 8).translate(0, -0.12, 0.02), C('#c0c8d4'));
+    for (let i = 0; i < 3; i++) mesh(prop, new THREE.CylinderGeometry(0.075, 0.075, 0.02, 8).translate(0, -0.04 - i * 0.05, 0.02), C('#ff4fa3'));
+    mesh(prop, new THREE.IcosahedronGeometry(0.04, 0).translate(0, -0.25, 0.02), C('#7dff7a'));
+    group(prop, 'muzzle', 0, -0.28, 0.02);
   } else {
     group(prop, 'muzzle', 0, -0.05, 0);
+  }
+  if (o.gloves) {
+    for (const arm of [nodes.armL, nodes.armR]) mesh(arm, new THREE.IcosahedronGeometry(0.12, 1).scale(1, 1, 1.15).translate(0, -0.3, 0.02), C(o.gloves));
   }
 
   // ── legs ──

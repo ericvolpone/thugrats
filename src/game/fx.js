@@ -98,6 +98,27 @@ export class FX {
     this.tracers.push({ mesh, t: 0, life: 0.25 });
   }
 
+  /** Flat beam / laser / slash streak from (x0, z0) to (x1, z1). */
+  beam(x0, z0, x1, z1, color = '#9ad8ff', width = 0.25, life = 0.2, y = 0.7) {
+    const len = Math.hypot(x1 - x0, z1 - z0) || 0.01;
+    const geo = new THREE.BoxGeometry(width, width * 0.5, len);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
+    mesh.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
+    mesh.rotation.y = Math.atan2(x1 - x0, z1 - z0);
+    this.scene.add(mesh);
+    this.tracers.push({ mesh, t: 0, life });
+  }
+
+  /** Swipe arc on the ground (melee cones). */
+  arc(x, z, angle, r, half, color = '#ffffff', life = 0.18) {
+    const geo = new THREE.RingGeometry(r * 0.35, r, 16, 1, -half, half * 2).rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.position.set(x, 0.15, z);
+    mesh.rotation.y = angle - Math.PI / 2;
+    this.scene.add(mesh);
+    this.tracers.push({ mesh, t: 0, life });
+  }
+
   number(x, y, z, val, color = '#fff', big = false) {
     if (this.nums.length > 60) return;
     let el = this.numPool.pop();

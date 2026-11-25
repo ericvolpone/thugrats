@@ -9,7 +9,8 @@ import { repForRun } from '../data/account.js';
 import { FX } from './fx.js';
 import { Telegraphs } from './telegraphs.js';
 import { buildLoadout, computeStats, AbilityInst } from './stats.js';
-import { levelOffers, itemOffers } from './upgrades.js';
+import { gearDropChance } from '../data/gear.js';
+import { levelOffers, itemOffers, itemGain, banishKind, banishId } from './upgrades.js';
 import { MOBS, BOSSES } from '../data/mobs.js';
 import { DIFFICULTIES, MAP_DEFAULTS } from '../data/maps.js';
 import { Save } from '../save.js';
@@ -23,6 +24,9 @@ export const xpFor = (L) => Math.round(6 + 6 * (L - 1) + 0.8 * (L - 1) ** 2);
  * One run on one map. Owns the scene and every system; abilities and items talk
  * to the world through the methods on this class (hit, explode, shoot, lob...).
  */
+/** How long level-up / loot cards ignore input after they appear. */
+const PICK_LOCK_MS = 1000;
+
 export class Run {
   constructor({ hero, map, diff, input, ui }) {
     this.hero = hero;
@@ -58,7 +62,9 @@ export class Run {
     this.bossKills = 0;
     this.titanKills = 0;
     this.chestsOpened = 0;
-    this.levelBonus = { hp: 0, dmg: 0 };
+    this.levelBonus = { hp: 0, dmg: 0, luck: 0 };
+    this.banished = new Set(); // ability / item ids never offered again this run
+    this.banishes = { ability: 1, item: 1 };
     this.buffs = {};
     this.items = { ring: [], title: [], rep: [] };
     this.abilities = [];
@@ -155,14 +161,15 @@ export class Run {
     return a;
   }
 
-  addItem(def, tier) {
+  addItem(def, tier, gain) {
     const own = this.findItem(def.id);
+    const g = gain ?? itemGain(def, own, tier);
     if (own) {
-      own.power += def.values[tier];
+      own.power += g;
       own.level++;
       own.tier = Math.max(own.tier, tier);
     } else {
-      this.items[def.slot].push({ def, power: def.values[tier], level: 1, tier });
+      this.items[def.slot].push({ def, power: g, level: 1, tier });
     }
   }
 
@@ -173,8 +180,10 @@ export class Run {
     let dmg = base;
     if (m.tier >= 1) dmg *= 1 + s.bigDmg;
     if (m.fear) dmg *= 1.12;
+    if (m.shrunkUntil > this.time) dmg *= 1 + m.shrunk;
     let crit = false;
-    if (!o.noCrit && Math.random() < s.crit) {
+    const critC = s.crit + (ability?.def?.base?.crit ? ability.stat('crit') : 0);
+    if (!o.noCrit && Math.random() < critC) {
       crit = true;
       dmg *= 1 + s.critDmg;
     }
@@ -204,6 +213,7 @@ export class Run {
   }
 
   explode(x, z, r, dmg, ability, o = {}) {
+    if (this.flags.megaton) r *= 1.25;
     for (const m of this.mobs.near(x, z, r)) this.hit(m, dmg, ability, { knock: o.small ? 1 : 5, fromX: x, fromZ: z });
     this.fx.explosion(x, z, r, o.color);
     if (!o.small) {
@@ -283,6 +293,8 @@ export class Run {
       p.shield -= a;
       dmg -= a;
     }
+    const thorns = this.flags.thorns ?? 0;
+    if (thorns && src && src.hp != null && !src.dead && amount > 0) this.hit(src, amount * thorns * this.stats.dmg, null, { noCrit: true, color: '#ffb0a0' });
     if (dmg <= 0) return;
     p.hp -= dmg;
     p.hurtT = 1;
@@ -317,8 +329,9 @@ export class Run {
       this.xpNext = xpFor(this.level);
       this.levelBonus.hp += 3;
       this.levelBonus.dmg += 0.01;
+      this.levelBonus.luck += 1;
       this.player.hp += 3;
-      this.queue.push({ kind: 'level', reason: `Level ${this.level}!  +3 max HP, +1% damage` });
+      this.queue.push({ kind: 'level', reason: `Level ${this.level}!  +3 max HP, +1% damage, +1 luck` });
       sfx('levelup', 0.15);
       this.fx.ring(this.player.x, this.player.z, 3, '#58c4ff', 0.5);
     }
@@ -349,28 +362,57 @@ export class Run {
   openNextChoice() {
     const q = this.queue.shift();
     const cards = q.kind === 'level' ? levelOffers(this) : itemOffers(this, 3, q.minTier ?? 0);
-    this.choice = { ...q, cards };
+    this.choice = { ...q, cards, lockUntil: performance.now() + PICK_LOCK_MS };
     this.paused = true;
     this.ui.showChoice(this.choice);
   }
 
-  reroll() {
-    if (!this.choice || this.rerolls <= 0) return;
-    this.rerolls--;
+  reroll(free = false) {
+    if (!this.choice || (!free && this.rerolls <= 0) || this.choiceLocked()) return;
+    if (!free) this.rerolls--;
     const q = this.choice;
     q.cards = q.kind === 'level' ? levelOffers(this) : itemOffers(this, 3, q.minTier ?? 0);
+    q.banishing = false;
     this.ui.showChoice(q);
   }
 
+  /** Toggle banish mode: the next card clicked is banished instead of taken. */
+  toggleBanish() {
+    const q = this.choice;
+    if (!q || this.choiceLocked()) return;
+    const kind = q.kind === 'level' ? 'ability' : 'item';
+    if (this.banishes[kind] <= 0 && !q.banishing) return;
+    q.banishing = !q.banishing;
+    this.ui.showChoice(q);
+  }
+
+  /** Remove a card's ability/item from every future offer this run, then reroll for free. */
+  banish(card) {
+    const kind = banishKind(card);
+    if (!kind || this.banishes[kind] <= 0) return;
+    this.banishes[kind]--;
+    this.banished.add(banishId(card));
+    this.toast(`🚫 ${card.def?.name ?? card.ability.def.name} banished for this run`);
+    sfx('select');
+    this.reroll(true);
+  }
+
+  /** Cards can't be taken for a moment after they pop up (no accidental picks mid-fight). */
+  choiceLocked() {
+    return !!this.choice && performance.now() < (this.choice.lockUntil ?? 0);
+  }
+
   choose(card) {
+    if (this.choiceLocked()) return;
+    if (card && this.choice?.banishing) return this.banish(card);
     if (!card) {
       this.addGold(10 + this.level * 2, true);
     } else if (card.type === 'newAbility') {
       this.addAbility(card.def);
     } else if (card.type === 'abilityUp') {
-      card.ability.applyUpgrade(card.up, card.tier);
+      card.ability.applyUpgrade(card.up, card.tier, card.gain);
     } else if (card.type === 'item') {
-      this.addItem(card.def, card.tier);
+      this.addItem(card.def, card.tier, card.gain);
     } else if (card.type === 'gold') {
       this.addGold(card.amount, true);
     }
@@ -534,18 +576,21 @@ export class Run {
     this.pet?.update(dt);
 
     // buffs
-    const fr = this.buffs.frenzy;
-    if (fr) {
-      fr.t -= dt;
-      if (Math.random() < dt * 20) this.fx.burst(p.x, 0.5, p.z, '#ff3b3b', 1, 2, 0.4, 0.7, -2);
-      if (fr.t <= 0) delete this.buffs.frenzy;
+    // buffs: {t, max, fx?, stats?(s, b), rate?, src?} — see computeStats
+    for (const id in this.buffs) {
+      const b = this.buffs[id];
+      b.t -= dt;
+      const col = b.fx ?? (id === 'frenzy' ? '#ff3b3b' : null);
+      if (col && Math.random() < dt * 20) this.fx.burst(p.x, 0.5, p.z, col, 1, 2, 0.4, 0.7, -2);
+      if (b.t <= 0) delete this.buffs[id];
     }
 
     // abilities
     if (!p.dead) {
       const power = this.buffs.frenzy?.power ?? 0;
       for (const a of this.abilities) {
-        const rate = a.def.id === 'frenzy' ? 1 : a.def.id === 'pistol' ? 1 + power * 1.6 : 1 + power;
+        let rate = a.def.id === 'frenzy' ? 1 : a.def.id === 'pistol' ? 1 + power * 1.6 : 1 + power;
+        for (const id in this.buffs) { const b = this.buffs[id]; if (b.rate && b.src !== a.def.id) rate += b.rate; }
         a.cd -= dt * rate;
         if (a.cd > 0) continue;
         const tgt = a.def.ready(this, a);
@@ -597,17 +642,24 @@ export class Run {
     const before = Save.hero(this.hero.id).level;
     const levels = Save.addHeroXp(this.hero.id, heroXp);
     Save.recordRun(this.hero.id, this.kills);
-    let gear = null;
+    // gear: a clear always gives/upgrades the map's signature piece; any decent
+    // run may also drop a random piece (new, or one tier up toward this difficulty's cap)
+    const grant = (gdef) => {
+      const cur = Save.gearTier(this.hero.id, gdef.id);
+      const next = Math.max(d.gearMin, cur < 0 ? d.gearMin : Math.min(d.gearCap, cur + 1));
+      if (next > cur) Save.setGear(this.hero.id, gdef.id, next);
+      return { def: gdef, from: cur, to: Math.max(cur, next), capped: next <= cur };
+    };
+    const gear = [];
+    const heroGear = this.hero.gear ?? [];
     if (victory) {
       Save.recordClear(this.map.id, this.diffIndex);
-      const gdef = this.hero.gear?.find((g) => g.id === this.map.gear);
-      if (gdef) {
-        const cur = Save.gearTier(this.hero.id, gdef.id);
-        let next = cur < 0 ? d.gearMin : Math.min(d.gearCap, cur + 1);
-        next = Math.max(next, d.gearMin);
-        if (next > cur) Save.setGear(this.hero.id, gdef.id, next);
-        gear = { def: gdef, from: cur, to: Math.max(cur, next), capped: next <= cur };
-      }
+      const sig = heroGear.find((g) => g.map === this.map.id);
+      if (sig) gear.push(grant(sig));
+    }
+    if (Math.random() < gearDropChance({ minutes: mins, bossKills: this.bossKills, victory })) {
+      const pool = heroGear.filter((g) => !g.map && !gear.some((x) => x.def === g) && Save.gearTier(this.hero.id, g.id) < d.gearCap);
+      if (pool.length) gear.push({ ...grant(pick(pool)), drop: true });
     }
     const rep = repForRun({ minutes: mins, bossKills: this.bossKills, titanKills: this.titanKills, victory, diffIndex: this.diffIndex });
     Save.addRep(rep);

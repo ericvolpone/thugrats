@@ -1,8 +1,11 @@
 # Thugrats
 
 A browser roguelite auto-shooter (Megabonk / Azeroth Survivors style) where every
-hero is a baby with a criminal trope. First playable prototype: **Lenny "Nickles"**,
-a diapered mobster with a fedora, a cigar and a snub-nose .38.
+hero is a baby with a criminal trope. Six playable heroes: **Lenny "Nickles"** (mobster,
+guns), **Tiny Tony Two-Fists** (brute, melee/tank), **Boom-Boom Bianchi** (demolitions),
+**Lucy "The Ghost"** (spy, crits/control), **Babyface Moretti** (hitman, sniper) and
+**Professor Pudding** (mastermind, gadgets/summons). Each has 12-13 abilities, three
+talent trees and three signature gear pieces.
 
 Three.js (WebGL 2) + Vite. All art is procedural low-poly geometry, swappable for
 Blender `.glb` files at runtime (see [public/models/README.md](public/models/README.md)).
@@ -22,7 +25,7 @@ Abilities fire on their own; you move, turn the camera and jump.
 | Move | WASD / arrows | left stick | drag on the left part of the screen |
 | Turn camera | Q / E, or drag the mouse | right stick | drag on the right part |
 | Jump | Space | A | JUMP button |
-| Menus & cards | click, 1/2/3, R reroll | D-pad/stick + A, X reroll, B back, LB/RB tabs | tap |
+| Menus & cards | click, 1/2/3, R reroll, B banish | D-pad/stick + A, X reroll, Y banish, B back, LB/RB tabs | tap |
 | Pause | Esc / P | Start | ❚❚ |
 
 Jumping clears ground telegraphs and enemy shots if timed right, and lands you on
@@ -34,10 +37,18 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
 - **Hideout (home screen):** your crew (Lenny + locked teasers), hero level and XP,
   and tabs for **Play** (maps × difficulty), **Talents**, **Gear** and **Kit**.
 - **A run:** start with one ability. Mobs pour in from every side and walk at you.
-  Kills drop XP gems and gold. Each level gives +3 max HP / +1% damage and three
-  cards: a new ability (up to 5) or a rarity-rolled upgrade to one you own.
-- **Rarity:** grey → green → blue → purple → orange. **Luck** pushes rolls up.
-  Some upgrades (extra bullet, pierce, extra car...) only appear at higher tiers.
+  Kills drop XP gems and gold. Each level gives +3 max HP, +1% damage, +1 luck and
+  three cards, each about a **different** ability: a new one (up to 5) or an upgrade
+  to one you own. Cards ignore input for 1 s after they pop up, so a stray click or
+  jump mid-fight can't take one.
+- **Rarity:** grey → green → blue → purple → orange (roll sizes ×1, 1.5, 2.2, 3, 4).
+  **Luck** pushes rolls up. Every roll of a stat shrinks the more of it you already
+  have, so an early purple is worth far more than a fifth grey. Whole-number upgrades
+  (extra bullet, pierce, extra car...) are flat and only appear at higher tiers.
+  Upgrades that no longer help (e.g. Frenzy cooldown once it's up 100% of the time)
+  stop being offered.
+- **Banish:** once per run each, remove one ability and one item from all future
+  offers. Banishing rerolls the cards for free.
 - **Items (5 slots):** 2 Rings, 1 Crime Title, 2 Reputations, from chests (cost
   gold, rising each time) and boss kills. Picking one you own levels it up.
   Reputations are always in the pool.
@@ -51,11 +62,29 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
   difficulty). Spend it in the hideout's **Rep** tab: adopt **Biscuit the Bulldog**,
   who fetches gems and gold far outside your pickup range (upgrade his leash and
   speed), and buy up to +50% run XP, +50% run gold and +20% move speed.
-- **After the run:** hero XP → hero levels → talent points. Clearing a map gives that
-  map's **gear** for the hero, upgraded one tier per clear, capped by difficulty
+- **After the run:** hero XP → hero levels → talent points.
+- **Gear (per hero):** three slots (Head, Chest, Feet), one piece worn in each, three
+  options per slot: the hero's signature piece for that slot (clearing a map gives
+  it, one tier up per clear) and two shared pieces that drop at random from runs of
+  3+ minutes and clears (new, or one tier up). Tiers are capped by difficulty
   (Normal: green, Hard: purple, Nightmare: orange).
 
-## Lenny's kit
+## Maps
+
+160 × 160 arenas, each laid out by hand in `src/game/layouts.js`:
+
+- **Little Italy:** a piazza with a fountain and café tables, rowhouse alleys under
+  string lights, a church, a market street, curbside parking.
+- **The Docks:** warehouses, a container maze (some stacked too high to jump), gantry
+  cranes on the quay, piers out into the bay (the Admiral waits on one), fuel tanks
+  and a fish market.
+- **Casino Row:** the Strip with palm medians, neon casinos and valet lines, a fountain
+  show, an open-air casino floor, a parking lot full of jumpable cars, a wedding
+  chapel and giant dice.
+
+Mobs steer around walls instead of piling up behind them.
+
+## Lenny's kit (other heroes: `src/heroes/<id>/`)
 
 | Ability | What it does |
 | --- | --- |
@@ -84,28 +113,31 @@ Booties (Casino Row).
 src/
   main.js              renderer, screen switching, main loop, debug helpers
   assets/              model library (procedural + glTF override), baby rig, mobs, props
-  data/                tiers, mobs/bosses/titans, maps & difficulties, run items
-  heroes/              hero registry; heroes/lenny/{abilities,talents,gear}.js
+  data/                tiers (rarity + diminishing returns), mobs/bosses/titans, maps &
+                       difficulties, run items, shared gear, account (Rep) upgrades
+  heroes/              hero registry, common.js (upgrade builders + cone/line/chain/nova helpers),
+                       <hero>/{abilities,talents,gear}.js for lenny, tony, boom, ghost, babyface, prof
   game/
     run.js             one run: director, titans, XP/gold, damage pipeline, rewards
     stats.js           loadout (talents + gear), per-frame stats, AbilityInst
     mobs.js            instanced mobs, spatial grid, AI, targeting priorities
     bossBrain.js       boss/titan mechanics → telegraphs.js (ground warnings)
     combat.js          bullets, lobs, zones, traps, cars, orbits, marks, goons
-    pickups.js, fx.js, world.js, player.js, upgrades.js (card offers)
+    world.js           arena drawing + collision helpers; layouts.js = one layout per map
+    pickups.js, fx.js, player.js, pet.js, upgrades.js (card offers, banish)
   ui/                  home.js (hideout), hud.js (HUD, minimap, cards, end screen)
 ```
 
 **Adding a hero:** make `src/heroes/<id>/` with abilities/talents/gear in the same
-shape as Lenny's, register a model (usually `buildBaby` with a new look) and add an
-entry to `HEROES`. Abilities are small objects with `base` stats, `upgrades`, a
+shape as Lenny's and add an entry to `HEROES` with a `look` for `buildBaby` (hats,
+glasses, props...). Abilities are small objects with `base` stats, `upgrades`, a
 `ready()` targeting check and a `fire()` that calls the run API (`shoot`, `lob`,
 `explode`, `zone`, `car`, `orbit`, `mark`, `spawnGoon`, `hit`...).
 
 ## Debug (browser console)
 
 ```js
-thugrats.play('the_docks', 1)   // start a run (map id, difficulty 0-2)
+thugrats.play('the_docks', 1, 'ghost')   // start a run (map id, difficulty 0-2, hero id)
 thugrats.god()                  // no damage this run
 thugrats.xp(200)  thugrats.gold(500)  thugrats.time(120)  thugrats.ability('driveby')
 thugrats.heroXp(1000)           // hero levels for talent testing

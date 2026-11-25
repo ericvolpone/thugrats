@@ -1,0 +1,62 @@
+/** Babyface's talent trees (format: heroes/lenny/talents.js). */
+export const BABYFACE_TREES = [
+  { id: 'marksman', name: 'Marksman', icon: '🔭', color: '#ffd36b', blurb: 'One shot, one nap.' },
+  { id: 'cleaner', name: 'Cleaner', icon: '🧹', color: '#ff6b5a', blurb: 'Close-range cleanup and loud exits.' },
+  { id: 'professional', name: 'Professional', icon: '💼', color: '#8fd0ff', blurb: 'Planning, contacts, getting paid.' },
+];
+
+export const BABYFACE_TALENTS = [
+  // ── Marksman ──
+  { id: 'h_scope', tree: 'marksman', row: 0, col: 0, max: 5, name: 'Good Scope', icon: '🔭',
+    desc: (r) => `Sniper Rifle +${5 * r}% damage.`, apply: (c, r) => c.abil('rifle', 'damage', 'pct', 5 * r) },
+  { id: 'h_bolt', tree: 'marksman', row: 0, col: 2, max: 3, name: 'Smooth Bolt', icon: '⚙️',
+    desc: (r) => `Sniper Rifle fires ${6 * r}% faster.`, apply: (c, r) => c.abil('rifle', 'cooldown', 'pct', 6 * r) },
+  { id: 'h_head', tree: 'marksman', row: 1, col: 0, max: 3, name: 'Headshots', icon: '🎯',
+    desc: (r) => `+${4 * r}% crit chance.`, apply: (c, r) => c.stat('crit', 0.04 * r) },
+  { id: 'h_critdmg', tree: 'marksman', row: 1, col: 2, max: 3, name: 'Hollow Tips', icon: '🩸',
+    desc: (r) => `+${15 * r}% crit damage.`, apply: (c, r) => c.stat('critDmg', 0.15 * r) },
+  { id: 'h_pierce', tree: 'marksman', row: 2, col: 0, max: 2, name: 'Armor-Piercing', icon: '➡️',
+    desc: (r) => `Sniper Rifle pierces +${2 * r}.`, apply: (c, r) => c.abil('rifle', 'pierce', 'add', 2 * r) },
+  { id: 'h_big', tree: 'marksman', row: 2, col: 2, max: 3, name: 'Big Game', icon: '🐘',
+    desc: (r) => `+${8 * r}% damage to elites, bosses and titans.`, apply: (c, r) => c.stat('bigDmg', 0.08 * r) },
+  { id: 'h_list', tree: 'marksman', row: 3, col: 1, max: 2, name: 'Long List', icon: '📋',
+    desc: (r) => `Hit List marks +${r} more name${r > 1 ? 's' : ''}.`, apply: (c, r) => c.abil('hit_list', 'count', 'add', r) },
+  { id: 'h_double', tree: 'marksman', row: 4, col: 1, max: 1, name: 'Double Tap', icon: '✌️', capstone: true,
+    desc: () => '30% chance the Sniper Rifle fires a second shot.', apply: (c) => c.flag('doubleTap', 0.3) },
+
+  // ── Cleaner ──
+  { id: 'h_shells', tree: 'cleaner', row: 0, col: 0, max: 5, name: 'Buckshot', icon: '💥',
+    desc: (r) => `Sawed-Off and Uzi deal +${5 * r}% damage.`, apply: (c, r) => { c.abil('sawed_off', 'damage', 'pct', 5 * r); c.abil('uzi', 'damage', 'pct', 5 * r); } },
+  { id: 'h_armor', tree: 'cleaner', row: 0, col: 2, max: 3, name: 'Kevlar Onesie', icon: '🦺',
+    desc: (r) => `Take ${4 * r}% less damage.`, apply: (c, r) => c.stat('armor', 0.04 * r) },
+  { id: 'h_hp', tree: 'cleaner', row: 1, col: 0, max: 3, name: 'Tough Guy', icon: '❤️',
+    desc: (r) => `+${12 * r} max HP.`, apply: (c, r) => c.stat('maxHp', 12 * r) },
+  { id: 'h_mines', tree: 'cleaner', row: 1, col: 2, max: 2, name: 'Mine Field', icon: '🧱',
+    desc: (r) => `+${r} Claymore.`, apply: (c, r) => c.abil('claymore', 'count', 'add', r) },
+  { id: 'h_boom', tree: 'cleaner', row: 2, col: 0, max: 3, name: 'Loud Exit', icon: '💣',
+    desc: (r) => `Explosive abilities have +${8 * r}% area.`, apply: (c, r) => c.abil('#explosive', 'area', 'pct', 8 * r) },
+  { id: 'h_regen', tree: 'cleaner', row: 2, col: 2, max: 3, name: 'Band-Aids', icon: '🩹',
+    desc: (r) => `+${(0.4 * r).toFixed(1)} HP regen per second.`, apply: (c, r) => c.stat('regen', 0.4 * r) },
+  { id: 'h_flash', tree: 'cleaner', row: 3, col: 1, max: 2, name: 'Extra Bright', icon: '⚪',
+    desc: (r) => `Flashbang stuns ${0.4 * r}s longer.`, apply: (c, r) => c.abil('flashbang', 'duration', 'add', 0.4 * r) },
+  { id: 'h_doubles', tree: 'cleaner', row: 4, col: 1, max: 1, name: 'The Twins', icon: '🕴️', capstone: true,
+    desc: () => 'Body Double hires one more lookalike.', apply: (c) => c.abil('body_double', 'count', 'add', 1) },
+
+  // ── Professional ──
+  { id: 'h_fee', tree: 'professional', row: 0, col: 0, max: 5, name: 'Upfront Fee', icon: '💵',
+    desc: (r) => `+${8 * r}% gold.`, apply: (c, r) => c.stat('goldGain', 0.08 * r) },
+  { id: 'h_cd', tree: 'professional', row: 0, col: 2, max: 3, name: 'Punctual', icon: '⏱️',
+    desc: (r) => `All abilities cool down ${3 * r}% faster.`, apply: (c, r) => c.stat('haste', 0.03 * r) },
+  { id: 'h_luck', tree: 'professional', row: 1, col: 0, max: 3, name: 'Lucky Coin', icon: '🪙',
+    desc: (r) => `+${6 * r} luck.`, apply: (c, r) => c.stat('luck', 6 * r) },
+  { id: 'h_xp', tree: 'professional', row: 1, col: 2, max: 3, name: 'Reputation', icon: '📈',
+    desc: (r) => `+${6 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.06 * r) },
+  { id: 'h_contacts', tree: 'professional', row: 2, col: 0, max: 1, name: 'Contacts', icon: '📞',
+    desc: () => '+2 rerolls per run and chests cost 25% less.', apply: (c) => { c.stat('rerolls', 2); c.stat('chestDiscount', 0.25); } },
+  { id: 'h_focus', tree: 'professional', row: 2, col: 2, max: 3, name: 'Meditation', icon: '🧘',
+    desc: (r) => `Deep Breath lasts ${r}s longer.`, apply: (c, r) => c.abil('focus', 'duration', 'add', r) },
+  { id: 'h_silver', tree: 'professional', row: 3, col: 1, max: 3, name: 'Melted Spoons', icon: '🥄',
+    desc: (r) => `Silver Bullet cools down ${10 * r}% faster.`, apply: (c, r) => c.abil('silver_bullet', 'cooldown', 'pct', 10 * r) },
+  { id: 'h_rain', tree: 'professional', row: 4, col: 1, max: 1, name: 'Whole Crew', icon: '🌧️', capstone: true,
+    desc: () => 'Rain of Lead fires 8 more shots over a 25% bigger area.', apply: (c) => { c.abil('rain_of_lead', 'count', 'add', 8); c.abil('rain_of_lead', 'area', 'pct', 25); } },
+];

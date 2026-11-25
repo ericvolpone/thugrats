@@ -278,3 +278,21 @@ body.padnav button:focus, body.padnav [data-nav]:focus { outline: 3px solid var(
 body.padnav .card:focus { transform: translateY(-4px); }
 .pad-hint { display: none; color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
 body.padnav .pad-hint { display: block; }
+
+/* banish */
+#choice-banish.on { border-color: #ff4d4d; color: #ff8080; }
+.banish-note { text-align: center; color: var(--muted); font-size: 13px; margin: 6px 0 0; min-height: 1em; }
+.card.banish { border-color: #ff4d4d; box-shadow: 0 0 0 2px #ff4d4d55 inset; }
+.card.banish .ban { position: absolute; inset: auto 8px 8px 8px; background: #ff4d4d; color: #fff; font: 13px 'Lilita One'; border-radius: 8px; padding: 3px; text-align: center; }
+.card.nobanish { opacity: 0.4; pointer-events: none; }
+.gear-slot .gtxt { flex: 1; min-width: 0; }
+.gear-slot.worn { border-color: var(--gold); background: rgba(242, 192, 55, 0.07); }
+.gear-slot .btn { flex: none; }
+.gear-slot .sig { font-size: 10px; background: var(--gold); color: #111; padding: 1px 5px; border-radius: 5px; vertical-align: middle; }
+
+/* pick lock: cards ignore input for a moment after they appear */
+#choice.picklock .card, #choice.picklock .row .btn { pointer-events: none; }
+#choice.picklock .card { filter: saturate(0.4) brightness(0.8); }
+#choice.picklock #choice-cards { position: relative; }
+#choice.picklock #choice-cards::after { content: ''; position: absolute; left: 0; bottom: -6px; height: 3px; width: 100%; background: var(--gold); transform-origin: left; animation: picklock var(--lock, 1000ms) linear forwards; border-radius: 2px; }
+@keyframes picklock { from { transform: scaleX(1); } to { transform: scaleX(0); } }

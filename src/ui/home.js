@@ -6,6 +6,7 @@ import { MAPS, DIFFICULTIES } from '../data/maps.js';
 import { TIERS, tierColor } from '../data/tiers.js';
 import { Save, heroXpToNext, HERO_MAX_LEVEL } from '../save.js';
 import { BOSSES } from '../data/mobs.js';
+import { GEAR_SLOTS } from '../data/gear.js';
 import { ACCOUNT_UPGRADES } from '../data/account.js';
 import { paint, C, el } from '../util.js';
 import { sfx } from '../audio.js';
@@ -19,7 +20,7 @@ export class HomeScreen {
   constructor({ onPlay }) {
     this.onPlay = onPlay;
     this.root = document.getElementById('home');
-    this.heroId = 'lenny';
+    this.heroId = Save.data.lastHero && heroById(Save.data.lastHero) ? Save.data.lastHero : 'lenny';
     this.tab = 'play';
     this.selTalent = null;
 
@@ -68,6 +69,8 @@ export class HomeScreen {
     const h = heroById(id);
     if (!h || h.locked) return;
     this.heroId = id;
+    Save.data.lastHero = id;
+    Save.write();
     if (this.model) this.scene.remove(this.model.root);
     this.model = createHeroModel(h.model);
     this.model.root.scale.setScalar(1.5);
@@ -118,7 +121,7 @@ export class HomeScreen {
     const title = el('div', 'home-title', `<h1>THUGRATS</h1><div class="sub">the hideout</div><div class="spacer"></div><div class="rep-chip" title="Rep — account-wide, earned by every run">🤝 ${Save.rep} Rep</div>`);
     const mini = el('div', 'roster-mini');
     for (const hh of HEROES) {
-      const b = el('button', `${hh.id === this.heroId ? 'sel' : ''} ${hh.locked ? 'locked' : ''}`, hh.locked ? '🔒' : '👶');
+      const b = el('button', `${hh.id === this.heroId ? 'sel' : ''} ${hh.locked ? 'locked' : ''}`, hh.locked ? '🔒' : hh.icon ?? '👶');
       b.title = hh.name;
       b.onclick = () => { if (!hh.locked) { sfx('click'); this.setHero(hh.id); } };
       mini.appendChild(b);
@@ -131,7 +134,7 @@ export class HomeScreen {
     for (const hh of HEROES) {
       const lv = hh.locked ? '' : `LV ${Save.hero(hh.id).level}`;
       const b = el('button', `hero-card ${hh.id === this.heroId ? 'sel' : ''} ${hh.locked ? 'locked' : ''}`,
-        `<div class="face">${hh.locked ? '🔒' : '👶'}</div><div><div class="nm">${hh.name}</div><div class="tt">${hh.title}${hh.locked ? ' · coming soon' : ''}</div></div><div class="lv">${lv}</div>`);
+        `<div class="face">${hh.locked ? '🔒' : hh.icon ?? '👶'}</div><div><div class="nm">${hh.name}</div><div class="tt">${hh.title}${hh.locked ? ' · coming soon' : ''}</div></div><div class="lv">${lv}</div>`);
       b.onclick = () => { if (!hh.locked) { sfx('click'); this.setHero(hh.id); } };
       roster.appendChild(b);
     }
@@ -170,7 +173,7 @@ export class HomeScreen {
     for (const m of MAPS) {
       const locked = m.requires && Save.bestClear(m.requires) < 0;
       const best = Save.bestClear(m.id);
-      const gear = h.gear.find((g) => g.id === m.gear);
+      const gear = h.gear.find((g) => g.map === m.id);
       const gt = gear ? Save.gearTier(h.id, gear.id) : -1;
       const card = el('div', `map-card ${locked ? 'locked' : ''}`);
       card.innerHTML = `<h3>${m.name}</h3><div class="blurb">${locked ? `🔒 Clear ${MAPS.find((x) => x.id === m.requires).name} to unlock` : m.blurb}</div>
@@ -268,22 +271,33 @@ export class HomeScreen {
       row.append(add, sub);
       info.appendChild(row);
     } else {
-      info.innerHTML = '<span class="muted">Tap a talent to read it, tap again to learn a rank (right-click to unlearn). You earn a point every hero level. Deeper rows need 3 points per row in that branch; the bottom row holds a capstone that changes how Lenny plays.</span>';
+      info.innerHTML = `<span class="muted">Tap a talent to read it, tap again to learn a rank (right-click to unlearn). You earn a point every hero level. Deeper rows need 3 points per row in that branch; the bottom row holds a capstone that changes how ${h.name.split(' ')[0]} plays.</span>`;
     }
     body.appendChild(info);
   }
 
   renderGear(body, h) {
-    body.appendChild(el('div', 'note', 'Gear is permanent and specific to this hero. Each map drops one piece; clearing it again upgrades it (Normal caps at Uncommon, Hard at Epic, Nightmare at Legendary).'));
-    for (const g of h.gear) {
-      const t = Save.gearTier(h.id, g.id);
-      const map = MAPS.find((m) => m.id === g.map);
-      const row = el('div', `gear-slot ${t < 0 ? 'empty' : ''}`);
-      row.innerHTML = `<div class="ic" style="border-color:${t >= 0 ? tierColor(t) : '#444'}">${g.icon}</div>
-        <div><div class="nm" style="color:${t >= 0 ? tierColor(t) : 'inherit'}">${g.slot}: ${g.name} ${t >= 0 ? `(${TIERS[t].name})` : ''}</div>
-        <div class="ds">${t >= 0 ? g.desc(t) : `Clear ${map.name} to earn it.`}</div>
-        ${t >= 0 && t < 4 ? `<div class="ds" style="opacity:0.7">Next: ${g.desc(t + 1)}</div>` : ''}</div>`;
-      body.appendChild(row);
+    body.appendChild(el('div', 'note', 'Gear is permanent and belongs to this hero. Wear one piece per slot. Each map\'s signature piece comes from clearing it; the others drop at random from long runs and clears. Repeat drops upgrade a piece, up to the difficulty\'s cap (Normal: Uncommon, Hard: Epic, Nightmare: Legendary).'));
+    for (const slot of GEAR_SLOTS) {
+      body.appendChild(el('h3', 'rep-group', slot));
+      const worn = Save.equipped(h.id, slot, h.gear);
+      for (const g of h.gear.filter((x) => x.slot === slot)) {
+        const t = Save.gearTier(h.id, g.id);
+        const map = MAPS.find((m) => m.id === g.map);
+        const on = worn === g.id;
+        const row = el('div', `gear-slot ${t < 0 ? 'empty' : ''} ${on ? 'worn' : ''}`);
+        row.innerHTML = `<div class="ic" style="border-color:${t >= 0 ? tierColor(t) : '#444'}">${g.icon}</div>
+          <div class="gtxt"><div class="nm" style="color:${t >= 0 ? tierColor(t) : 'inherit'}">${g.name} ${t >= 0 ? `(${TIERS[t].name})` : ''}${g.map ? ' <span class="sig">signature</span>' : ''}</div>
+          <div class="ds">${t >= 0 ? g.desc(t) : g.map ? `Clear ${map.name} to earn it.` : 'Random drop from runs.'}</div>
+          ${t >= 0 && t < 4 ? `<div class="ds" style="opacity:0.7">Next: ${g.desc(t + 1)}</div>` : ''}</div>`;
+        if (t >= 0) {
+          const b = el('button', `btn small ${on ? '' : 'ghost'}`, on ? 'Worn' : 'Wear');
+          b.disabled = on;
+          b.onclick = () => { sfx('select'); Save.equip(h.id, slot, g.id); this.render(); };
+          row.appendChild(b);
+        }
+        body.appendChild(row);
+      }
     }
   }
 

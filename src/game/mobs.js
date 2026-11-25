@@ -248,7 +248,31 @@ export class MobManager {
       const r = m.def.ranged;
       if (r && dist < r.keep) want = dist < r.keep * 0.7 ? -0.6 : 0;
       if (dist < touch + 0.05) want = 0;
-      const nx = dx / dist, nz = dz / dist;
+      let nx = dx / dist, nz = dz / dist;
+      // wall steering: if something solid is straight ahead, slide around it
+      // (keep the chosen side for a while so they don't jitter at corners)
+      if (!m.def.fly && want > 0 && dist > 3) {
+        m.steerCheck = (m.steerCheck ?? Math.random() * 0.2) - dt;
+        if (m.steerCheck <= 0) {
+          m.steerCheck = 0.18;
+          const look = m.radius + 1.4;
+          if (run.world.blockedAt(m.x + nx * look, m.z + nz * look)) {
+            if (!(m.steerT > 0)) {
+              const lf = !run.world.blockedAt(m.x - nz * look, m.z + nx * look);
+              const rf = !run.world.blockedAt(m.x + nz * look, m.z - nx * look);
+              m.steer = lf && !rf ? 1 : rf && !lf ? -1 : (m.id % 2 ? 1 : -1);
+            }
+            m.steerT = 0.9;
+          }
+        }
+        if (m.steerT > 0) {
+          m.steerT -= dt;
+          const sx = nx * 0.3 - nz * m.steer, sz = nz * 0.3 + nx * m.steer;
+          const l = Math.hypot(sx, sz);
+          nx = sx / l;
+          nz = sz / l;
+        }
+      }
       m.vx = nx * sp * want;
       m.vz = nz * sp * want;
       if (m.brain?.dash) { m.vx = m.brain.dash.vx; m.vz = m.brain.dash.vz; }

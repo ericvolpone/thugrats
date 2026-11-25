@@ -1,6 +1,7 @@
 import { TIERS, tierColor } from '../data/tiers.js';
-import { SLOTS, SLOT_NAMES } from '../data/items.js';
+import { SLOTS, SLOT_NAMES, itemById } from '../data/items.js';
 import { upgradeText } from '../game/stats.js';
+import { banishKind } from '../game/upgrades.js';
 import { fmtTime, fmtNum, el } from '../util.js';
 import { heroXpToNext } from '../save.js';
 import { sfx } from '../audio.js';
@@ -27,12 +28,14 @@ export class Hud {
     });
     this.$('choice-reroll').addEventListener('click', () => this.run?.reroll());
     this.$('choice-skip').addEventListener('click', () => this.run?.choose(null));
+    this.$('choice-banish').addEventListener('click', () => this.run?.toggleBanish());
     addEventListener('keydown', (e) => {
       if (!this.run || this.run.ended) return;
       if (this.run.choice) {
         const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
         if (i >= 0 && this.run.choice.cards[i]) this.run.choose(this.run.choice.cards[i]);
         if (e.code === 'KeyR') this.run.reroll();
+        if (e.code === 'KeyB') this.run.toggleBanish();
         return;
       }
       if (e.code === 'Escape' || e.code === 'KeyP') this.togglePause();
@@ -160,7 +163,7 @@ export class Hud {
     r.abilities.forEach((a, i) => {
       const cd = this.abSlots[i].querySelector('.cd');
       if (cd) cd.style.setProperty('--p', `${Math.max(0, Math.min(1, a.cd / a.cdMax)) * 100}%`);
-      this.abSlots[i].classList.toggle('buff', a.def.id === 'frenzy' && !!r.buffs.frenzy);
+      this.abSlots[i].classList.toggle('buff', !!r.buffs[a.def.id]);
     });
 
     // titans
@@ -193,13 +196,18 @@ export class Hud {
       const g = c.getContext('2d');
       g.fillStyle = 'rgba(40,36,44,0.9)';
       g.fillRect(0, 0, W, W);
-      g.fillStyle = 'rgba(255,255,255,0.08)';
-      for (let s = -88; s <= 88; s += 44) {
-        g.fillRect(X(s) - 5 * k, 0, 10 * k, W);
-        g.fillRect(0, Z(s) - 5 * k, W, 10 * k);
+      g.globalAlpha = 0.45;
+      for (const f of r.world.mm) {
+        g.fillStyle = f.color;
+        if (f.r != null) { g.beginPath(); g.arc(X(f.x), Z(f.z), f.r * k, 0, Math.PI * 2); g.fill(); }
+        else g.fillRect(X(f.x0), Z(f.z0), (f.x1 - f.x0) * k, (f.z1 - f.z0) * k);
       }
-      g.fillStyle = 'rgba(120,100,110,0.85)';
-      for (const b of r.world.rects) g.fillRect(X(b.x0), Z(b.z0), (b.x1 - b.x0) * k, (b.z1 - b.z0) * k);
+      g.globalAlpha = 1;
+      for (const b of r.world.rects) {
+        if (b.kind === 'water') continue;
+        g.fillStyle = b.kind === 'prop' ? 'rgba(150,140,150,0.6)' : 'rgba(120,100,110,0.9)';
+        g.fillRect(X(b.x0), Z(b.z0), (b.x1 - b.x0) * k, (b.z1 - b.z0) * k);
+      }
       for (const [x, z] of r.map.bossSpawns) {
         g.strokeStyle = 'rgba(255,90,90,0.5)';
         g.lineWidth = 2;
@@ -294,19 +302,24 @@ export class Hud {
         col = '#f2c037';
         html = `<span class="tag">NEW ABILITY</span><div class="tier">Ability ${r.abilities.length + 1}/5</div><div class="ic">${card.def.icon}</div><div class="nm">${card.def.name}</div><div class="what">${card.def.desc}</div>`;
       } else if (card.type === 'abilityUp') {
-        const a = card.ability;
-        html = `<div class="tier">${TIERS[tier].name}</div><div class="ic">${a.def.icon}</div><div class="nm">${a.def.name}</div><div class="eff">${upgradeText(card.up, tier)}</div><div class="lvl">Lv ${a.level} → ${a.level + 1}</div>`;
+        const a = card.ability, up = card.up;
+        const have = up.kind === 'pct' ? (a.inc[up.stat] ?? 0) * 100 : (a.add[up.stat] ?? 0);
+        const fmtTot = (v) => (up.fmt ? up.fmt(v) : up.kind === 'pct' ? `+${Math.round(v)}%` : `+${Math.round(v * 10) / 10}`);
+        html = `<div class="tier">${TIERS[tier].name}</div><div class="ic">${a.def.icon}</div><div class="nm">${a.def.name}</div><div class="eff">${upgradeText(up, card.gain)}</div>
+          <div class="lvl">${have > 0 ? `${up.label}: ${fmtTot(have)} → ${fmtTot(have + card.gain)}` : `Lv ${a.level} → ${a.level + 1}`}</div>`;
       } else if (card.type === 'item') {
         const d = card.def;
         const cur = card.owned?.power ?? 0;
-        const next = cur + d.values[tier];
+        const next = cur + card.gain;
         html = `<span class="tag">${card.owned ? `LV ${card.owned.level + 1}` : 'NEW'}</span><div class="tier">${TIERS[tier].name} ${SLOT_NAMES[d.slot]}</div><div class="ic">${d.icon}</div><div class="nm">${d.name}</div>
           <div class="eff">${d.desc(next)}</div>${card.owned ? `<div class="lvl">was: ${d.desc(cur)}</div>` : ''}`;
       } else {
         html = `<div class="ic">💰</div><div class="nm">Pocket Money</div><div class="eff">+${card.amount} gold</div>`;
       }
       b.style.setProperty('--tc', col);
-      b.innerHTML = `<span class="kb">${i + 1}</span>${html}`;
+      const banishable = c.banishing && banishKind(card);
+      if (c.banishing) { b.classList.add(banishable ? 'banish' : 'nobanish'); b.disabled = !banishable; }
+      b.innerHTML = `<span class="kb">${i + 1}</span>${html}${banishable ? '<span class="ban">🚫 BANISH</span>' : ''}`;
       b.addEventListener('click', () => r.choose(card));
       box.appendChild(b);
     });
@@ -314,6 +327,22 @@ export class Hud {
     rr.textContent = `🎲 Reroll (${r.rerolls})`;
     rr.disabled = r.rerolls <= 0;
     this.$('choice-skip').textContent = `Skip (+${10 + r.level * 2} gold)`;
+    const kind = c.kind === 'level' ? 'ability' : 'item';
+    const bb = this.$('choice-banish');
+    bb.textContent = c.banishing ? '✖ Cancel banish' : `🚫 Banish ${kind} (${r.banishes[kind]})`;
+    bb.disabled = !c.banishing && r.banishes[kind] <= 0;
+    bb.classList.toggle('on', !!c.banishing);
+    const names = [...r.banished].map((id) => r.hero.abilities.find((a) => a.id === id)?.name ?? itemById(id)?.name).filter(Boolean);
+    this.$('choice-banish-note').textContent = c.banishing ? `Pick the ${kind} to remove from this run's offers (the cards reroll for free).` : names.length ? `Banished: ${names.join(', ')}` : '';
+    // brief pick lock so a click/tap/button meant for the fight doesn't take a card
+    const box2 = this.$('choice');
+    const left = (c.lockUntil ?? 0) - performance.now();
+    clearTimeout(this.lockTimer);
+    if (left > 0) {
+      box2.classList.add('picklock');
+      box2.style.setProperty('--lock', `${left}ms`);
+      this.lockTimer = setTimeout(() => box2.classList.remove('picklock'), left);
+    } else box2.classList.remove('picklock');
     this.$('choice').classList.remove('hidden');
   }
 
@@ -343,17 +372,13 @@ export class Hud {
       const d = name(id);
       return `<div class="dmg-row"><span>${d.icon}</span><span>${d.name}</span><div class="bar"><i style="width:${(v / total) * 100}%"></i></div><span>${fmtNum(v)}</span></div>`;
     }).join('');
-    let gear = '';
-    if (res.gear) {
-      const g = res.gear;
-      gear = g.capped
-        ? `<div class="reward">${g.def.icon} <b>${g.def.name}</b> is already <b style="color:${tierColor(g.to)}">${TIERS[g.to].name}</b> — clear a harder difficulty to upgrade it further.</div>`
-        : `<div class="reward">${g.def.icon} Gear ${g.from < 0 ? 'unlocked' : 'upgraded'}: <b style="color:${tierColor(g.to)}">${g.def.name} (${TIERS[g.to].name})</b><br><span style="color:var(--muted);font-size:13px">${g.def.desc(g.to)}</span></div>`;
-    }
+    const gear = (res.gear ?? []).map((g) => (g.capped
+      ? `<div class="reward">${g.def.icon} <b>${g.def.name}</b> is already <b style="color:${tierColor(g.to)}">${TIERS[g.to].name}</b> — clear a harder difficulty to upgrade it further.</div>`
+      : `<div class="reward">${g.def.icon} ${g.drop ? 'Gear drop! ' : ''}${g.from < 0 ? 'New gear' : 'Gear upgraded'}: <b style="color:${tierColor(g.to)}">${g.def.name} (${TIERS[g.to].name})</b> <span style="color:var(--muted);font-size:13px">${g.def.slot}</span><br><span style="color:var(--muted);font-size:13px">${g.def.desc(g.to)}${g.from < 0 ? ' · equip it in the Gear tab' : ''}</span></div>`)).join('');
     const lvl = res.levels > 0 ? ` — <b style="color:var(--gold)">LEVEL UP! ${res.before} → ${res.after}</b> (+${res.levels} talent point${res.levels > 1 ? 's' : ''})` : '';
     panel.innerHTML = `
       <div class="end-head ${res.victory ? '' : 'lose'}"><h2>${res.victory ? 'Map Cleared!' : 'Busted!'}</h2>
-      <p style="color:var(--muted);margin:0">${res.victory ? `${run.map.name} (${run.diff.name}) belongs to the family now.` : 'Lenny got put in time-out. The family remembers.'}</p></div>
+      <p style="color:var(--muted);margin:0">${res.victory ? `${run.map.name} (${run.diff.name}) belongs to the family now.` : `${run.hero.name.split(' ')[0]} got put in time-out. The family remembers.`}</p></div>
       <div class="end-sum"><div>${fmtTime(res.time)}<span>time</span></div><div>${fmtNum(res.kills)}<span>kills</span></div><div>${res.level}<span>level</span></div><div>${fmtNum(res.gold)}<span>gold</span></div><div>${run.titanKills}/${run.titans.length}<span>titans</span></div></div>
       <div class="reward">⭐ +${res.heroXp} hero XP${lvl}</div>
       <div class="reward">🤝 +${res.rep} Rep <span style="color:var(--muted);font-size:13px">(account-wide — spend it in the hideout's Rep tab)</span></div>

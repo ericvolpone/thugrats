@@ -16,7 +16,8 @@ const _v = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
 
-const LOB_COLORS = { grenade: '#4f7d2f', molotov: '#d9a441', cement: '#a9a49a', dynamite: '#c8281e' };
+const LOB_COLORS = { grenade: '#4f7d2f', molotov: '#d9a441', cement: '#a9a49a', dynamite: '#c8281e', bottle: '#3a8f4a', pipe: '#8a8f99', pudding: '#e8b86b', gas: '#7fc24a', smoke: '#555a60', c4: '#e8e2cf', firework: '#ff4fa3', slime: '#7dff7a', knife: '#c9d2dc' };
+const ZONE_COLORS = { fire: '#ff6a1a', cement: '#9c978c', gas: '#7fc24a', ice: '#8fd8ff', smoke: '#6b6f78', slime: '#62e05a', void: '#5a2a8a', glass: '#bfe8d0' };
 
 export class Combat {
   constructor(run) {
@@ -37,7 +38,7 @@ export class Combat {
     this.lobs = [];
     this.lMesh = inst(new THREE.IcosahedronGeometry(0.24, 0), new THREE.MeshLambertMaterial({ flatShading: true }), MAX_L);
     this.orbits = [];
-    this.oMesh = inst(paint(new THREE.BoxGeometry(0.7, 0.3, 0.45), C('#3da35a')), MATS.flat, MAX_O);
+    this.oMesh = inst(paint(new THREE.BoxGeometry(0.7, 0.3, 0.45), C('#ffffff')), MATS.flat, MAX_O);
     this.zones = [];
     this.traps = [];
     this.cars = [];
@@ -58,7 +59,7 @@ export class Combat {
     this.bullets.push({
       x: o.x, z: o.z, y: o.y ?? 0.7, vx: s * o.speed, vz: c * o.speed, angle: o.angle, left: o.range ?? 18,
       dmg: o.dmg, pierce: o.pierce ?? 0, bounce: o.bounce ?? 0, size: o.size ?? 1, color: o.color ?? '#ffe38a',
-      ability: o.ability, hit: new Set(), explode: o.explode, knock: o.knock ?? 0.8, speed: o.speed,
+      ability: o.ability, hit: new Set(), explode: o.explode, knock: o.knock ?? 0.8, speed: o.speed, onHit: o.onHit,
     });
     this.run.fx.muzzle(o.x, o.y ?? 0.7, o.z);
   }
@@ -70,11 +71,12 @@ export class Combat {
 
   lob(o) {
     const p = this.run.player;
-    this.lobs.push({ x0: o.x ?? p.x, z0: o.z ?? p.z, tx: o.tx, tz: o.tz, t: 0, dur: o.dur ?? 0.7, kind: o.kind, onLand: o.onLand, small: o.small, h: o.small ? 1.5 : 3.2 });
+    if (this.lobs.length >= MAX_L) return o.onLand(o.tx, o.tz);
+    this.lobs.push({ x0: o.x ?? p.x, z0: o.z ?? p.z, tx: o.tx, tz: o.tz, t: 0, dur: o.dur ?? 0.7, kind: o.kind, onLand: o.onLand, small: o.small, h: o.h ?? (o.small ? 1.5 : 3.2), color: o.color });
   }
 
   zone(o) {
-    const color = o.kind === 'fire' ? '#ff6a1a' : o.kind === 'cement' ? '#9c978c' : '#888';
+    const color = o.color ?? ZONE_COLORS[o.kind] ?? '#888';
     const mesh = new THREE.Mesh(this.zoneGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false }));
     mesh.position.set(o.x, 0.07, o.z);
     mesh.scale.setScalar(o.r);
@@ -118,7 +120,7 @@ export class Combat {
   }
 
   spawnGoon(o) {
-    const model = createHeroModel('goon');
+    const model = createHeroModel(o.model ?? 'goon');
     const p = this.run.player;
     const a = rand(0, TAU);
     const g = { ...o, model, x: p.x + Math.sin(a) * 2, z: p.z + Math.cos(a) * 2, facing: 0, atkT: 0, swing: 0, target: null };
@@ -139,18 +141,23 @@ export class Combat {
     let n = 0;
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
-      const step = b.speed * dt;
-      b.x += b.vx * dt;
-      b.z += b.vz * dt;
-      b.left -= step;
-      let dead = b.left <= 0 || run.world.solidAt(b.x, b.z, 0, b.y);
+      // fast bullets move in sub-steps so they can't tunnel through small mobs
+      const subs = Math.max(1, Math.ceil((b.speed * dt) / 0.7));
+      let dead = false;
+      for (let sub = 0; sub < subs && !dead; sub++) {
+      const h = dt / subs;
+      b.x += b.vx * h;
+      b.z += b.vz * h;
+      b.left -= b.speed * h;
+      dead = b.left <= 0 || run.world.solidAt(b.x, b.z, 0, b.y);
       if (!dead) {
         const r = 0.25 * b.size;
         mobs.each(b.x, b.z, r, (m) => {
           if (dead || b.hit.has(m.id)) return;
           b.hit.add(m.id);
           run.hit(m, b.dmg, b.ability, { knock: b.knock, fromX: b.x - b.vx, fromZ: b.z - b.vz });
-          if (b.explode) run.explode(b.x, b.z, b.explode.r, b.dmg * b.explode.dmg, b.ability, { small: true });
+          if (b.explode) run.explode(b.x, b.z, b.explode.r, b.dmg * b.explode.dmg, b.ability, { small: true, color: b.explode.color });
+          b.onHit?.(m, b);
           if (b.pierce > 0) { b.pierce--; return; }
           if (b.bounce > 0) {
             b.bounce--;
@@ -170,6 +177,7 @@ export class Combat {
           }
           dead = true;
         });
+      }
       }
       if (dead) { this.bullets[i] = this.bullets[this.bullets.length - 1]; this.bullets.pop(); continue; }
       _e.set(0, b.angle, 0);
@@ -226,7 +234,7 @@ export class Combat {
       const sc = l.small ? 0.6 : 1;
       _m.compose(_v.set(x, y, z), _q, _s.set(sc, sc * (l.kind === 'molotov' ? 1.8 : 1), sc));
       this.lMesh.setMatrixAt(n, _m);
-      this.lMesh.setColorAt(n, _c.set(LOB_COLORS[l.kind] ?? '#888'));
+      this.lMesh.setColorAt(n, _c.set(l.color ?? LOB_COLORS[l.kind] ?? '#888'));
       n++;
       if (l.kind === 'molotov' && Math.random() < 0.5) run.fx.burst(x, y, z, '#ff9a2a', 1, 0.5, 0.25, 0.6, 0);
     }
@@ -241,13 +249,20 @@ export class Combat {
       const fade = Math.min(1, (zn.life - zn.t) / 0.4);
       zn.mesh.material.opacity = 0.4 * fade + (zn.kind === 'fire' ? Math.sin(run.time * 18 + i) * 0.06 : 0);
       if (zn.slow) mobs.each(zn.x, zn.z, zn.r, (m) => { m.zoneSlow = Math.max(m.zoneSlow, m.tier >= 2 ? zn.slow * 0.4 : zn.slow); });
+      if (zn.pull) mobs.each(zn.x, zn.z, zn.r, (m) => {
+        if (m.tier >= 2) return;
+        const dx = zn.x - m.x, dz = zn.z - m.z, d = Math.hypot(dx, dz) || 1;
+        if (d > 0.6) { m.x += (dx / d) * zn.pull * dt * (m.tier ? 0.4 : 1); m.z += (dz / d) * zn.pull * dt * (m.tier ? 0.4 : 1); }
+      });
+      if (zn.follow) { zn.x = run.player.x; zn.z = run.player.z; zn.mesh.position.set(zn.x, 0.07, zn.z); }
+      zn.onTick?.(zn, dt);
       if (zn.dps) {
         zn.tick -= dt;
         if (zn.tick <= 0) {
           zn.tick = 0.5;
-          mobs.each(zn.x, zn.z, zn.r, (m) => run.hit(m, zn.dps * 0.5, zn.ability, { noCrit: true, isBurn: true, color: '#ff9a3d' }));
+          mobs.each(zn.x, zn.z, zn.r, (m) => run.hit(m, zn.dps * 0.5, zn.ability, { noCrit: true, isBurn: zn.kind === 'fire', color: zn.kind === 'fire' ? '#ff9a3d' : '#cfe' }));
         }
-        if (Math.random() < dt * 14 * zn.r) {
+        if (zn.kind === 'fire' && Math.random() < dt * 14 * zn.r) {
           const a = rand(0, TAU), r = Math.sqrt(Math.random()) * zn.r;
           run.fx.burst(zn.x + Math.sin(a) * r, 0.2, zn.z + Math.cos(a) * r, Math.random() < 0.5 ? '#ff7a1a' : '#ffd23f', 1, 1.2, 0.5, 1, -3);
         }
@@ -296,6 +311,8 @@ export class Combat {
       if (o.t >= o.life) { this.orbits.splice(i, 1); continue; }
       const grow = Math.min(1, o.t * 4, (o.life - o.t) * 4);
       const dmg = o.ability.stat('damage');
+      const spin = o.spin ?? 3.6;
+      o.angle += dt * (spin - 3.6);
       for (let k = 0; k < o.count; k++) {
         const a = o.angle + (k / o.count) * TAU;
         const x = p.x + Math.sin(a) * o.r * grow, z = p.z + Math.cos(a) * o.r * grow;
@@ -303,19 +320,22 @@ export class Combat {
           const last = o.hitT.get(m.id) ?? -9;
           if (run.time - last < 0.45) return;
           o.hitT.set(m.id, run.time);
-          run.hit(m, dmg, o.ability, { knock: 3, fromX: p.x, fromZ: p.z });
+          run.hit(m, dmg, o.ability, { knock: o.knock ?? 3, fromX: p.x, fromZ: p.z });
+          o.onHit?.(m);
         });
         if (n < MAX_O) {
           _e.set(0, a + run.time * 4, 0.3);
           _q.setFromEuler(_e);
           _m.compose(_v.set(x, 0.8 + Math.sin(run.time * 5 + k) * 0.15, z), _q, _s.set(grow, grow, grow));
+          this.oMesh.setColorAt(n, _c.set(o.color ?? '#3da35a'));
           this.oMesh.setMatrixAt(n++, _m);
         }
-        if (Math.random() < dt * 3) run.fx.burst(x, 0.8, z, '#7be495', 1, 1.5, 0.6, 0.7, 2);
+        if (Math.random() < dt * 3) run.fx.burst(x, 0.8, z, o.spark ?? '#7be495', 1, 1.5, 0.6, 0.7, 2);
       }
     }
     this.oMesh.count = n;
     this.oMesh.instanceMatrix.needsUpdate = true;
+    if (this.oMesh.instanceColor) this.oMesh.instanceColor.needsUpdate = true;
 
     // hit-contract marks
     for (let i = this.marks.length - 1; i >= 0; i--) {
@@ -349,7 +369,7 @@ export class Combat {
         }
       }
       if (!g.target || g.target.dead || Math.hypot(g.target.x - p.x, g.target.z - p.z) > 14) {
-        g.target = run.mobs.target(g.x, g.z, 10, 'nearest');
+        g.target = run.mobs.target(g.x, g.z, g.seek ?? 10, 'nearest');
       }
       let tx, tz, moving = false;
       if (g.target) { tx = g.target.x; tz = g.target.z; } else {
@@ -358,7 +378,7 @@ export class Combat {
         tz = p.z - Math.sin(p.facing) * side - Math.cos(p.facing) * 1.5;
       }
       const dx = tx - g.x, dz = tz - g.z, d = Math.hypot(dx, dz);
-      const reach = g.target ? g.target.radius + 0.9 : 0.6;
+      const reach = g.target ? g.target.radius + (g.reach ?? 0.9) : 0.6;
       if (d > reach) {
         const sp = 7.5 * Math.min(1, d / 2);
         g.x += (dx / d) * sp * dt;
@@ -369,10 +389,11 @@ export class Combat {
       g.atkT -= dt;
       g.swing = Math.max(0, g.swing - dt * 4);
       if (g.target && d <= reach + 0.2 && g.atkT <= 0) {
-        g.atkT = 0.65;
+        g.atkT = g.rate ?? 0.65;
         g.swing = 1;
         const dmg = g.permanent ? 18 * run.stats.dmg * (1 + (run.abilityById('goon')?.inc.damage ?? 0)) : g.ability.stat('damage');
-        run.hit(g.target, dmg, g.ability ?? { def: { id: 'godfather', tags: [] } }, { knock: 4, fromX: g.x, fromZ: g.z });
+        if (g.onAttack) g.onAttack(g, g.target, dmg);
+        else run.hit(g.target, dmg, g.ability ?? { def: { id: 'godfather', tags: [] } }, { knock: 4, fromX: g.x, fromZ: g.z });
       }
       run.world.collide(g, 0.4);
       g.model.root.position.set(g.x, 0, g.z);

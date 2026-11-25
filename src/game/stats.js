@@ -1,5 +1,7 @@
 import { BASE_STATS } from '../heroes/index.js';
 import { Save } from '../save.js';
+import { scaledGain } from '../data/tiers.js';
+import { GEAR_SLOTS } from '../data/gear.js';
 
 /**
  * Builds the run's permanent layer from hero base stats + talents + gear:
@@ -26,9 +28,10 @@ export function buildLoadout(hero) {
     const r = prof.talents[t.id] ?? 0;
     if (r > 0) t.apply(ctx, r);
   }
-  for (const g of hero.gear ?? []) {
-    const tier = Save.gearTier(hero.id, g.id);
-    if (tier >= 0) g.apply(ctx, tier);
+  for (const slot of GEAR_SLOTS) {
+    const id = Save.equipped(hero.id, slot, hero.gear ?? []);
+    const g = id && hero.gear.find((x) => x.id === id);
+    if (g) g.apply(ctx, Save.gearTier(hero.id, g.id));
   }
   return { stats, mods, flags };
 }
@@ -38,7 +41,9 @@ export function computeStats(run) {
   const s = { ...run.loadout.stats };
   s.maxHp += run.levelBonus.hp;
   s.dmg += run.levelBonus.dmg;
+  s.luck += run.levelBonus.luck ?? 0;
   for (const it of run.allItems()) it.def.stats?.(it.power, s, run, it);
+  for (const id in run.buffs) run.buffs[id].stats?.(s, run.buffs[id], run);
   s.pickup *= 1 + s.pickupPct;
   s.speed *= 1 + s.speedPct;
   if (run.buffs.frenzy) s.armor += s.frenzyArmor;
@@ -55,6 +60,7 @@ export class AbilityInst {
     this.run = run;
     this.inc = {};
     this.add = {};
+    this.acc = {}; // per-stat total of scaled upgrades taken (for diminishing returns)
     this.level = 1;
     this.cd = 0.4;
     this.cdMax = 1;
@@ -83,18 +89,38 @@ export class AbilityInst {
     }
   }
 
-  applyUpgrade(up, tier) {
-    const v = up.values[tier];
-    if (up.kind === 'pct') this.inc[up.stat] = (this.inc[up.stat] ?? 0) + v / 100;
-    else this.add[up.stat] = (this.add[up.stat] ?? 0) + v;
+  /**
+   * Size of an upgrade roll for this ability. Upgrades with `values` are flat,
+   * tier-gated (extra bullet, pierce...). Upgrades with `v` scale with rarity and
+   * shrink the more of that stat this ability already has (see tiers.decay).
+   */
+  gainFor(up, tier) {
+    if (up.values) return up.values[tier];
+    let g = scaledGain(up.v, this.acc[up.stat] ?? 0, tier);
+    if (up.int) g = Math.max(1, Math.round(g));
+    return g;
+  }
+
+  /** Can this upgrade still be offered at this tier? */
+  canOffer(up, tier) {
+    if (up.values && !(up.values[tier] > 0)) return false;
+    if (up.max != null && (this.add[up.stat] ?? 0) >= up.max) return false;
+    if (this.def.useless?.(this, up.stat)) return false;
+    return true;
+  }
+
+  applyUpgrade(up, tier, gain = this.gainFor(up, tier)) {
+    if (up.kind === 'pct') this.inc[up.stat] = (this.inc[up.stat] ?? 0) + gain / 100;
+    else this.add[up.stat] = (this.add[up.stat] ?? 0) + gain;
+    if (!up.values) this.acc[up.stat] = (this.acc[up.stat] ?? 0) + gain;
     this.level++;
     this.history.push({ label: up.label, tier });
   }
 }
 
-export function upgradeText(up, tier) {
-  const v = up.values[tier];
-  if (up.fmt) return up.fmt(v);
-  if (up.kind === 'pct') return `+${v}% ${up.label}`;
+export function upgradeText(up, gain) {
+  if (up.fmt) return up.fmt(gain);
+  const v = Math.round(gain * 10) / 10;
+  if (up.kind === 'pct') return `+${Math.round(gain)}% ${up.label}`;
   return `+${v} ${up.label}`;
 }

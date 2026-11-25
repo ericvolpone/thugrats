@@ -1,0 +1,62 @@
+/** Tiny Tony's talent trees (format: heroes/lenny/talents.js). */
+export const TONY_TREES = [
+  { id: 'bruiser', name: 'Bruiser', icon: '🥊', color: '#ff6b5a', blurb: 'Fists, combos and bigger swings.' },
+  { id: 'iron', name: 'Iron Diaper', icon: '🛡️', color: '#8fb8ff', blurb: 'Soak it all up and dish it back.' },
+  { id: 'barfight', name: 'Bar Fight', icon: '🍼', color: '#ffb02e', blurb: 'Bottles, chairs, stink and chaos.' },
+];
+
+export const TONY_TALENTS = [
+  // ── Bruiser ──
+  { id: 't_knuckles', tree: 'bruiser', row: 0, col: 0, max: 5, name: 'Bare Knuckles', icon: '✊',
+    desc: (r) => `Melee abilities deal +${4 * r}% damage.`, apply: (c, r) => c.abil('#melee', 'damage', 'pct', 4 * r) },
+  { id: 't_jab', tree: 'bruiser', row: 0, col: 2, max: 3, name: 'Quick Jab', icon: '⚡',
+    desc: (r) => `Haymaker swings ${6 * r}% faster.`, apply: (c, r) => c.abil('haymaker', 'cooldown', 'pct', 6 * r) },
+  { id: 't_reach', tree: 'bruiser', row: 1, col: 0, max: 3, name: 'Long Arms', icon: '🦍',
+    desc: (r) => `Melee abilities have +${6 * r}% area.`, apply: (c, r) => c.abil('#melee', 'area', 'pct', 6 * r) },
+  { id: 't_sucker', tree: 'bruiser', row: 1, col: 2, max: 3, name: 'Sucker Punch', icon: '😵',
+    desc: (r) => `+${3 * r}% crit chance, +${10 * r}% crit damage.`, apply: (c, r) => { c.stat('crit', 0.03 * r); c.stat('critDmg', 0.1 * r); } },
+  { id: 't_charge', tree: 'bruiser', row: 2, col: 0, max: 2, name: 'Stampede', icon: '🐂',
+    desc: (r) => `Bull Rush deals +${25 * r}% damage and is ${10 * r}% longer.`, apply: (c, r) => { c.abil('bull_rush', 'damage', 'pct', 25 * r); c.abil('bull_rush', 'range', 'pct', 10 * r); } },
+  { id: 't_lariat', tree: 'bruiser', row: 2, col: 2, max: 2, name: 'Big Spin', icon: '🌀',
+    desc: (r) => `Spinning Lariat has +${r} fist${r > 1 ? 's' : ''}.`, apply: (c, r) => c.abil('lariat', 'count', 'add', r) },
+  { id: 't_bully', tree: 'bruiser', row: 3, col: 1, max: 3, name: 'Bully', icon: '👊',
+    desc: (r) => `+${8 * r}% damage to elites, bosses and titans.`, apply: (c, r) => c.stat('bigDmg', 0.08 * r) },
+  { id: 't_two_fists', tree: 'bruiser', row: 4, col: 1, max: 1, name: 'Two Fists', icon: '🥊', capstone: true,
+    desc: () => 'Haymaker always throws one extra swing (the other fist).', apply: (c) => c.flag('tonyCombo', true) },
+
+  // ── Iron Diaper ──
+  { id: 't_beef', tree: 'iron', row: 0, col: 0, max: 5, name: 'Big Boned', icon: '🍖',
+    desc: (r) => `+${14 * r} max HP.`, apply: (c, r) => c.stat('maxHp', 14 * r) },
+  { id: 't_thick', tree: 'iron', row: 0, col: 2, max: 3, name: 'Thick Skin', icon: '🦏',
+    desc: (r) => `Take ${4 * r}% less damage.`, apply: (c, r) => c.stat('armor', 0.04 * r) },
+  { id: 't_naps', tree: 'iron', row: 1, col: 0, max: 3, name: 'Power Nap', icon: '😴',
+    desc: (r) => `+${(0.5 * r).toFixed(1)} HP regen per second.`, apply: (c, r) => c.stat('regen', 0.5 * r) },
+  { id: 't_belly', tree: 'iron', row: 1, col: 2, max: 3, name: 'Six-Pack', icon: '🛡️', 
+    desc: (r) => `Iron Belly shields for +${20 * r}% and recharges ${6 * r}% faster.`, apply: (c, r) => { c.abil('iron_belly', 'power', 'pct', 20 * r); c.abil('iron_belly', 'cooldown', 'pct', 6 * r); } },
+  { id: 't_stubborn', tree: 'iron', row: 2, col: 0, max: 2, name: 'Stubborn', icon: '🐐',
+    desc: (r) => `${5 * r}% chance to shrug off a hit.`, apply: (c, r) => c.stat('dodge', 0.05 * r) },
+  { id: 't_juice', tree: 'iron', row: 2, col: 2, max: 3, name: 'Extra Juice', icon: '🧃',
+    desc: (r) => `Juice Box Rage lasts ${r}s longer.`, apply: (c, r) => c.abil('roid_rage', 'duration', 'add', r) },
+  { id: 't_quake', tree: 'iron', row: 3, col: 1, max: 1, name: 'Aftershock', icon: '🌋',
+    desc: () => 'Ground Pound cracks the street: a slowing, damaging rubble patch for 3s.', apply: (c) => c.flag('tonyQuake', true) },
+  { id: 't_thorns', tree: 'iron', row: 4, col: 1, max: 1, name: 'Spiky Onesie', icon: '🦔', capstone: true,
+    desc: () => 'Shields are 30% stronger. Every hit you take deals 200% of it back to whoever dealt it.', apply: (c) => { c.flag('tonyThorns', true); c.flag('thorns', 2); } },
+
+  // ── Bar Fight ──
+  { id: 't_arm', tree: 'barfight', row: 0, col: 0, max: 5, name: 'Good Arm', icon: '💪',
+    desc: (r) => `Thrown abilities deal +${5 * r}% damage.`, apply: (c, r) => c.abil('#thrown', 'damage', 'pct', 5 * r) },
+  { id: 't_quick', tree: 'barfight', row: 0, col: 2, max: 3, name: 'Last Call', icon: '⏱️',
+    desc: (r) => `All abilities cool down ${3 * r}% faster.`, apply: (c, r) => c.stat('haste', 0.03 * r) },
+  { id: 't_glass', tree: 'barfight', row: 1, col: 0, max: 2, name: 'Broken Glass', icon: '🍼',
+    desc: (r) => `Bottle Smash throws +${2 * r} shards.`, apply: (c, r) => c.abil('bottle', 'count', 'add', 2 * r) },
+  { id: 't_stink', tree: 'barfight', row: 1, col: 2, max: 3, name: 'Ripe', icon: '💩',
+    desc: (r) => `Stink Bomb clouds are ${8 * r}% bigger and last ${r}s longer.`, apply: (c, r) => { c.abil('stink_bomb', 'area', 'pct', 8 * r); c.abil('stink_bomb', 'duration', 'add', r); } },
+  { id: 't_luck', tree: 'barfight', row: 2, col: 0, max: 3, name: 'Lucky Punch', icon: '🍀',
+    desc: (r) => `+${6 * r} luck.`, apply: (c, r) => c.stat('luck', 6 * r) },
+  { id: 't_chair', tree: 'barfight', row: 2, col: 2, max: 2, name: 'Steel Chair', icon: '🪑',
+    desc: (r) => `Folding Chair deals +${30 * r}% damage.`, apply: (c, r) => c.abil('folding_chair', 'damage', 'pct', 30 * r) },
+  { id: 't_tab', tree: 'barfight', row: 3, col: 1, max: 3, name: 'Running a Tab', icon: '💵',
+    desc: (r) => `+${8 * r}% gold and XP.`, apply: (c, r) => { c.stat('goldGain', 0.08 * r); c.stat('xpGain', 0.08 * r); } },
+  { id: 't_brothers', tree: 'barfight', row: 4, col: 1, max: 1, name: 'The Whole Family', icon: '👨‍👦‍👦', capstone: true,
+    desc: () => 'Little Brother always brings one more brother.', apply: (c) => c.abil('little_bro', 'count', 'add', 1) },
+];

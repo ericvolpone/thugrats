@@ -6,6 +6,7 @@
  *   A (bottom)          press the focused button
  *   B (right)           back: close pause / resume
  *   X (left)            reroll (on card screens)
+ *   Y (top)             banish mode (on card screens)
  *   LB / RB             previous / next hideout tab
  *   Start               pause / resume during a run
  *
@@ -127,6 +128,7 @@ export class PadNav {
     }
     if (edge(1)) this.onBack?.(layer.id);
     if (edge(2)) layer.querySelector('#choice-reroll:not([disabled])')?.click();
+    if (edge(3)) layer.querySelector('#choice-banish:not([disabled])')?.click();
     if (layer.id === 'home' && (edge(4) || edge(5))) {
       const tabs = [...layer.querySelectorAll('.tabs button')];
       const i = tabs.findIndex((t) => t.classList.contains('on'));

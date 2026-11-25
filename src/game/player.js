@@ -15,8 +15,8 @@ export class Player {
     this.root = this.model.root;
     this.root.scale.setScalar(1.15);
     run.scene.add(this.root);
-    this.x = 0;
-    this.z = 0;
+    this.x = run.map.spawn?.[0] ?? 0;
+    this.z = run.map.spawn?.[1] ?? 0;
     this.radius = 0.55;
     this.facing = 0;
     this.moving = false;

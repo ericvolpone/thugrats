@@ -16,10 +16,11 @@ export const DIFFICULTIES = [
 export const MAPS = [
   {
     id: 'little_italy',
+    spawn: [0, 13],
     name: 'Little Italy',
     blurb: 'Back alleys, red sauce and a whole precinct that wants you in time-out.',
     theme: {
-      ground: '#4a4a52', street: '#3a3a42', line: '#e8d26a', sidewalk: '#8b8680',
+      ground: '#5e5650', street: '#3a3a42', line: '#e8d26a', sidewalk: '#8b8680',
       buildings: ['#8a3b2e', '#a0522d', '#6e3b2f', '#9b6b4a', '#7a2e2a'],
       sky: '#1b1424', fog: '#2a1f33', hemi: ['#ffdcb0', '#40304a'], sun: '#ffd8a8',
       props: ['dumpster', 'trashcan', 'hydrant', 'lamp', 'bench', 'car', 'crate'],
@@ -34,12 +35,11 @@ export const MAPS = [
     ],
     bosses: ['officer_donut'],
     titans: [
-      { boss: 'lunch_lady', pos: [-70, -55], cond: { level: 12 } },
-      { boss: 'detective', pos: [72, -50], cond: { gold: 300 } },
-      { boss: 'commissioner', pos: [0, 82], cond: { titans: 2, level: 20 } },
+      { boss: 'lunch_lady', pos: [-55, -46], cond: { level: 12 } },
+      { boss: 'detective', pos: [55, -46], cond: { gold: 300 } },
+      { boss: 'commissioner', pos: [0, 60], cond: { titans: 2, level: 20 } },
     ],
-    bossSpawns: [[-55, 30], [55, 35], [0, -70], [-20, 60]],
-    gear: 'dons_fedora',
+    bossSpawns: [[-27, -12], [27, 14], [0, -38], [-22, 48]],
   },
   {
     id: 'the_docks',
@@ -47,7 +47,7 @@ export const MAPS = [
     blurb: 'Fog, shipping containers and seagulls with a grudge.',
     requires: 'little_italy',
     theme: {
-      ground: '#4d5560', street: '#3c434c', line: '#f2f2f2', sidewalk: '#6d7884',
+      ground: '#4d5560', street: '#3c434c', line: '#f2f2f2', sidewalk: '#6d7884', water: '#1b3f5c',
       buildings: ['#5c6f7e', '#7a6a58', '#4f5d6b', '#6b5444'],
       sky: '#152030', fog: '#24364a', hemi: ['#cfe6ff', '#24303d'], sun: '#dbe9ff',
       props: ['container', 'barrel', 'crate', 'bollard', 'lamp', 'crate'],
@@ -62,12 +62,11 @@ export const MAPS = [
     ],
     bosses: ['harbor_master'],
     titans: [
-      { boss: 'big_tuna', pos: [-72, 50], cond: { bosses: 1 } },
-      { boss: 'customs_chief', pos: [70, 55], cond: { gold: 350 } },
-      { boss: 'admiral', pos: [0, -82], cond: { titans: 2, level: 22 } },
+      { boss: 'big_tuna', pos: [-56, -48], cond: { bosses: 1 } },
+      { boss: 'customs_chief', pos: [58, -50], cond: { gold: 350 } },
+      { boss: 'admiral', pos: [24, 70], cond: { titans: 2, level: 22 } },
     ],
-    bossSpawns: [[-50, -30], [50, -35], [0, 65], [30, 10]],
-    gear: 'lead_bib',
+    bossSpawns: [[-8, -16], [44, -16], [-35, 36], [12, -48]],
   },
   {
     id: 'casino_row',
@@ -90,17 +89,16 @@ export const MAPS = [
     ],
     bosses: ['floor_manager'],
     titans: [
-      { boss: 'dealer_supreme', pos: [-70, -60], cond: { gold: 400 } },
-      { boss: 'the_king', pos: [72, -55], cond: { level: 16 } },
-      { boss: 'big_lou', pos: [0, 82], cond: { titans: 2, bosses: 2 } },
+      { boss: 'dealer_supreme', pos: [-56, 66], cond: { gold: 400 } },
+      { boss: 'the_king', pos: [58, -26], cond: { level: 16 } },
+      { boss: 'big_lou', pos: [0, 64], cond: { titans: 2, bosses: 2 } },
     ],
-    bossSpawns: [[-55, 25], [55, 25], [0, -65], [25, 55]],
-    gear: 'loaded_booties',
+    bossSpawns: [[-24, 18], [24, -24], [0, -52], [26, 36]],
   },
 ];
 
 export const MAP_DEFAULTS = {
-  half: 110, // arena is 220 x 220
+  half: 80, // arena is 160 x 160
   duration: 12 * 60, // seconds before the Feds arrive
   bossEvery: 150,
   firstBoss: 150,

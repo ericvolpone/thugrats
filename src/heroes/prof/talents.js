@@ -1,0 +1,62 @@
+/** Professor Pudding's talent trees (format: heroes/lenny/talents.js). */
+export const PROF_TREES = [
+  { id: 'mad', name: 'Mad Science', icon: '⚗️', color: '#b07aff', blurb: 'Lightning, beams and things best left alone.' },
+  { id: 'robotics', name: 'Robotics', icon: '🤖', color: '#7ad0ff', blurb: 'Let the machines do the work.' },
+  { id: 'brain', name: 'Big Brain', icon: '🧠', color: '#ff8fd0', blurb: 'Cooldowns, luck and learning.' },
+];
+
+export const PROF_TALENTS = [
+  // ── Mad Science ──
+  { id: 'p_volts', tree: 'mad', row: 0, col: 0, max: 5, name: 'More Volts', icon: '⚡',
+    desc: (r) => `Science abilities deal +${4 * r}% damage.`, apply: (c, r) => c.abil('#science', 'damage', 'pct', 4 * r) },
+  { id: 'p_jumps', tree: 'mad', row: 0, col: 2, max: 3, name: 'Conductive Goo', icon: '🔗',
+    desc: (r) => `Tesla Coil jumps ${r} more time${r > 1 ? 's' : ''}.`, apply: (c, r) => c.abil('tesla', 'count', 'add', r) },
+  { id: 'p_area', tree: 'mad', row: 1, col: 0, max: 3, name: 'Wider Beams', icon: '📡',
+    desc: (r) => `Beam abilities have +${10 * r}% area.`, apply: (c, r) => c.abil('#beam', 'area', 'pct', 10 * r) },
+  { id: 'p_crit', tree: 'mad', row: 1, col: 2, max: 3, name: 'Precise Measurements', icon: '📏',
+    desc: (r) => `+${3 * r}% crit chance.`, apply: (c, r) => c.stat('crit', 0.03 * r) },
+  { id: 'p_freeze', tree: 'mad', row: 2, col: 0, max: 1, name: 'Deep Freeze', icon: '🧊',
+    desc: () => 'Freeze Ray has a 20% chance to freeze thugs solid.', apply: (c) => c.flag('deepFreeze', true) },
+  { id: 'p_hole', tree: 'mad', row: 2, col: 2, max: 3, name: 'Event Horizon', icon: '🕳️',
+    desc: (r) => `Pocket Black Hole +${10 * r}% area.`, apply: (c, r) => c.abil('black_hole', 'area', 'pct', 10 * r) },
+  { id: 'p_big', tree: 'mad', row: 3, col: 1, max: 3, name: 'Peer Review', icon: '📑',
+    desc: (r) => `+${8 * r}% damage to elites, bosses and titans.`, apply: (c, r) => c.stat('bigDmg', 0.08 * r) },
+  { id: 'p_super', tree: 'mad', row: 4, col: 1, max: 1, name: 'Supercharged', icon: '🌩️', capstone: true,
+    desc: () => 'Tesla Coil jumps 3 more times and barely loses damage per jump. Robo-Nanny zaps chain once.', apply: (c) => c.flag('supercharged', true) },
+
+  // ── Robotics ──
+  { id: 'p_bots', tree: 'robotics', row: 0, col: 0, max: 5, name: 'Better Circuits', icon: '🔌',
+    desc: (r) => `Summon and orbit abilities deal +${5 * r}% damage.`, apply: (c, r) => { c.abil('#summon', 'damage', 'pct', 5 * r); c.abil('#orbit', 'damage', 'pct', 5 * r); } },
+  { id: 'p_life', tree: 'robotics', row: 0, col: 2, max: 3, name: 'Long-Life Batteries', icon: '🔋',
+    desc: (r) => `Robo-Nanny lasts ${2 * r}s longer.`, apply: (c, r) => c.abil('robo', 'duration', 'add', 2 * r) },
+  { id: 'p_hp', tree: 'robotics', row: 1, col: 0, max: 3, name: 'Lab Coat', icon: '🥼',
+    desc: (r) => `+${12 * r} max HP.`, apply: (c, r) => c.stat('maxHp', 12 * r) },
+  { id: 'p_drones', tree: 'robotics', row: 1, col: 2, max: 2, name: 'Spare Parts', icon: '🛸',
+    desc: (r) => `Drone Swarm +${r} drone${r > 1 ? 's' : ''}.`, apply: (c, r) => c.abil('drones', 'count', 'add', r) },
+  { id: 'p_shield', tree: 'robotics', row: 2, col: 0, max: 3, name: 'Shield Generator', icon: '🔵',
+    desc: (r) => `Force Field +${20 * r}% shield.`, apply: (c, r) => c.abil('force_field', 'power', 'pct', 20 * r) },
+  { id: 'p_armor', tree: 'robotics', row: 2, col: 2, max: 3, name: 'Tin-Foil Onesie', icon: '🥫',
+    desc: (r) => `Take ${4 * r}% less damage.`, apply: (c, r) => c.stat('armor', 0.04 * r) },
+  { id: 'p_pickup', tree: 'robotics', row: 3, col: 1, max: 2, name: 'Tractor Beam', icon: '🧲',
+    desc: (r) => `+${30 * r}% pickup range.`, apply: (c, r) => c.stat('pickupPct', 0.3 * r) },
+  { id: 'p_army', tree: 'robotics', row: 4, col: 1, max: 1, name: 'Robot Army', icon: '🤖', capstone: true,
+    desc: () => 'Robo-Nanny builds one more robot.', apply: (c) => c.abil('robo', 'count', 'add', 1) },
+
+  // ── Big Brain ──
+  { id: 'p_think', tree: 'brain', row: 0, col: 0, max: 5, name: 'Quick Thinking', icon: '💭',
+    desc: (r) => `All abilities cool down ${2 * r}% faster.`, apply: (c, r) => c.stat('haste', 0.02 * r) },
+  { id: 'p_xp', tree: 'brain', row: 0, col: 2, max: 3, name: 'Gifted', icon: '📚',
+    desc: (r) => `+${7 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.07 * r) },
+  { id: 'p_luck', tree: 'brain', row: 1, col: 0, max: 3, name: 'Probability', icon: '🎲',
+    desc: (r) => `+${7 * r} luck.`, apply: (c, r) => c.stat('luck', 7 * r) },
+  { id: 'p_dur', tree: 'brain', row: 1, col: 2, max: 3, name: 'Long Experiments', icon: '⏳',
+    desc: (r) => `+${6 * r}% duration.`, apply: (c, r) => c.stat('duration', 0.06 * r) },
+  { id: 'p_reroll', tree: 'brain', row: 2, col: 0, max: 1, name: 'Hypothesis', icon: '🧪',
+    desc: () => '+2 rerolls per run.', apply: (c) => c.stat('rerolls', 2) },
+  { id: 'p_area2', tree: 'brain', row: 2, col: 2, max: 3, name: 'Big Ideas', icon: '💡',
+    desc: (r) => `+${5 * r}% area.`, apply: (c, r) => c.stat('area', 0.05 * r) },
+  { id: 'p_brain', tree: 'brain', row: 3, col: 1, max: 3, name: 'Galaxy Brain', icon: '🌌',
+    desc: (r) => `Big Brain Time lasts ${r}s longer.`, apply: (c, r) => c.abil('big_brain', 'duration', 'add', r) },
+  { id: 'p_sticky', tree: 'brain', row: 4, col: 1, max: 1, name: 'Sticky Pudding', icon: '🍮', capstone: true,
+    desc: () => 'Pudding Blaster blobs slow what they hit by 35%.', apply: (c) => c.flag('stickyPudding', true) },
+];

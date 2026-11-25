@@ -70,6 +70,21 @@ export const Save = {
     this.hero(heroId).gear[gearId] = tier;
     write();
   },
+  /**
+   * The gear id worn in a slot. Falls back to the first owned piece in that slot
+   * (so a slot never sits empty while you own something for it).
+   */
+  equipped(heroId, slot, gearList) {
+    const h = this.hero(heroId);
+    const id = h.equip?.[slot];
+    if (id && this.gearTier(heroId, id) >= 0) return id;
+    return gearList.find((g) => g.slot === slot && this.gearTier(heroId, g.id) >= 0)?.id ?? null;
+  },
+  equip(heroId, slot, gearId) {
+    const h = this.hero(heroId);
+    h.equip = { ...(h.equip ?? {}), [slot]: gearId };
+    write();
+  },
   /** clears[mapId] = highest difficulty index cleared (any hero) */
   bestClear(mapId) {
     return data.clears[mapId] ?? -1;

@@ -38,7 +38,7 @@ export const ACCOUNT_UPGRADES = [
 ];
 
 export const petRange = (l) => 10 + l * 3; // 10m → 34m
-export const petSpeed = (l) => 7 + l * 0.9; // 7 → 14.2 m/s
+export const petSpeed = (l) => 9.1 + l * 1.17; // 9.1 → 18.5 m/s
 
 /** Rep earned for a run. */
 export function repForRun({ minutes, bossKills, titanKills, victory, diffIndex }) {
