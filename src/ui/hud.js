@@ -42,6 +42,7 @@ export class Hud {
     this.$('choice-reroll').addEventListener('click', () => this.run?.reroll());
     this.$('choice-skip').addEventListener('click', () => this.run?.choose(null));
     this.$('choice-banish').addEventListener('click', () => this.run?.toggleBanish());
+    this.$('dm-reset').addEventListener('click', () => this.run && this.resetMeter());
     addEventListener('keydown', (e) => {
       if (!this.run || this.run.ended) return;
       if (this.run.choice) {
@@ -62,6 +63,8 @@ export class Hud {
       const html = t && this.run ? this.tipHtml(t.dataset.tip) : '';
       this.tip.classList.toggle('hidden', !html);
       if (html) { this.tip.innerHTML = html; this.placeTip(e); }
+      const h = e.target.closest?.('[data-tip],[data-hl]');
+      this.highlight(h && this.run ? this.affected(h.dataset.hl ?? h.dataset.tip) : [], !!h?.dataset.hl);
     });
     addEventListener('mousemove', (e) => { if (!this.tip.classList.contains('hidden')) this.placeTip(e); });
 
@@ -75,9 +78,36 @@ export class Hud {
         requestAnimationFrame(() => requestAnimationFrame(() => h.classList.remove('on')));
       },
       showChoice: (c) => this.showChoice(c),
-      hideChoice: () => this.$('choice').classList.add('hidden'),
+      hideChoice: () => { this.$('choice').classList.add('hidden'); this.highlight([]); },
       showEnd: (r, run) => this.showEnd(r, run),
     };
+  }
+
+  /** Indices of your abilities that a hovered thing touches. Keys as in tipHtml, plus 'itd:<item id>'. */
+  affected(key) {
+    const r = this.run;
+    const [kind, a1, a2] = key.split(':');
+    if (kind === 'ab') return [+a1];
+    const def = kind === 'itd' ? itemById(a1) : kind === 'it' ? r.findItem(a1)?.def : kind === 'is' ? r.items[a1]?.[+a2]?.def : null;
+    if (!def) return [];
+    return r.abilities.map((a, i) => (def.affects(a) ? i : -1)).filter((i) => i >= 0);
+  }
+
+  /** Light-yellow glow on the given ability slots (HUD + pause list). lift: raise the bar over the card overlay. */
+  highlight(idx, lift = false) {
+    const k = idx.join();
+    if (k === this.hlKey && lift === this.hlLift) return;
+    this.hlKey = k;
+    this.hlLift = lift;
+    (this.abCols ?? []).forEach((c, i) => c.classList.toggle('hl', idx.includes(i)));
+    document.querySelectorAll('#pause-build [data-tip^="ab:"]').forEach((l) => l.classList.toggle('hl', idx.includes(+l.dataset.tip.split(':')[1])));
+    document.body.classList.toggle('hl-lift', lift && idx.length > 0);
+  }
+
+  /** "🔫 Snub-Nose, 💸 Make It Rain" for an item def (or a note that it's a hero stat). */
+  affectsText(def) {
+    const list = this.run.abilities.filter((a) => def.affects(a));
+    return list.length ? list.map((a) => `${a.def.icon} ${a.def.name}`).join(', ') : 'You (not tied to an ability)';
   }
 
   placeTip(e) {
@@ -113,7 +143,8 @@ export class Hud {
     return `<div class="th">${d.icon} ${d.name} <small>${d.slot === 'stash' ? `×${it.level}` : `Lv ${it.level}`}</small></div><div class="tk" style="color:${tierColor(it.tier)}">${d.slot === 'stash' ? 'Contraband' : `${TIERS[it.tier].name} ${SLOT_NAMES[d.slot]}`}${d.needsLabel ? ` · FOR ${String(d.needsLabel).toUpperCase()}` : ''}</div>
       <div class="td">${d.desc(it.power)}</div>${d.slot === 'stash' ? `<div class="tn">Stacks linearly: another copy from the Black Market adds the same again (×${it.level + 1}).</div>` : ''}<div class="ts"><span>Now <b>${d.short(it.power, r, it)}</b></span></div>
       ${d.cap ? `<div class="tn">${maxed ? '<em>MAXED</em> ' : ''}Caps at ${d.cap}. Once it does, it stops being offered (no banish used).</div>` : ''}
-      ${d.needsLabel ? `<div class="tn">Only affects abilities tagged ${String(d.needsLabel).toUpperCase()}.</div>` : ''}`;
+      ${d.needsLabel ? `<div class="tn">Only affects abilities tagged ${String(d.needsLabel).toUpperCase()}.</div>` : ''}
+      <div class="tn"><b style="color:#fff3b0">Affects:</b> ${this.affectsText(d)}</div>`;
   }
 
   attach(run) {
@@ -125,9 +156,11 @@ export class Hud {
     this.$('pause').classList.add('hidden');
     this.$('toasts').innerHTML = '';
     this.buildSlots();
+    this.resetMeter();
   }
 
   detach() {
+    this.highlight([]);
     this.run = null;
     this.tip.classList.add('hidden');
     this.root.classList.add('hidden');
@@ -140,6 +173,7 @@ export class Hud {
     const on = force ?? !r.paused;
     r.paused = on;
     this.$('pause').classList.toggle('hidden', !on);
+    this.highlight([]);
     if (on) this.$('pause-build').innerHTML = this.buildHtml(r);
   }
 
@@ -164,12 +198,18 @@ export class Hud {
     const ab = this.$('ability-bar');
     ab.innerHTML = '';
     this.abSlots = [];
+    this.abCols = [];
+    this.abMods = [];
     for (let i = 0; i < 5; i++) {
-      const s = el('div', 'slot empty', '');
-      s.dataset.tip = `ab:${i}`;
-      ab.appendChild(s);
-      this.abSlots.push(s);
+      // a column: the icon, then (desktop) a fixed-height list of its modifiers
+      const col = el('div', 'ab-col', '<div class="slot empty"></div><div class="ab-mods"></div>');
+      col.dataset.tip = `ab:${i}`;
+      ab.appendChild(col);
+      this.abCols.push(col);
+      this.abSlots.push(col.firstElementChild);
+      this.abMods.push(col.lastElementChild);
     }
+    this.hlKey = null;
     const ib = this.$('item-bar');
     ib.innerHTML = '';
     this.itSlots = [];
@@ -216,7 +256,10 @@ export class Hud {
         const a = r.abilities[i];
         sl.className = a ? 'slot' : 'slot empty';
         sl.innerHTML = a ? `${a.def.icon}<div class="cd"></div><span class="lv">${a.level}</span>` : '';
-        sl.title = a ? a.def.name : '';
+        this.abMods[i].innerHTML = a ? a.upgradeInfo().filter((u) => u.have).map(({ up, have, maxed }) => {
+          const v = up.fmt ? up.fmt(have) : up.kind === 'pct' ? `+${Math.round(have)}%` : `+${Math.round(have * 10) / 10}`;
+          return `<div class="${maxed ? 'mx' : ''}">${v} ${up.label}</div>`;
+        }).join('') : '';
       });
       for (const row of this.itSlots) {
         const it = r.items[row.dataset.slot][+row.dataset.i];
@@ -261,6 +304,43 @@ export class Hud {
       if (this.bannerT <= 0) this.$('banner').classList.remove('on');
     }
     this.drawMinimap();
+    this.updateMeter(dt);
+  }
+
+  // ── live damage meter (bottom right) ───────────────────
+  /** Name + icon for a damage source id (ability id, 'burn', 'godfather'). */
+  dmgSource(id, run = this.run) {
+    return run.hero.abilities.find((a) => a.id === id) ?? { name: id === 'burn' ? 'Burning' : id === 'godfather' ? 'Godfather Bodyguard' : id, icon: id === 'burn' ? '🔥' : '🤵' };
+  }
+
+  resetMeter() {
+    const r = this.run;
+    this.meter = { base: { ...r.dmgBy }, t0: r.time, snaps: [{ t: r.time, by: { ...r.dmgBy } }], tick: 0, snapT: 0 };
+  }
+
+  updateMeter(dt) {
+    const r = this.run, m = this.meter;
+    if (!m) return;
+    m.snapT += dt;
+    if (m.snapT >= 1) {
+      m.snapT = 0;
+      m.snaps.push({ t: r.time, by: { ...r.dmgBy } });
+      while (m.snaps.length > 2 && r.time - m.snaps[1].t >= 30) m.snaps.shift();
+    }
+    m.tick -= dt;
+    if (m.tick > 0) return;
+    m.tick = 0.25;
+    const old = m.snaps[0];
+    const span = Math.max(1, r.time - old.t);
+    const rows = Object.keys(r.dmgBy).map((id) => ({ id, tot: r.dmgBy[id] - (m.base[id] ?? 0), dps: (r.dmgBy[id] - (old.by[id] ?? 0)) / span }))
+      .filter((x) => x.tot > 0).sort((a, b) => b.tot - a.tot).slice(0, 8);
+    const top = rows[0]?.tot || 1;
+    const dps = rows.reduce((a, x) => a + x.dps, 0);
+    this.$('dm-total').textContent = `${fmtNum(Math.round(dps))} DPS`;
+    this.$('dm-rows').innerHTML = rows.map((x) => {
+      const d = this.dmgSource(x.id);
+      return `<div class="dm-row"><span class="ic">${d.icon}</span><div class="dm-bar"><i style="width:${(x.tot / top) * 100}%"></i><span class="nm">${d.name}</span><span class="v">${fmtNum(Math.round(x.tot))}</span></div><span class="dps">${fmtNum(Math.round(x.dps))}</span></div>`;
+    }).join('') || '<div class="dm-empty">No damage yet</div>';
   }
 
   drawMinimap() {
@@ -413,7 +493,7 @@ export class Hud {
         const next = cur + card.gain;
         const stack = d.slot === 'stash' && card.owned ? `×${card.owned.level + 1}` : null;
         html = `${d.needsLabel ? `<span class="kind">FOR ${String(d.needsLabel).toUpperCase()}</span>` : ''}<span class="tag">${stack ?? (card.owned ? `LV ${card.owned.level + 1}` : 'NEW')}</span><div class="tier">${d.slot === 'stash' ? 'Contraband' : `${TIERS[tier].name} ${SLOT_NAMES[d.slot]}`}</div><div class="ic">${d.icon}</div><div class="nm">${d.name}</div>
-          <div class="eff">${d.desc(next)}</div>${card.owned ? `<div class="lvl">was: ${d.desc(cur)}</div>` : ''}`;
+          <div class="eff">${d.desc(next)}</div>${card.owned ? `<div class="lvl">was: ${d.desc(cur)}</div>` : ''}<div class="aff">Affects: ${this.affectsText(d)}</div>`;
       } else {
         html = `<div class="ic">💰</div><div class="nm">Pocket Money</div><div class="eff">+${card.amount} gold</div>`;
       }
@@ -422,6 +502,8 @@ export class Hud {
       const banishable = c.banishing && banishKind(card);
       if (c.banishing) { b.classList.add(banishable ? 'banish' : 'nobanish'); b.disabled = !banishable; }
       b.innerHTML = `<span class="kb">${i + 1}</span>${html}${banishable ? '<span class="ban">🚫 BANISH</span>' : ''}`;
+      if (card.type === 'abilityUp') b.dataset.hl = `ab:${r.abilities.indexOf(card.ability)}`;
+      if (card.type === 'item') b.dataset.hl = `itd:${card.def.id}`;
       b.addEventListener('click', () => r.choose(card));
       box.appendChild(b);
     });
@@ -470,7 +552,7 @@ export class Hud {
     const panel = this.$('end-panel');
     const dm = Object.entries(res.dmgBy).sort((a, b) => b[1] - a[1]);
     const total = dm.reduce((a, [, v]) => a + v, 0) || 1;
-    const name = (id) => run.hero.abilities.find((a) => a.id === id) ?? { name: id === 'burn' ? 'Burning' : id === 'godfather' ? 'Godfather Bodyguard' : id, icon: id === 'burn' ? '🔥' : '🤵' };
+    const name = (id) => this.dmgSource(id, run);
     const dmgRows = dm.slice(0, 8).map(([id, v]) => {
       const d = name(id);
       return `<div class="dmg-row"><span>${d.icon}</span><span>${d.name}</span><div class="bar"><i style="width:${(v / total) * 100}%"></i></div><span>${fmtNum(v)}</span></div>`;

@@ -348,3 +348,43 @@ body.padnav .pad-hint { display: block; }
 #choice-cards { padding-top: 8px; }
 .card:has(.kind) { padding-top: 26px; }
 @media (max-width: 640px) { .card:has(.kind) { padding-top: 18px; } }
+
+/* ── hover highlight: which abilities a thing touches ── */
+.ab-col.hl .slot, .build .line.hl { border-color: #fff3b0 !important; box-shadow: 0 0 0 2px #fff3b0, 0 0 16px 4px rgba(255, 240, 160, 0.75); }
+.build .line.hl { border-radius: 8px; background: rgba(255, 240, 160, 0.08); }
+#hud { z-index: auto; }
+#hud > * { z-index: 20; }
+body.hl-lift .hud-bottom { z-index: 41; }
+.card .aff { font-size: 11px; color: #fff3b0; opacity: 0.85; margin-top: auto; }
+
+/* ── ability columns: icon + modifier list (desktop) ── */
+.ab-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ab-mods { display: none; }
+@media (min-width: 1101px) and (min-height: 701px) {
+  #ability-bar { gap: 8px; }
+  .ab-col { width: 116px; }
+  .ab-col .slot { width: 74px; height: 74px; font-size: 38px; border-radius: 14px; }
+  .ab-col .slot .lv { font-size: 16px; }
+  .ab-mods { display: block; width: 116px; height: 72px; overflow: hidden; text-align: center; font: 600 11px/14px system-ui, sans-serif; color: #e8e8e8; text-shadow: 0 1px 2px #000, 0 0 5px rgba(0,0,0,0.9); }
+  .ab-mods div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ab-mods .mx { color: #ffcf6a; }
+  #toasts { bottom: calc(170px + var(--sab)); }
+}
+
+/* ── live damage meter (bottom right) ── */
+#dmeter { position: absolute; right: calc(12px + var(--sar)); bottom: calc(14px + var(--sab)); width: 290px; background: rgba(0,0,0,0.5); border-radius: 12px; padding: 7px 9px; font: 600 11px/1.2 system-ui, sans-serif; }
+.dm-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.dm-head b { font: 13px 'Lilita One'; letter-spacing: 0.06em; color: var(--gold); }
+#dm-total { flex: 1; color: #fff; }
+#dm-reset { pointer-events: auto; background: rgba(255,255,255,0.12); color: #fff; border: 0; border-radius: 7px; padding: 2px 8px; font: 600 11px system-ui, sans-serif; cursor: pointer; }
+#dm-reset:hover { background: rgba(255,255,255,0.25); }
+.dm-row { display: grid; grid-template-columns: 18px 1fr 44px; gap: 6px; align-items: center; margin: 2px 0; }
+.dm-row .ic { font-size: 14px; text-align: center; }
+.dm-bar { position: relative; height: 16px; background: rgba(255,255,255,0.07); border-radius: 4px; overflow: hidden; }
+.dm-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(242,192,55,0.55), rgba(242,120,40,0.55)); }
+.dm-bar .nm { position: absolute; left: 5px; top: 1px; right: 52px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px #000; }
+.dm-bar .v { position: absolute; right: 5px; top: 1px; text-shadow: 0 1px 2px #000; }
+.dm-row .dps { text-align: right; color: #ffd98a; }
+.dm-empty, .dm-foot { color: var(--muted); font-size: 10px; }
+.dm-foot { margin-top: 4px; }
+@media (max-width: 1100px), (max-height: 700px) { #dmeter { display: none; } }

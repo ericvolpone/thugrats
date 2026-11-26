@@ -181,7 +181,21 @@ const CAP = {
 };
 /** Which ability tags a Contraband item works with (for tooltips/cards). */
 const NEEDS_LABEL = { toe_tag: 'execute' };
+/**
+ * Which of your abilities an item changes (for hover highlights). Items that only
+ * touch the hero (HP, gold, XP, dodge...) affect none.
+ */
+const deals = (a) => a.def.base.damage != null;
+const tag = (t) => (a) => a.def.tags.includes(t);
+const AFFECTS = {
+  brass_ring: deals, pinky_ring: deals, hitman: deals, kingpin: deals, bagman: deals, getaway: deals, arsonist: deals,
+  street_cred: deals, feared: deals, blood_money: deals,
+  mood_ring: (a) => a.def.base.area != null,
+  diamond_ring: (a) => a.def.base.cooldown != null, made_man: (a) => a.def.base.cooldown != null,
+  hollow_tips: tag('projectile'), toe_tag: (a) => a.def.base.execute != null,
+};
 for (const it of ITEMS) {
+  it.affects = AFFECTS[it.id] ?? (it.needs && typeof it.needs === 'string' ? tag(it.needs) : () => false);
   it.short = SHORT[it.id] ?? ((v) => it.desc(v));
   it.cap = CAP[it.id];
   if (it.needs) it.needsLabel = NEEDS_LABEL[it.id] ?? it.needs;

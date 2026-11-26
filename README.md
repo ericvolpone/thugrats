@@ -56,7 +56,11 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
   left, so you can see what talents and Contraband boost it. A card that would max
   an upgrade or item gets a glowing **MAXED OUT** border.
 - **Hover** any ability or item (HUD or pause screen) for everything about it: stats,
-  every upgrade with its current total and cap, and what maxes it.
+  every upgrade with its current total and cap, and what maxes it. Hovering an item,
+  Contraband or upgrade card also glows the abilities it affects.
+- **Desktop HUD:** abilities sit in columns with their modifiers listed under the icon,
+  items run down the left side, and a live damage meter in the bottom right shows
+  each source's total (since the last reset) and its DPS over the last 30 seconds.
 - **Banish:** 3 per run, shared between abilities and items. Banishing rerolls the
   cards for free.
 - **Caps:** chance-based items stop at 100% (dodge at 60%) and luck at 150. A maxed
