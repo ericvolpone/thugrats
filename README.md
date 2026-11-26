@@ -45,13 +45,26 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
   **Luck** pushes rolls up. Every roll of a stat shrinks the more of it you already
   have, so an early purple is worth far more than a fifth grey. Whole-number upgrades
   (extra bullet, pierce, extra car...) are flat and only appear at higher tiers.
-  Upgrades that no longer help (e.g. Frenzy cooldown once it's up 100% of the time)
-  stop being offered.
-- **Banish:** once per run each, remove one ability and one item from all future
-  offers. Banishing rerolls the cards for free.
-- **Items (5 slots):** 2 Rings, 1 Crime Title, 2 Reputations, from chests (cost
-  gold, rising each time) and boss kills. Picking one you own levels it up.
-  Reputations are always in the pool.
+  Upgrades that no longer help (e.g. Frenzy recharge once it's up 100% of the time)
+  stop being offered. "Recharge Rate" is how fast abilities come back.
+- **Abilities that want a crowd** (The Big One, Ground Pound...) lower their demand
+  the longer they've been ready, so they never sit idle.
+- **Auras** (Make It Rain, Spinning Lariat, Shuriken Ring, Drone Swarm) are always
+  on: no cooldown or duration, only damage, radius and how many things orbit.
+- **Dashes** are done by a shadow copy of your hero; you never lose control.
+- **Banish:** 3 per run, shared between abilities and items. Banishing rerolls the
+  cards for free.
+- **Caps:** chance-based items stop at 100% (dodge at 60%) and luck at 150. A maxed
+  item is retired from offers for free, without using a banish.
+- **Lifesteal** comes from some talents (Frenzy, melee, crits, drones) and the Blood
+  Money reputation; it heals at most 6% of max HP per second.
+- **Items (7 slots):** 2 Rings, 1 Crime Title, 2 Reputations, 2 Contraband, from
+  chests (cost gold, rising each time), elites (25% free chest) and boss kills.
+  Picking one you own levels it up. Reputations are always in the pool.
+  **Contraband** changes how one kind of ability plays (Drum Magazine for guns, Det
+  Cord for explosives, Lead Pipe for melee, Spinning Top for auras, Bear Trap Spool,
+  Rolodex, Sugar Cube, Chalk Outline, Nitro Can, Car Battery, Toe Tag, Hollow Tips,
+  Grandpa's Grappa) and is only offered once you own an ability of that kind.
 - **Bosses** spawn every 2:30 at a pad shown on the minimap (30 s warning) and
   give a full level plus a guaranteed loot pick.
 - **Titans (3 per map)** are summoned by standing in their altar's beam once their
@@ -71,7 +84,9 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
 
 ## Maps
 
-160 × 160 arenas, each laid out by hand in `src/game/layouts.js`:
+160 × 160 arenas, each laid out by hand in `src/game/layouts.js`. The minimap is
+north-up; your arrow points where you're walking and the faint wedge is the camera.
+Elites have a crimson ring (crimson diamonds on the minimap); chests are gold boxes.
 
 - **Little Italy:** a piazza with a fountain and café tables, rowhouse alleys under
   string lights, a church, a market street, curbside parking.
@@ -81,6 +96,11 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
 - **Casino Row:** the Strip with palm medians, neon casinos and valet lines, a fountain
   show, an open-air casino floor, a parking lot full of jumpable cars, a wedding
   chapel and giant dice.
+- **Chinatown** (after Little Italy): a lantern avenue under two paifang gates, a
+  night market, a temple garden with a pagoda and koi pond, tight shophouse alleys.
+- **Coney Island** (after The Docks): roller coaster, Ferris wheel, carousel, bumper
+  cars, the boardwalk with game booths, the beach and a pier.
+  New maps have no signature gear yet, so a clear always drops a random piece.
 
 Mobs steer around walls instead of piling up behind them.
 
@@ -99,7 +119,7 @@ Mobs steer around walls instead of piling up behind them.
 | 🧨 Dynamite Trap | Proximity mines dropped at your feet |
 | 😭 Tantrum | Point-blank shockwave + knockback |
 | 🏏 Hired Goon | A bat-wielding cousin fights for a while |
-| 💸 Make It Rain | Orbiting stacks of cash |
+| 💸 Make It Rain | Always-on aura of orbiting cash |
 | 📜 Hit Contract | Marks the biggest target; a sniper collects |
 
 **Talents:** Trigger Man (guns → *Akimbo*), Demolitions (explosives → *Explosive

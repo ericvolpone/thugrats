@@ -95,6 +95,62 @@ export const MAPS = [
     ],
     bossSpawns: [[-24, 18], [24, -24], [0, -52], [26, 36]],
   },
+  {
+    id: 'chinatown',
+    spawn: [0, 4],
+    name: 'Chinatown',
+    blurb: 'Lantern-lit alleys, a night market and a parade dragon that has had enough.',
+    requires: 'little_italy',
+    theme: {
+      ground: '#4a3a36', street: '#2e2a2c', line: '#f2c037', sidewalk: '#7a6a62',
+      buildings: ['#8a2a22', '#6a3a2a', '#3a4a3a', '#7a5a3a', '#5a2a2a'], windows: '#ffb070',
+      sky: '#1a0c10', fog: '#3a1418', hemi: ['#ffd0a0', '#3a1a1a'], sun: '#ffc890',
+      props: ['crate', 'barrel', 'trashcan', 'lamp', 'bonsai'],
+    },
+    roster: [
+      { mob: 'alley_cat', from: 0, w: 10 },
+      { mob: 'health_inspector', from: 0.5, w: 7 },
+      { mob: 'tourist', from: 2, w: 4 },
+      { mob: 'rat', from: 3, w: 4 },
+      { mob: 'line_cook', from: 4, w: 3 },
+      { mob: 'riot_cop', from: 7, w: 2 },
+    ],
+    bosses: ['maitre_d'],
+    titans: [
+      { boss: 'food_critic', pos: [-58, 58], cond: { level: 14 } },
+      { boss: 'landlord', pos: [58, 58], cond: { gold: 350 } },
+      { boss: 'parade_dragon', pos: [0, -60], cond: { titans: 2, level: 21 } },
+    ],
+    bossSpawns: [[-30, -20], [30, -20], [0, 36], [-44, 22]],
+  },
+  {
+    id: 'coney_island',
+    spawn: [0, -8],
+    name: 'Coney Island',
+    blurb: 'Boardwalk, rides and a beach full of people who want you off it.',
+    requires: 'the_docks',
+    theme: {
+      ground: '#6a6a60', street: '#7a5a3a', line: '#f2e0b0', sidewalk: '#a08060', water: '#1f6a8a',
+      buildings: ['#e0e0d0', '#c84a3a', '#3a7aa8', '#e8c050', '#5aa06a'], windows: '#ffe0a0',
+      sky: '#3a5a8a', fog: '#7a9ab8', hemi: ['#fff0d0', '#5a6a7a'], sun: '#fff4d8',
+      props: ['umbrella', 'trashcan', 'bench', 'lamp', 'booth'],
+    },
+    roster: [
+      { mob: 'seagull', from: 0, w: 10 },
+      { mob: 'lifeguard', from: 0.5, w: 7 },
+      { mob: 'beach_cop', from: 1.5, w: 5 },
+      { mob: 'clown', from: 2.5, w: 4 },
+      { mob: 'mascot', from: 4, w: 3 },
+      { mob: 'k9', from: 6, w: 3 },
+    ],
+    bosses: ['ringmaster'],
+    titans: [
+      { boss: 'strongman', pos: [-60, -56], cond: { bosses: 1 } },
+      { boss: 'fortune_teller', pos: [60, -56], cond: { level: 16 } },
+      { boss: 'captain_coney', pos: [0, 50], cond: { titans: 2, gold: 300 } },
+    ],
+    bossSpawns: [[-34, -22], [34, -22], [-40, 30], [40, 30]],
+  },
 ];
 
 export const MAP_DEFAULTS = {

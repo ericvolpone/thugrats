@@ -143,15 +143,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #xpbar i { position: absolute; left: 0; bottom: 0; top: 0; background: linear-gradient(90deg, #2f8cff, #58c4ff); width: 0; transition: width 0.1s; }
 #xpbar span { position: absolute; right: 8px; bottom: 0; font: 11px 'Lilita One'; line-height: 14px; color: #fff; }
 .hud-top { position: absolute; top: calc(20px + var(--sat)); left: calc(10px + var(--sal)); right: calc(10px + var(--sar)); display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.hud-left { display: flex; flex-direction: column; gap: 6px; width: 250px; }
-#hpbar { position: relative; height: 22px; background: rgba(0,0,0,0.6); border-radius: 11px; overflow: hidden; border: 2px solid rgba(0,0,0,0.5); }
+.hud-left { display: flex; flex-direction: column; gap: 6px; width: 290px; }
+#hpbar { position: relative; height: 26px; background: rgba(0,0,0,0.6); border-radius: 11px; overflow: hidden; border: 2px solid rgba(0,0,0,0.5); }
 #hpbar i { position: absolute; inset: 0; width: 100%; background: linear-gradient(#ff6b5a, #c8281e); transition: width 0.1s; }
 #hpbar b { position: absolute; top: 0; bottom: 0; left: 0; background: rgba(160, 220, 255, 0.7); width: 0; }
-#hpbar span { position: absolute; inset: 0; text-align: center; font: 14px/18px 'Lilita One'; color: #fff; text-shadow: 0 1px 2px #000; }
+#hpbar span { position: absolute; inset: 0; text-align: center; font: 16px/22px 'Lilita One'; color: #fff; text-shadow: 0 1px 2px #000; }
 .hud-chips { display: flex; gap: 6px; }
 .chip { background: rgba(0,0,0,0.55); border-radius: 999px; padding: 3px 10px; font-weight: 700; font-size: 14px; }
 #titan-list { display: flex; flex-direction: column; gap: 4px; }
-.titan-row { background: rgba(0,0,0,0.5); border-radius: 10px; padding: 5px 8px; font-size: 12px; border-left: 3px solid #666; }
+.titan-row { background: rgba(0,0,0,0.5); border-radius: 10px; padding: 6px 9px; font-size: 13px; border-left: 3px solid #666; }
 .titan-row.ready { border-left-color: var(--gold); background: rgba(80,60,10,0.6); }
 .titan-row.active { border-left-color: var(--red); }
 .titan-row.dead { opacity: 0.45; text-decoration: line-through; }
@@ -168,17 +168,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .boss-bar .tr i { display: block; height: 100%; background: linear-gradient(90deg, #ff3b3b, #ff9a1f); }
 .boss-bar.titan .tr i { background: linear-gradient(90deg, #b14cff, #ff4fd8); }
 .hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-#minimap { width: 150px; height: 150px; border-radius: 14px; background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.12); }
+#minimap { width: 220px; height: 220px; border-radius: 14px; background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.12); }
 #pause-btn { pointer-events: auto; background: rgba(0,0,0,0.55); border: 0; border-radius: 10px; width: 40px; height: 36px; color: #fff; font-size: 14px; }
 .hud-bottom { position: absolute; bottom: calc(10px + var(--sab)); left: 0; right: 0; display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; padding: 0 10px; }
 #ability-bar, #item-bar { display: flex; gap: 5px; }
-.slot { width: 46px; height: 46px; border-radius: 10px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.15); position: relative; display: grid; place-items: center; font-size: 24px; overflow: hidden; }
+.slot { width: 60px; height: 60px; border-radius: 12px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.15); position: relative; display: grid; place-items: center; font-size: 31px; overflow: hidden; }
 .slot.empty { opacity: 0.35; font-size: 12px; color: var(--muted); }
 .slot .cd { position: absolute; inset: 0; background: conic-gradient(rgba(0,0,0,0.7) var(--p, 0%), transparent 0); }
-.slot .lv { position: absolute; right: 2px; bottom: 0; font: 11px 'Lilita One'; text-shadow: 0 1px 2px #000; }
+.slot .lv { position: absolute; right: 3px; bottom: 0; font: 14px 'Lilita One'; text-shadow: 0 1px 2px #000; }
 .slot.buff { box-shadow: 0 0 12px #ff3b3b; border-color: #ff3b3b; }
-.slot .sl { position: absolute; left: 0; right: 0; top: 1px; font-size: 7px; text-align: center; color: var(--muted); letter-spacing: 0.05em; }
-#item-bar .slot { width: 40px; height: 40px; font-size: 20px; }
+.slot .sl { position: absolute; left: 0; right: 0; top: 1px; font-size: 9px; text-align: center; color: var(--muted); letter-spacing: 0.05em; }
+#item-bar .slot { width: 52px; height: 52px; font-size: 26px; }
+.slot.wait { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); }
 #banner { position: absolute; top: 24%; left: 0; right: 0; text-align: center; opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: scale(0.9); }
 #banner.on { opacity: 1; transform: scale(1); }
 #banner h1 { font-size: 46px; color: var(--gold); text-shadow: 0 4px 0 #000, 0 0 30px rgba(0,0,0,0.8); }
@@ -231,8 +232,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .dmg-row .bar { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
 .dmg-row .bar i { display: block; height: 100%; background: var(--gold); }
 
+@media (max-width: 1100px), (max-height: 700px) {
+  #minimap { width: 170px; height: 170px; }
+  .slot { width: 50px; height: 50px; font-size: 26px; }
+  #item-bar .slot { width: 44px; height: 44px; font-size: 22px; }
+}
 @media (max-width: 860px), (max-height: 520px) {
   .hud-left { width: 180px; }
+  #hpbar { height: 22px; }
+  #hpbar span { font-size: 14px; line-height: 18px; }
+  .slot .lv { font-size: 11px; }
+  .slot .sl { font-size: 7px; }
   #minimap { width: 110px; height: 110px; }
   #hud-time { font-size: 22px; }
   .titan-row { font-size: 10px; padding: 3px 6px; }

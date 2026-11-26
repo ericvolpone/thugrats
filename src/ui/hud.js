@@ -1,5 +1,7 @@
 import { TIERS, tierColor } from '../data/tiers.js';
 import { SLOTS, SLOT_NAMES, itemById } from '../data/items.js';
+
+const SLOT_LABEL = { ring: 'RING', title: 'TITLE', rep: 'REP', stash: 'STASH' };
 import { upgradeText } from '../game/stats.js';
 import { banishKind } from '../game/upgrades.js';
 import { fmtTime, fmtNum, el } from '../util.js';
@@ -113,7 +115,7 @@ export class Hud {
     this.itSlots = [];
     for (const [slot, n] of Object.entries(SLOTS)) {
       for (let i = 0; i < n; i++) {
-        const s = el('div', 'slot empty', `<span class="sl">${slot === 'title' ? 'TITLE' : slot === 'rep' ? 'REP' : 'RING'}</span>`);
+        const s = el('div', 'slot empty', `<span class="sl">${SLOT_LABEL[slot]}</span>`);
         s.dataset.slot = slot;
         s.dataset.i = i;
         ib.appendChild(s);
@@ -157,13 +159,13 @@ export class Hud {
         const it = r.items[slot][counters[slot]++];
         sl.className = it ? 'slot' : 'slot empty';
         sl.style.borderColor = it ? tierColor(it.tier) : '';
-        sl.innerHTML = it ? `${it.def.icon}<span class="lv">${it.level}</span>` : `<span class="sl">${slot === 'title' ? 'TITLE' : slot.toUpperCase()}</span>`;
+        sl.innerHTML = it ? `${it.def.icon}<span class="lv">${it.level}</span>` : `<span class="sl">${SLOT_LABEL[slot]}</span>`;
       }
     }
     r.abilities.forEach((a, i) => {
-      const cd = this.abSlots[i].querySelector('.cd');
+      const cd = this.abSlots[i]?.querySelector('.cd');
       if (cd) cd.style.setProperty('--p', `${Math.max(0, Math.min(1, a.cd / a.cdMax)) * 100}%`);
-      this.abSlots[i].classList.toggle('buff', !!r.buffs[a.def.id]);
+      this.abSlots[i]?.classList.toggle('buff', !!r.buffs[a.def.id]);
     });
 
     // titans
@@ -217,18 +219,10 @@ export class Hud {
       }
       this.mmBase = c;
     }
-    // the map turns with the camera so "up" on the minimap = forward on screen
-    const yaw = r.camYaw, cs = Math.cos(yaw), sn = Math.sin(yaw), C0 = W / 2;
-    const P = (x, z) => {
-      const dx = X(x) - C0, dz = Z(z) - C0;
-      return [C0 + dx * cs - dz * sn, C0 + dx * sn + dz * cs];
-    };
+    // north-up: the map never turns; a faint wedge shows where the camera looks
+    const P = (x, z) => [X(x), Z(z)];
     ctx.clearRect(0, 0, W, W);
-    ctx.save();
-    ctx.translate(C0, C0);
-    ctx.rotate(yaw);
-    ctx.drawImage(this.mmBase, -C0, -C0);
-    ctx.restore();
+    ctx.drawImage(this.mmBase, 0, 0);
     const t = r.time;
     const dot = (x, z, rad, fill) => {
       const [px, pz] = P(x, z);
@@ -246,15 +240,29 @@ export class Hud {
     }
     for (const m of r.mobs.list) {
       if (m.dead || m.tier === 0) continue;
-      dot(m.x, m.z, m.tier === 1 ? 3 : 6, m.tier === 1 ? '#ffd23f' : m.tier === 2 ? '#ff3030' : '#ff4fd8');
+      if (m.tier === 1) {
+        // elites: crimson diamond (chests are gold boxes)
+        const [px, pz] = P(m.x, m.z);
+        ctx.fillStyle = '#ff3b6b';
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(px, pz - 5); ctx.lineTo(px + 4, pz); ctx.lineTo(px, pz + 5); ctx.lineTo(px - 4, pz);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        continue;
+      }
+      dot(m.x, m.z, 6, m.tier === 2 ? '#ff3030' : '#ff4fd8');
     }
     for (const c of r.pickups.chests) {
       const [px, pz] = P(c.x, c.z);
+      ctx.fillStyle = '#8a5a2a';
+      ctx.fillRect(px - 5, pz - 4, 10, 8);
       ctx.fillStyle = '#f2c037';
-      ctx.fillRect(px - 4, pz - 4, 8, 8);
+      ctx.fillRect(px - 5, pz - 1, 10, 2);
+      ctx.fillRect(px - 1, pz - 4, 2, 8);
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 1;
-      ctx.strokeRect(px - 4, pz - 4, 8, 8);
+      ctx.strokeRect(px - 5, pz - 4, 10, 8);
     }
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
@@ -273,9 +281,18 @@ export class Hud {
     if (r.pet) dot(r.pet.x, r.pet.z, 3, '#c9a27a');
     const p = r.player;
     const [px, pz] = P(p.x, p.z);
+    // camera view wedge
+    const cf = Math.atan2(-Math.cos(r.camYaw), -Math.sin(r.camYaw)); // canvas angle of camera-forward
+    ctx.fillStyle = 'rgba(255,255,255,0.09)';
+    ctx.beginPath();
+    ctx.moveTo(px, pz);
+    ctx.arc(px, pz, 42, cf - 0.6, cf + 0.6);
+    ctx.closePath();
+    ctx.fill();
+    // the arrow points where you're walking (or last walked), not where you're shooting
     ctx.save();
     ctx.translate(px, pz);
-    ctx.rotate(-p.facing + Math.PI + yaw);
+    ctx.rotate(Math.PI - p.moveFacing);
     ctx.fillStyle = '#fff';
     ctx.beginPath();
     ctx.moveTo(0, -8);
@@ -329,8 +346,8 @@ export class Hud {
     this.$('choice-skip').textContent = `Skip (+${10 + r.level * 2} gold)`;
     const kind = c.kind === 'level' ? 'ability' : 'item';
     const bb = this.$('choice-banish');
-    bb.textContent = c.banishing ? '✖ Cancel banish' : `🚫 Banish ${kind} (${r.banishes[kind]})`;
-    bb.disabled = !c.banishing && r.banishes[kind] <= 0;
+    bb.textContent = c.banishing ? '✖ Cancel banish' : `🚫 Banish (${r.banishes} left)`;
+    bb.disabled = !c.banishing && r.banishes <= 0;
     bb.classList.toggle('on', !!c.banishing);
     const names = [...r.banished].map((id) => r.hero.abilities.find((a) => a.id === id)?.name ?? itemById(id)?.name).filter(Boolean);
     this.$('choice-banish-note').textContent = c.banishing ? `Pick the ${kind} to remove from this run's offers (the cards reroll for free).` : names.length ? `Banished: ${names.join(', ')}` : '';
@@ -356,8 +373,8 @@ export class Hud {
       <div class="stats-grid">
         <div>Max HP <b>${Math.round(s.maxHp)}</b></div><div>Regen <b>${s.regen.toFixed(1)}/s</b></div><div>Armor <b>${pct(s.armor)}</b></div>
         <div>Damage <b>${pct(s.dmg)}</b></div><div>Crit <b>${pct(s.crit)}</b></div><div>Crit Dmg <b>+${pct(s.critDmg)}</b></div>
-        <div>Cooldown Spd <b>+${pct(s.haste)}</b></div><div>Area <b>+${pct(s.area)}</b></div><div>Duration <b>+${pct(s.duration)}</b></div>
-        <div>Move Spd <b>${s.speed.toFixed(1)}</b></div><div>Luck <b>${Math.round(s.luck)}</b></div><div>Dodge <b>${pct(s.dodge)}</b></div>
+        <div>Recharge Rate <b>+${pct(s.haste)}</b></div><div>Area <b>+${pct(s.area)}</b></div><div>Duration <b>+${pct(s.duration)}</b></div>
+        <div>Move Spd <b>${s.speed.toFixed(1)}</b></div><div>Luck <b>${Math.round(s.luck)}</b></div><div>Dodge <b>${pct(s.dodge)}</b></div><div>Lifesteal <b>${pct(s.lifesteal)}</b></div>
         <div>XP <b>${pct(s.xpGain)}</b></div><div>Gold <b>${pct(s.goldGain)}</b></div><div>Pickup <b>${s.pickup.toFixed(1)}m</b></div>
       </div>`;
   }

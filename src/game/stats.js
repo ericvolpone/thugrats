@@ -2,6 +2,7 @@ import { BASE_STATS } from '../heroes/index.js';
 import { Save } from '../save.js';
 import { scaledGain } from '../data/tiers.js';
 import { GEAR_SLOTS } from '../data/gear.js';
+import { MAX_LUCK } from '../data/items.js';
 
 /**
  * Builds the run's permanent layer from hero base stats + talents + gear:
@@ -46,10 +47,11 @@ export function computeStats(run) {
   for (const id in run.buffs) run.buffs[id].stats?.(s, run.buffs[id], run);
   s.pickup *= 1 + s.pickupPct;
   s.speed *= 1 + s.speedPct;
-  if (run.buffs.frenzy) s.armor += s.frenzyArmor;
+  if (run.buffs.frenzy) { s.armor += s.frenzyArmor; s.lifesteal += s.frenzyLeech; }
   s.armor = Math.min(0.75, s.armor);
   s.dodge = Math.min(0.6, s.dodge);
   s.crit = Math.min(1, s.crit);
+  s.luck = Math.min(MAX_LUCK, s.luck);
   return s;
 }
 
@@ -63,7 +65,9 @@ export class AbilityInst {
     this.acc = {}; // per-stat total of scaled upgrades taken (for diminishing returns)
     this.level = 1;
     this.cd = 0.4;
-    this.cdMax = 1;
+    this.cdMax = def.base.cooldown ?? 1;
+    this.wait = 0; // seconds spent off cooldown waiting for a target
+    this.poll = 0;
     this.history = []; // [{label, tier}]
     // talent/gear modifiers that match this ability
     this.mods = run.loadout.mods.filter((m) => m.match === def.id || (m.match[0] === '#' && def.tags.includes(m.match.slice(1))));
@@ -75,8 +79,12 @@ export class AbilityInst {
 
   stat(k) {
     const b = this.def.base[k] ?? 0;
-    const inc = this.inc[k] ?? 0;
-    const add = this.add[k] ?? 0;
+    let inc = this.inc[k] ?? 0;
+    let add = this.add[k] ?? 0;
+    for (const it of this.run.items.stash) {
+      const r = it.def.abil?.(it.power, this, k);
+      if (r) { inc += r[0]; add += r[1]; }
+    }
     const s = this.run.stats;
     switch (k) {
       case 'damage': return (b + add) * (1 + inc) * s.dmg;

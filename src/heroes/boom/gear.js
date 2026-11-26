@@ -11,7 +11,7 @@ export const BOOM_GEAR = [
   },
   {
     id: 'boom_vest', slot: 'Chest', name: 'Bandolier Bib', icon: '🦺', map: 'the_docks',
-    desc: (t) => `Stick of Dynamite cools down ${8 + 6 * t}% faster.${t >= 2 ? ' +1 C4 charge.' : ''}${t >= 3 ? ' +1 stick.' : ''}`,
+    desc: (t) => `Stick of Dynamite +${8 + 6 * t}% Recharge Rate.${t >= 2 ? ' +1 C4 charge.' : ''}${t >= 3 ? ' +1 stick.' : ''}`,
     apply(c, t) {
       c.abil('dynamite_stick', 'cooldown', 'pct', 8 + 6 * t);
       if (t >= 2) c.abil('c4', 'count', 'add', 1);

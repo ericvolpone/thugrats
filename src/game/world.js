@@ -12,6 +12,7 @@ const COLLIDE = {
   slot: [0.6, 0.55, 1.8], bench: [1, 0.3, 0.6, 'rect'], lamp: [0.35, 0.35, 4.2], hydrant: [0.35, 0.35, 0.85], palm: [0.35, 0.35, 4.5], trashcan: [0.4, 0.4, 1],
   bollard: [0.35, 0.35, 0.85], fountain: [2.8, 2.8, 1.1], cafe: [0.6, 0.6, 0.8], stall: [1.5, 0.7, 1, 'rect'], vespa: [0.3, 0.8, 1.1, 'rect'],
   planter: [0.6, 0.6, 0.6, 'rect'], forklift: [0.7, 1.1, 2.2, 'rect'], roulette: [1.5, 0.8, 0.95, 'rect'], dice: [2, 2, 4, 'rect'],
+  mahjong: [0.8, 0.8, 0.8], bonsai: [0.5, 0.5, 2], umbrella: [0.25, 0.25, 2.4], booth: [1.5, 0.8, 1, 'rect'], carousel: [5.2, 5.2, 99],
 };
 
 /**
@@ -109,6 +110,19 @@ export class World {
     for (const x of [x0, x1]) for (let z = z0 + 2; z < z1; z += 5) this.prop('bollard', x + (x === x0 ? 0.5 : -0.5), z);
   }
 
+  /** Koi pond: low stone rim, dark water, a few orange fish and lily pads. */
+  pond(x, z, r) {
+    this.bparts.push(paint(new THREE.CylinderGeometry(r + 0.4, r + 0.6, 0.45, 24).translate(x, 0.22, z), C('#8a8478')));
+    this.bparts.push(paint(new THREE.CylinderGeometry(r - 0.1, r - 0.1, 0.05, 24).translate(x, 0.42, z), C('#1f4a4a')));
+    for (let i = 0; i < 9; i++) {
+      const a = this.rnd() * Math.PI * 2, rr = this.rnd() * (r - 1);
+      const koi = i < 5;
+      this.bparts.push(paint((koi ? new THREE.BoxGeometry(0.25, 0.05, 0.7) : new THREE.CylinderGeometry(0.45, 0.45, 0.03, 8)).rotateY(a).translate(x + Math.sin(a) * rr, 0.47, z + Math.cos(a) * rr), C(koi ? (i % 2 ? '#ff7a1a' : '#f4f1ea') : '#3a8a3a')));
+    }
+    this.circles.push({ x, z, r: r + 0.5, h: 99 });
+    this.mm.push({ x, z, r, color: '#2a6a6a' });
+  }
+
   /** Solid water feature (casino fountain show). */
   pool(x, z, r) {
     this.bparts.push(paint(new THREE.CylinderGeometry(r, r + 0.3, 0.8, 28).translate(x, 0.4, z), C('#d8c8e8')));
@@ -175,6 +189,44 @@ export class World {
   /** Visual-only prop (no collision). */
   deco(kind, ...args) {
     if (kind === 'lights') { this.pparts.push(PROPS.lights(...args)); return; }
+    if (kind === 'lanterns') { this.pparts.push(PROPS.lanterns(...args)); return; }
+    if (kind === 'gate') {
+      // pillars collide, the street under it stays open
+      const [x, z, rot, w = 12] = args;
+      this.bparts.push(PROPS.gate(w).rotateY(rot).translate(x, 0, z));
+      const cx = Math.cos(rot) * w / 2, cz = -Math.sin(rot) * w / 2;
+      this.circles.push({ x: x + cx, z: z + cz, r: 0.6, h: 99 }, { x: x - cx, z: z - cz, r: 0.6, h: 99 });
+      return;
+    }
+    if (kind === 'pagoda') {
+      const [x, z, w = 8] = args;
+      if (!this.rectClear(x - w / 2 - 0.5, z - w / 2 - 0.5, x + w / 2 + 0.5, z + w / 2 + 0.5, 1)) return;
+      this.bparts.push(PROPS.pagoda(w).translate(x, 0, z));
+      this.rects.push({ x0: x - w / 2 - 0.5, z0: z - w / 2 - 0.5, x1: x + w / 2 + 0.5, z1: z + w / 2 + 0.5, h: 99, kind: 'building' });
+      return;
+    }
+    if (kind === 'ferris') {
+      const [x, z, rot = 0, r = 11] = args;
+      this.bparts.push(PROPS.ferris(r).rotateY(rot).translate(x, 0, z));
+      const hub = r + 1.5, spread = Math.tan(0.32) * hub / 2;
+      for (const s of [-1, 1]) for (const dz of [-1.4, 1.4]) {
+        const lx = s * spread, lz = dz;
+        this.circles.push({ x: x + lx * Math.cos(rot) + lz * Math.sin(rot), z: z - lx * Math.sin(rot) + lz * Math.cos(rot), r: 0.7, h: 99 });
+      }
+      return;
+    }
+    if (kind === 'coaster') {
+      // a run of track bents from (x0,z0) to (x1,z1); posts collide
+      const [x0, z0, x1, z1, h = 5] = args;
+      const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 6)), rot = Math.atan2(x1 - x0, z1 - z0);
+      for (let i = 0; i < n; i++) {
+        const k = (i + 0.5) / n, x = x0 + (x1 - x0) * k, z = z0 + (z1 - z0) * k;
+        const hh = h + Math.sin(k * Math.PI * 2 + x0) * 1.5;
+        this.pparts.push(PROPS.coaster(len / n + 0.1, hh).rotateY(rot).translate(x, 0, z));
+        this.circles.push({ x, z, r: 0.4, h: 99 });
+      }
+      return;
+    }
     if (kind === 'ship') { const [x, z, rot] = args; this.bparts.push(PROPS.ship().rotateY(rot).translate(x, 0, z)); return; }
     if (kind === 'neon') {
       const [x, z, rot, color, w, h, y] = args;

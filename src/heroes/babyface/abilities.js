@@ -62,7 +62,7 @@ export const BABYFACE_ABILITIES = [
     base: { cooldown: 16, duration: 5, power: 0.35 },
     upgrades: [DUR, scUp('power', 'Focus', 0.08, (v) => `+${Math.round(v * 100)}% focus speed`), CD],
     useless: permanentUptime,
-    ready: (run) => run.mobs.count(run.player.x, run.player.z, 14) >= 3,
+    ready: (run, a) => run.crowd(a, 14, 3),
     fire(run, a) {
       const pw = a.stat('power');
       buff(run, a, { fx: '#ffffff', rate: pw, stats: (s) => { s.crit += 0.15; } });

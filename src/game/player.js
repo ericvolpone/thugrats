@@ -19,6 +19,7 @@ export class Player {
     this.z = run.map.spawn?.[1] ?? 0;
     this.radius = 0.55;
     this.facing = 0;
+    this.moveFacing = Math.PI; // last direction walked (minimap arrow)
     this.moving = false;
     this.aimT = 0;
     this.aimX = 0;
@@ -97,6 +98,7 @@ export class Player {
     let target = this.facing;
     if (this.aimT > 0) target = Math.atan2(this.aimX - this.x, this.aimZ - this.z);
     else if (this.moving) target = Math.atan2(move.x, move.z);
+    if (this.moving) this.moveFacing = Math.atan2(move.x, move.z);
     this.facing = dampAngle(this.facing, target, this.aimT > 0 ? 22 : 12, dt);
 
     this.root.position.set(this.x, this.y, this.z);

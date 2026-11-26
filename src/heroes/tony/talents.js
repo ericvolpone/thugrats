@@ -8,7 +8,7 @@ export const TONY_TREES = [
 export const TONY_TALENTS = [
   // ── Bruiser ──
   { id: 't_knuckles', tree: 'bruiser', row: 0, col: 0, max: 5, name: 'Bare Knuckles', icon: '✊',
-    desc: (r) => `Melee abilities deal +${4 * r}% damage.`, apply: (c, r) => c.abil('#melee', 'damage', 'pct', 4 * r) },
+    desc: (r) => `Melee abilities deal +${4 * r}% damage and heal you for ${r}% of it.`, apply: (c, r) => { c.abil('#melee', 'damage', 'pct', 4 * r); c.stat('meleeLeech', 0.01 * r); } },
   { id: 't_jab', tree: 'bruiser', row: 0, col: 2, max: 3, name: 'Quick Jab', icon: '⚡',
     desc: (r) => `Haymaker swings ${6 * r}% faster.`, apply: (c, r) => c.abil('haymaker', 'cooldown', 'pct', 6 * r) },
   { id: 't_reach', tree: 'bruiser', row: 1, col: 0, max: 3, name: 'Long Arms', icon: '🦍',
@@ -46,7 +46,7 @@ export const TONY_TALENTS = [
   { id: 't_arm', tree: 'barfight', row: 0, col: 0, max: 5, name: 'Good Arm', icon: '💪',
     desc: (r) => `Thrown abilities deal +${5 * r}% damage.`, apply: (c, r) => c.abil('#thrown', 'damage', 'pct', 5 * r) },
   { id: 't_quick', tree: 'barfight', row: 0, col: 2, max: 3, name: 'Last Call', icon: '⏱️',
-    desc: (r) => `All abilities cool down ${3 * r}% faster.`, apply: (c, r) => c.stat('haste', 0.03 * r) },
+    desc: (r) => `+${3 * r}% Recharge Rate on all abilities.`, apply: (c, r) => c.stat('haste', 0.03 * r) },
   { id: 't_glass', tree: 'barfight', row: 1, col: 0, max: 2, name: 'Broken Glass', icon: '🍼',
     desc: (r) => `Bottle Smash throws +${2 * r} shards.`, apply: (c, r) => c.abil('bottle', 'count', 'add', 2 * r) },
   { id: 't_stink', tree: 'barfight', row: 1, col: 2, max: 3, name: 'Ripe', icon: '💩',

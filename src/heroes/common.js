@@ -7,9 +7,15 @@ export const scUp = (stat, label, v, fmt) => ({ stat, label, kind: 'add', v, fmt
 export const addUp = (stat, label, values, fmt, max) => ({ stat, label, kind: 'add', values, fmt, max });
 
 export const DMG = pctUp('damage', 'Damage', 20);
-export const CD = pctUp('cooldown', 'Cooldown Speed', 12);
+export const CD = pctUp('cooldown', 'Recharge Rate', 12);
 export const AREA = pctUp('area', 'Area', 15);
 export const DUR = pctUp('duration', 'Duration', 18);
+
+/**
+ * Auras (orbiting cash, fists, stars, drones) are always on: no cooldown or
+ * duration, just damage, radius and how many things spin. `label` names the count.
+ */
+export const AURA_UPS = (label) => [DMG, pctUp('area', 'Radius', 15), addUp('count', label, [1, 1, 1, 2, 2], null, 10)];
 
 /** For buffs/orbits that can't overlap: once duration covers the cooldown, more of either is wasted. */
 export const permanentUptime = (a, stat) => (stat === 'cooldown' || stat === 'duration') && a.stat('duration') >= a.stat('cooldown');
@@ -51,6 +57,7 @@ export function line(run, a, { x = run.player.x, z = run.player.z, angle, len, w
 /** Damage that arcs from target to target (lightning). */
 export function chain(run, a, first, { jumps, range = 6, dmg, falloff = 0.85, color = '#9ad8ff', onHit }) {
   const hit = new Set();
+  jumps += run.stats.extraJumps ?? 0;
   let cur = first, px = run.player.x, pz = run.player.z, d = dmg;
   for (let i = 0; i <= jumps && cur; i++) {
     hit.add(cur.id);

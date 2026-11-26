@@ -10,7 +10,7 @@ import { FX } from './fx.js';
 import { Telegraphs } from './telegraphs.js';
 import { buildLoadout, computeStats, AbilityInst } from './stats.js';
 import { gearDropChance } from '../data/gear.js';
-import { levelOffers, itemOffers, itemGain, banishKind, banishId } from './upgrades.js';
+import { levelOffers, itemOffers, itemGain, itemMaxed, banishKind, banishId } from './upgrades.js';
 import { MOBS, BOSSES } from '../data/mobs.js';
 import { DIFFICULTIES, MAP_DEFAULTS } from '../data/maps.js';
 import { Save } from '../save.js';
@@ -64,9 +64,10 @@ export class Run {
     this.chestsOpened = 0;
     this.levelBonus = { hp: 0, dmg: 0, luck: 0 };
     this.banished = new Set(); // ability / item ids never offered again this run
-    this.banishes = { ability: 1, item: 1 };
+    this.banishes = 3; // shared between abilities and items
+    this.maxed = new Set(); // items retired for free once more of them would do nothing
     this.buffs = {};
-    this.items = { ring: [], title: [], rep: [] };
+    this.items = { ring: [], title: [], rep: [], stash: [] };
     this.abilities = [];
     this.timers = [];
     this.queue = [];
@@ -76,6 +77,7 @@ export class Run {
     this.result = null;
     this.dmgBy = {};
     this.fedsArrived = false;
+    this.leech = 0;
 
     this.loadout = buildLoadout(hero);
     this.flags = { ...this.loadout.flags };
@@ -110,10 +112,19 @@ export class Run {
   // ── accessors used by abilities/items ──────────────────────
   get traps() { return this.combat.traps; }
   get orbits() { return this.combat.orbits; }
-  allItems() { return [...this.items.ring, ...this.items.title, ...this.items.rep]; }
+  allItems() { return [...this.items.ring, ...this.items.title, ...this.items.rep, ...this.items.stash]; }
   findItem(id) { return this.allItems().find((i) => i.def.id === id); }
   abilityById(id) { return this.abilities.find((a) => a.def.id === id); }
   later(t, fn) { this.timers.push({ t, fn }); }
+  /**
+   * Crowd check for abilities that want a pack (`need` mobs within `r`). The
+   * longer an ability has been off cooldown without firing, the fewer it wants
+   * (down to a fifth after ~4s), so it never sits idle forever.
+   */
+  crowd(a, r, need) {
+    const want = Math.max(1, Math.ceil(need * Math.max(0.2, 1 - (a?.wait ?? 0) / 5)));
+    return this.mobs.count(this.player.x, this.player.z, r) >= want;
+  }
   shake(a) { if (Save.settings().shake) this.shakeAmt = Math.max(this.shakeAmt, a); }
   toast(msg) { this.ui.toast(msg); }
 
@@ -163,13 +174,18 @@ export class Run {
 
   addItem(def, tier, gain) {
     const own = this.findItem(def.id);
-    const g = gain ?? itemGain(def, own, tier);
+    const g = gain ?? itemGain(def, own, tier, this);
     if (own) {
       own.power += g;
       own.level++;
       own.tier = Math.max(own.tier, tier);
     } else {
       this.items[def.slot].push({ def, power: g, level: 1, tier });
+    }
+    this.stats = computeStats(this);
+    if (itemMaxed(this, def, this.findItem(def.id))) {
+      this.maxed.add(def.id);
+      this.toast(`⭐ ${def.name} is maxed out and won't be offered again`);
     }
   }
 
@@ -181,6 +197,8 @@ export class Run {
     if (m.tier >= 1) dmg *= 1 + s.bigDmg;
     if (m.fear) dmg *= 1.12;
     if (m.shrunkUntil > this.time) dmg *= 1 + m.shrunk;
+    if (s.ctrlDmg && (m.rootT > 0 || m.slowT > 0)) dmg *= 1 + s.ctrlDmg;
+    if (s.burnVuln && m.burnT > 0) dmg *= 1 + s.burnVuln;
     let crit = false;
     const critC = s.crit + (ability?.def?.base?.crit ? ability.stat('crit') : 0);
     if (!o.noCrit && Math.random() < critC) {
@@ -190,6 +208,12 @@ export class Run {
     dmg *= 1 - (m.armor ?? 0);
     m.hp -= dmg;
     m.flash = 1;
+    // lifesteal (pooled; update() pays it out, at most 6% max HP per second)
+    if (!o.isBurn) {
+      const tags = ability?.def?.tags;
+      const leech = s.lifesteal + (tags?.includes('melee') ? s.meleeLeech : 0) + (tags?.includes('aura') ? s.auraLeech : 0) + (crit ? s.critLeech : 0);
+      if (leech > 0) this.leech += Math.min(dmg, m.hp + dmg) * leech;
+    }
     const id = ability?.def?.id ?? (o.isBurn ? 'burn' : null);
     if (id) this.dmgBy[id] = (this.dmgBy[id] ?? 0) + dmg;
     if (o.knock && m.tier < 2) {
@@ -204,6 +228,11 @@ export class Run {
       for (const it of this.allItems()) it.def.onHit?.(this, it, m, { amount: dmg, crit, ability, isBurn: false });
       sfx('hit', 0.05);
     }
+    // Hollow Tips: projectile hits sometimes burst
+    if (s.projBurst && !o.burst && !o.isBurn && ability?.def?.tags?.includes('projectile') && Math.random() < s.projBurst) {
+      for (const n of this.mobs.near(m.x, m.z, 1.8)) if (n !== m) this.hit(n, dmg * 0.6, ability, { burst: true, noCrit: true, knock: 1, fromX: m.x, fromZ: m.z });
+      this.fx.explosion(m.x, m.z, 1.4, '#cfcfcf');
+    }
     if (m.hp <= 0) this.kill(m, ability);
   }
 
@@ -214,6 +243,8 @@ export class Run {
 
   explode(x, z, r, dmg, ability, o = {}) {
     if (this.flags.megaton) r *= 1.25;
+    r *= 1 + this.stats.blastArea;
+    if (this.stats.blastBurn && !o.small) this.zone({ x, z, r: r * 0.8, life: 2, dps: dmg * this.stats.blastBurn, kind: 'fire', ability });
     for (const m of this.mobs.near(x, z, r)) this.hit(m, dmg, ability, { knock: o.small ? 1 : 5, fromX: x, fromZ: z });
     this.fx.explosion(x, z, r, o.color);
     if (!o.small) {
@@ -243,7 +274,7 @@ export class Run {
       else if (Math.random() < gc) this.pickups.coin(m.x, m.z, 1);
       if (Math.random() < (m.tier === 1 ? 0.08 : 0.004)) this.pickups.special('heal', m.x, m.z);
       if (Math.random() < 0.0012) this.pickups.special('magnet', m.x, m.z);
-      if (m.tier === 1 && Math.random() < 0.06) this.pickups.chest(m.x, m.z, true);
+      if (m.tier === 1 && Math.random() < 0.25) this.pickups.chest(m.x, m.z, true);
     }
     if (m.tier === 2) {
       this.bossKills++;
@@ -380,8 +411,7 @@ export class Run {
   toggleBanish() {
     const q = this.choice;
     if (!q || this.choiceLocked()) return;
-    const kind = q.kind === 'level' ? 'ability' : 'item';
-    if (this.banishes[kind] <= 0 && !q.banishing) return;
+    if (this.banishes <= 0 && !q.banishing) return;
     q.banishing = !q.banishing;
     this.ui.showChoice(q);
   }
@@ -389,8 +419,8 @@ export class Run {
   /** Remove a card's ability/item from every future offer this run, then reroll for free. */
   banish(card) {
     const kind = banishKind(card);
-    if (!kind || this.banishes[kind] <= 0) return;
-    this.banishes[kind]--;
+    if (!kind || this.banishes <= 0) return;
+    this.banishes--;
     this.banished.add(banishId(card));
     this.toast(`🚫 ${card.def?.name ?? card.ability.def.name} banished for this run`);
     sfx('select');
@@ -494,6 +524,10 @@ export class Run {
       const [x, z] = this.spawnPoint();
       const pack = !elite && Math.random() < 0.22 ? Math.floor(rand(3, 6)) : 1;
       for (let i = 0; i < pack; i++) this.mobs.spawn(r.mob, x + rand(-1.5, 1.5), z + rand(-1.5, 1.5), elite);
+      if (elite && !this.seenElite) {
+        this.seenElite = true;
+        this.toast('💀 Elite thug (red ring): 7× HP, drops 10 gold and has a 25% chance to drop a free chest');
+      }
       this.spawnAcc -= pack - 1;
     }
 
@@ -556,7 +590,7 @@ export class Run {
     this.stats = computeStats(this);
     const p = this.player;
     if (!p.dead) {
-      p.hp = Math.min(this.stats.maxHp, p.hp + this.stats.regen * dt);
+      p.hp = Math.min(this.stats.maxHp, p.hp + this.stats.regen * dt + Math.min(this.leech, this.stats.maxHp * 0.06 * dt));
     }
 
     for (let i = this.timers.length - 1; i >= 0; i--) {
@@ -591,16 +625,28 @@ export class Run {
       for (const a of this.abilities) {
         let rate = a.def.id === 'frenzy' ? 1 : a.def.id === 'pistol' ? 1 + power * 1.6 : 1 + power;
         for (const id in this.buffs) { const b = this.buffs[id]; if (b.rate && b.src !== a.def.id) rate += b.rate; }
-        a.cd -= dt * rate;
-        if (a.cd > 0) continue;
+        if (a.def.aura) { a.cd = 0; this.combat.aura(a); continue; }
+        if (a.cd > 0) {
+          a.cd -= dt * rate;
+          if (a.cd > 0) continue;
+          a.cd = 0;
+        }
+        // off cooldown: look for a target ten times a second; `wait` = how long it has been ready
+        a.wait += dt;
+        a.poll -= dt;
+        if (a.poll > 0) continue;
+        a.poll = 0.1;
         const tgt = a.def.ready(this, a);
-        if (!tgt || (Array.isArray(tgt) && !tgt.length)) { a.cd = 0.1; continue; }
+        if (!tgt || (Array.isArray(tgt) && !tgt.length)) continue;
         const r = a.def.fire(this, a, tgt);
+        if (r === false) continue;
         a.cdMax = a.stat('cooldown');
-        a.cd = r === false ? 0.1 : a.cdMax;
+        a.cd = a.cdMax;
+        a.wait = 0;
       }
     }
     for (const it of this.allItems()) it.def.tick?.(this, it, dt);
+    this.leech = 0;
 
     this.updateDirector(dt);
     this.updateTitans(dt);
@@ -652,12 +698,14 @@ export class Run {
     };
     const gear = [];
     const heroGear = this.hero.gear ?? [];
+    let sig = null;
     if (victory) {
       Save.recordClear(this.map.id, this.diffIndex);
-      const sig = heroGear.find((g) => g.map === this.map.id);
+      sig = heroGear.find((g) => g.map === this.map.id);
       if (sig) gear.push(grant(sig));
     }
-    if (Math.random() < gearDropChance({ minutes: mins, bossKills: this.bossKills, victory })) {
+    // maps without a signature piece always drop a random one on a clear
+    if ((victory && !sig) || Math.random() < gearDropChance({ minutes: mins, bossKills: this.bossKills, victory })) {
       const pool = heroGear.filter((g) => !g.map && !gear.some((x) => x.def === g) && Save.gearTier(this.hero.id, g.id) < d.gearCap);
       if (pool.length) gear.push({ ...grant(pick(pool)), drop: true });
     }

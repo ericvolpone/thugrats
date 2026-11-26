@@ -19,9 +19,15 @@ function pickDistinct(pool, n, forced = []) {
   return out;
 }
 
-/** Size of the next roll of an item (see items.js). */
-export function itemGain(def, owned, tier) {
-  return scaledGain(def.v, owned?.power ?? 0, tier);
+/** Size of the next roll of an item (see items.js), clipped to the power that still helps. */
+export function itemGain(def, owned, tier, run) {
+  const g = scaledGain(def.v, owned?.power ?? 0, tier);
+  return def.room && run ? Math.max(0, Math.min(g, def.room(run, owned))) : g;
+}
+
+/** True when more of this item would do nothing (chance at 100%, luck at the cap...). */
+export function itemMaxed(run, def, owned) {
+  return !!def.room && def.room(run, owned) <= def.v * 0.05;
 }
 
 /**
@@ -72,17 +78,19 @@ export function itemOffers(run, n = 3, minTier = 0) {
   const luck = run.stats.luck;
   const pool = [];
   for (const def of ITEMS) {
-    if (run.banished.has(def.id)) continue;
+    if (run.banished.has(def.id) || run.maxed.has(def.id)) continue;
+    if (def.needs && !run.abilities.some((a) => (typeof def.needs === 'function' ? def.needs(a) : a.def.tags.includes(def.needs)))) continue;
     const ownedInst = run.findItem(def.id);
+    if (itemMaxed(run, def, ownedInst)) continue;
     if (ownedInst) {
-      if (!def.maxed?.(run, ownedInst)) pool.push({ def, owned: ownedInst, w: 3 });
-    } else if (run.items[def.slot].length < SLOTS[def.slot]) pool.push({ def, owned: null, w: def.slot === 'rep' ? 1.4 : 1 });
+      pool.push({ def, owned: ownedInst, w: 3 });
+    } else if (run.items[def.slot].length < SLOTS[def.slot]) pool.push({ def, owned: null, w: def.slot === 'rep' ? 1.4 : def.slot === 'stash' ? 1.6 : 1 });
   }
   // make sure at least one reputation shows up whenever one is available
   const rep = shuffle(pool.filter((c) => c.def.slot === 'rep')).slice(0, 1);
   const cards = shuffle(pickDistinct(pool, n, rep)).map((c) => {
     const tier = rollTier(luck, minTier);
-    return { type: 'item', def: c.def, owned: c.owned, tier, gain: itemGain(c.def, c.owned, tier) };
+    return { type: 'item', def: c.def, owned: c.owned, tier, gain: itemGain(c.def, c.owned, tier, run) };
   });
   while (cards.length < n) cards.push({ type: 'gold', amount: 40 + run.level * 4, tier: 0 });
   return cards;

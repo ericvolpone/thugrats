@@ -44,6 +44,9 @@ export class Combat {
     this.cars = [];
     this.marks = [];
     this.goons = [];
+    this.shadows = []; // shadow copies of the hero that do dashes (the real hero stays put)
+    this.shadowPool = [];
+    this.shadowMat = new THREE.MeshBasicMaterial({ color: '#2a1840', transparent: true, opacity: 0.6, depthWrite: false });
     this.zoneGeo = new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2);
     this.trapGeo = (() => {
       const parts = [];
@@ -107,6 +110,34 @@ export class Combat {
 
   orbit(o) {
     this.orbits.push({ ...o, t: 0, angle: rand(0, TAU), hitT: new Map() });
+  }
+
+  /**
+   * A shadow copy of the hero dashes from (x, z) along `angle` for `len` over
+   * `dur` seconds, then fades. Used for charges so the player never loses control.
+   * onStep(x, z, k) runs every frame with progress k (0..1).
+   */
+  shadow({ x, z, angle, len, dur = 0.28, onStep, color }) {
+    let model = this.shadowPool.pop();
+    if (!model) {
+      model = createHeroModel(this.run.hero.model);
+      model.root.scale.setScalar(1.15);
+      model.root.traverse((o) => { if (o.isMesh) { o.material = this.shadowMat; o.renderOrder = 2; } });
+    }
+    model.root.visible = true;
+    this.scene.add(model.root);
+    this.shadows.push({ model, x0: x, z0: z, angle, len, dur, t: 0, onStep, color: color ?? '#8a5ac8' });
+  }
+
+  /** Keep an always-on aura (def.aura) spinning for ability `a`; its count/radius follow the ability's stats. */
+  aura(a) {
+    let o = this.orbits.find((q) => q.ability === a);
+    if (!o) {
+      o = { ...a.def.aura, ability: a, life: Infinity, aura: true, t: 0, angle: rand(0, TAU), hitT: new Map() };
+      this.orbits.push(o);
+    }
+    o.count = a.stat('count');
+    o.r = a.stat('area');
   }
 
   mark(mob, delay, cb) {
@@ -280,6 +311,7 @@ export class Combat {
       if (t.arm <= 0 && mobs.count(t.x, t.z, t.trigger) > 0) {
         this.scene.remove(t.mesh);
         this.traps.splice(i, 1);
+        if (run.stats.trapRoot) for (const m of mobs.near(t.x, t.z, t.trigger * 2.2)) m.rootT = Math.max(m.rootT, m.tier >= 2 ? 0.25 : run.stats.trapRoot);
         t.onTrigger(t.x, t.z);
       }
     }
@@ -299,7 +331,11 @@ export class Combat {
         run.hit(m, c.dmg, c.ability, { knock: 10, fromX: m.x - c.vz * side, fromZ: m.z + c.vx * side });
       });
       if (Math.random() < 0.5) run.fx.burst(c.x - c.vx * 0.05, 0.3, c.z - c.vz * 0.05, '#777', 1, 1, 0.5, 1.2, -1);
-      if (c.left <= 0) { this.scene.remove(c.mesh); this.cars.splice(i, 1); }
+      if (c.left <= 0) {
+        if (run.stats.nitro && c.ability) run.explode(c.x - c.vx * 0.4, c.z - c.vz * 0.4, 3.2, c.dmg * run.stats.nitro, c.ability);
+        this.scene.remove(c.mesh);
+        this.cars.splice(i, 1);
+      }
     }
 
     // orbiting cash
@@ -309,7 +345,7 @@ export class Combat {
       o.t += dt;
       o.angle += dt * 3.6;
       if (o.t >= o.life) { this.orbits.splice(i, 1); continue; }
-      const grow = Math.min(1, o.t * 4, (o.life - o.t) * 4);
+      const grow = o.aura ? Math.min(1, o.t * 2) : Math.min(1, o.t * 4, (o.life - o.t) * 4);
       const dmg = o.ability.stat('damage');
       const spin = o.spin ?? 3.6;
       o.angle += dt * (spin - 3.6);
@@ -400,6 +436,31 @@ export class Combat {
       g.model.root.rotation.y = g.facing;
       g.model.animator.update(dt, { move: moving ? 1 : 0, aiming: g.swing > 0, shoot: g.swing, hurt: 0, dead: false });
     }
+
+    // shadow dashes: run out, linger a moment, fade
+    for (let i = this.shadows.length - 1; i >= 0; i--) {
+      const sh = this.shadows[i];
+      sh.t += dt;
+      const k = Math.min(1, sh.t / sh.dur);
+      const e = 1 - (1 - k) * (1 - k);
+      const x = sh.x0 + Math.sin(sh.angle) * sh.len * e, z = sh.z0 + Math.cos(sh.angle) * sh.len * e;
+      if (k < 1) sh.onStep?.(x, z, k);
+      const root = sh.model.root;
+      root.position.set(x, 0, z);
+      root.rotation.y = sh.angle;
+      sh.model.animator.update(dt, { move: k < 1 ? 1 : 0, aiming: false, shoot: 0, hurt: 0, dead: false, air: false });
+      if (Math.random() < dt * 40 && k < 1) run.fx.burst(x, 0.6, z, sh.color, 1, 1.5, 0.4, 0.8, 1);
+      if (sh.t > sh.dur + 0.25) {
+        this.scene.remove(root);
+        this.shadowPool.push(sh.model);
+        this.shadows.splice(i, 1);
+      }
+    }
+    // the material is shared, so fade it by the youngest live shadow
+    if (this.shadows.length) {
+      const age = Math.min(...this.shadows.map((sh) => Math.max(0, sh.t - sh.dur) / 0.25));
+      this.shadowMat.opacity = 0.6 * (1 - age);
+    }
   }
 
   dispose() {
@@ -409,5 +470,6 @@ export class Combat {
     for (const c of this.cars) this.scene.remove(c.mesh);
     for (const m of this.marks) this.scene.remove(m.mesh);
     for (const g of this.goons) this.scene.remove(g.model.root);
+    for (const sh of this.shadows) this.scene.remove(sh.model.root);
   }
 }

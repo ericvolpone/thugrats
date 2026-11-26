@@ -189,6 +189,25 @@ registerMob('big_lou', () => adult({ shirt: '#3a0d0d', pants: '#1a1a1a', tie: '#
 registerMob('dealer_supreme', () => adult({ shirt: '#f4f4f4', vest: '#0d3a1a', pants: '#111', tie: '#c9a227', hair: '#ddd', collar: '#0d3a1a', prop: 'cards', girth: 1.2 }));
 
 // ── Pets ─────────────────────────────────────────────────────
+// Chinatown
+registerMob('alley_cat', () => quadruped({ fur: '#d88a3a', belly: '#f2d2a8', ear: '#e8a0a0', tail: 'long', size: 0.75, ears: 0.14 }));
+registerMob('tourist', () => adult({ shirt: '#ff7ab8', pants: '#e8d8b0', hat: 'cap', hatColor: '#f2f2f2', prop: 'radio', belly: true, glasses: '#111' }));
+registerMob('health_inspector', () => adult({ shirt: '#f4f4f4', pants: '#4a5a4a', vest: '#6a8a6a', hat: 'none', hair: '#3a2a1a', prop: 'clipboard', glasses: '#2a2a2a', tie: '#2f6a3a' }));
+registerMob('line_cook', () => adult({ shirt: '#f4f4f4', pants: '#2a2a2a', apron: '#e8e8e8', hat: 'chef', prop: 'wrench', girth: 1.3, belly: true, mustache: true }));
+registerMob('maitre_d', () => adult({ shirt: '#111', pants: '#111', vest: '#7a1020', tie: '#f2c94c', hat: 'none', hair: '#111', prop: 'cards', girth: 1.25, mustache: true }));
+registerMob('food_critic', () => adult({ shirt: '#4a2a5a', pants: '#2a1a30', collar: '#f2f2f2', hat: 'fedora', hatColor: '#2a1a30', prop: 'clipboard', glasses: '#c9a227', girth: 1.4, belly: true }));
+registerMob('landlord', () => adult({ shirt: '#5a4a2a', pants: '#3a2a1a', tie: '#c9a227', hat: 'fedora', hatColor: '#3a2a1a', prop: 'gavel', girth: 1.5, belly: true, mustache: true, hair: '#bbb' }));
+registerMob('parade_dragon', () => adult({ shirt: '#d8201e', pants: '#d8201e', cape: '#f2c037', collar: '#f2c037', belt: '#f2c037', hat: 'chef', hatColor: '#f2c037', girth: 1.7, belly: true, prop: 'none', skin: '#e03a2a', glasses: '#f2c037' }));
+// Coney Island
+registerMob('lifeguard', () => adult({ shirt: '#e0281e', pants: '#e0281e', hat: 'cap', hatColor: '#f2f2f2', prop: 'radio', skin: '#d89a6a', glasses: '#111' }));
+registerMob('clown', () => adult({ shirt: '#f2c037', pants: '#2c6bb8', collar: '#ff4fd8', hat: 'pompadour', hair: '#ff4f4f', prop: 'bottle', belly: true, girth: 1.15 }));
+registerMob('mascot', () => adult({ shirt: '#c8682a', pants: '#c8682a', apron: '#f2d020', hat: 'none', girth: 1.6, belly: true, prop: 'none', skin: '#e8b48f' }));
+registerMob('beach_cop', () => adult({ shirt: '#e2e8ee', pants: '#2b3a5a', hat: 'cap', hatColor: '#2b3a5a', badge: true, prop: 'baton', glasses: '#111' }));
+registerMob('ringmaster', () => adult({ shirt: '#c8281e', pants: '#f4f4f4', collar: '#f2c94c', hat: 'fedora', hatColor: '#111', tie: '#f2c94c', prop: 'mic', girth: 1.3, mustache: true }));
+registerMob('strongman', () => adult({ shirt: '#f4f4f4', pants: '#111', belt: '#c8281e', hat: 'none', hair: '#111', girth: 1.8, mustache: true, prop: 'wrench' }));
+registerMob('fortune_teller', () => adult({ shirt: '#5a2a8a', dress: '#3a1a6a', hat: 'bun', hair: '#2a1a0a', prop: 'cards', apron: '#c9a227', glasses: '#c9a227', belt: false }));
+registerMob('captain_coney', () => adult({ shirt: '#2c6bb8', pants: '#f4f4f4', hat: 'captain', cape: '#e0281e', collar: '#f2c94c', badge: true, girth: 1.6, belly: true, mustache: true, hair: '#eee', prop: 'mic' }));
+
 registerMob('pet_bulldog', () => {
   const g = quadruped({ fur: '#c9a27a', belly: '#f1e3cf', ear: '#8a6a4a', size: 0.85, ears: 0.1 });
   const collar = paint(new THREE.TorusGeometry(0.17, 0.035, 4, 10).rotateY(Math.PI / 2).rotateZ(Math.PI / 2).translate(0, 0.48 * 0.85, 0.3 * 0.85), C('#d6262a'));

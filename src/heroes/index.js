@@ -30,48 +30,52 @@ export const BASE_STATS = {
   luck: 0, haste: 0, area: 0, duration: 0, dmg: 1, xpGain: 1, goldGain: 1, dodge: 0,
   projectiles: 0, bigDmg: 0, burnDmg: 0, fearRadius: 0, chestRate: 1, rerolls: 2,
   chestDiscount: 0, startGold: 0, pickupPct: 0, speedPct: 0, frenzyArmor: 0,
+  // lifesteal: fraction of damage dealt that heals you (all hits / melee / crits / auras; capped at 6% max HP per second)
+  lifesteal: 0, meleeLeech: 0, critLeech: 0, auraLeech: 0, frenzyLeech: 0,
+  // contraband item effects
+  projBurst: 0, blastArea: 0, blastBurn: 0, burnVuln: 0, ctrlDmg: 0, nitro: 0, trapRoot: 0, extraJumps: 0, execHeal: 0,
 };
 
 export const HEROES = [
   {
     id: 'lenny', icon: '🎩', name: 'Lenny "Nickles"', title: 'The Mobster',
     blurb: 'Eighteen months old, runs half of Mulberry Street. Never seen without his fedora, his cigar or his .38.',
-    look: { hat: 'fedora', mouth: 'cigar', prop: 'pistol', chain: true, hatColor: '#2b2b33', band: '#111' },
+    look: { hat: 'fedora', mouth: 'cigar', prop: 'pistol', chain: true, hatColor: '#2b2b33', band: '#111', suspenders: '#2b2b33', scar: true, watch: '#f2c037', shoes: '#2a2a2e', soles: '#f4f1ea', hair: '#2a1a10' },
     stats: { maxHp: 120 }, start: 'pistol',
     abilities: LENNY_ABILITIES, talents: LENNY_TALENTS, trees: LENNY_TREES, gear: LENNY_GEAR,
   },
   {
     id: 'tony', icon: '🥊', name: 'Tiny Tony Two-Fists', title: 'The Brute',
     blurb: 'Biggest baby in the nursery. Settles every argument the same way. Bruiser, tank, menace.',
-    look: { hat: 'beanie', hatColor: '#6b1f1f', band: '#3a0f0f', mouth: 'pacifier', pacifier: '#d8302a', prop: 'none', shirt: '#f4f1ea', gloves: '#d8302a', skin: '#e8b48f', scale: 1.12 },
+    look: { hat: 'beanie', hatColor: '#6b1f1f', band: '#3a0f0f', mouth: 'pacifier', pacifier: '#d8302a', prop: 'none', shirt: '#f4f1ea', gloves: '#d8302a', skin: '#e8b48f', scale: 1.12, belt: '#c8281e', shoes: '#d8302a', freckles: true, tabs: '#d8302a' },
     stats: { maxHp: 165, armor: 0.08, speed: 6.0, regen: 0.8 }, start: 'haymaker',
     abilities: TONY_ABILITIES, talents: TONY_TALENTS, trees: TONY_TREES, gear: TONY_GEAR,
   },
   {
     id: 'boom', icon: '🧨', name: 'Boom-Boom Bianchi', title: 'Demolitions',
     blurb: 'Lost his eyebrows twice before he could walk. Believes every problem has an explosive solution.',
-    look: { hat: 'hardhat', hatColor: '#f2c037', band: '#c8a020', mouth: 'none', prop: 'dynamite', vest: '#5a6a3a', goggles: '#9ad8ff', skin: '#f0c09a' },
+    look: { hat: 'hardhat', hatColor: '#f2c037', band: '#c8a020', mouth: 'none', prop: 'dynamite', vest: '#5a6a3a', goggles: '#9ad8ff', skin: '#f0c09a', bandolier: '#5a3a22', shoes: '#6b4a2a', soles: '#3a2a1a', hair: '#c8601e', freckles: true, tabs: '#f2c037' },
     stats: { maxHp: 110, area: 0.05 }, start: 'dynamite_stick',
     abilities: BOOM_ABILITIES, talents: BOOM_TALENTS, trees: BOOM_TREES, gear: BOOM_GEAR,
   },
   {
     id: 'ghost', icon: '🕶️', name: 'Lucy "The Ghost"', title: 'The Spy',
     blurb: 'Nobody has ever seen her leave the crib. Nobody has ever seen her in it either.',
-    look: { hat: 'beret', hatColor: '#141418', band: '#141418', mouth: 'none', prop: 'silencer', shirt: '#24242c', mask: '#101014', skin: '#f6d0b4' },
+    look: { hat: 'beret', hatColor: '#141418', band: '#141418', mouth: 'none', prop: 'silencer', shirt: '#24242c', mask: '#101014', skin: '#f6d0b4', shoes: '#101014', soles: '#101014', belt: '#2a2a30', pin: '#c8c8d0', buttons: '#3a3a44', hair: '#101014', tabs: '#24242c' },
     stats: { maxHp: 95, speed: 6.9, crit: 0.1, dodge: 0.05 }, start: 'silenced',
     abilities: GHOST_ABILITIES, talents: GHOST_TALENTS, trees: GHOST_TREES, gear: GHOST_GEAR,
   },
   {
     id: 'babyface', icon: '🔭', name: 'Babyface Moretti', title: 'The Hitman',
     blurb: 'Takes the contract, takes the nap, takes the shot. In that order.',
-    look: { hat: 'fedora', hatColor: '#e8e4da', band: '#901818', mouth: 'pacifier', pacifier: '#901818', prop: 'rifle', shirt: '#2a2a32', shades: '#111' },
+    look: { hat: 'fedora', hatColor: '#e8e4da', band: '#901818', mouth: 'pacifier', pacifier: '#901818', prop: 'rifle', shirt: '#2a2a32', shades: '#111', tie: '#901818', collar: '#f4f1ea', shoes: '#e8e4da', soles: '#2a2a32', feather: '#901818', watch: '#d8d8d8', hair: '#3a2a1a' },
     stats: { maxHp: 105, critDmg: 0.75 }, start: 'rifle',
     abilities: BABYFACE_ABILITIES, talents: BABYFACE_TALENTS, trees: BABYFACE_TREES, gear: BABYFACE_GEAR,
   },
   {
     id: 'prof', icon: '🧠', name: 'Professor Pudding', title: 'The Mastermind',
     blurb: 'Skipped walking and went straight to particle physics. The pudding is load-bearing.',
-    look: { hat: 'brain', hatColor: '#f2a6b8', band: '#d98098', mouth: 'pacifier', pacifier: '#5af', prop: 'raygun', vest: '#e8e8f0', glasses: '#222', skin: '#f2c3a0' },
+    look: { hat: 'brain', hatColor: '#f2a6b8', band: '#d98098', mouth: 'pacifier', pacifier: '#5af', prop: 'raygun', vest: '#e8e8f0', glasses: '#222', skin: '#f2c3a0', tie: '#55aaff', shoes: '#e8e8f0', soles: '#55aaff', freckles: true, eyes: '#2a5a9a', tabs: '#ff8fd0' },
     stats: { maxHp: 100, haste: 0.05 }, start: 'pudding_blaster',
     abilities: PROF_ABILITIES, talents: PROF_TALENTS, trees: PROF_TREES, gear: PROF_GEAR,
   },

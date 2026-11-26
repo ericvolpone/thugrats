@@ -49,15 +49,43 @@ export function buildBaby(o = {}) {
   // ── hips + diaper ──
   const hips = group(rig, 'hips', 0, 0.34, 0);
   mesh(hips, new THREE.IcosahedronGeometry(0.26, 1).scale(1.12, 0.78, 1.0), P.diaper);
-  // safety pin
-  mesh(hips, new THREE.BoxGeometry(0.1, 0.03, 0.02).translate(0, 0.06, 0.26), P.gold);
+  // waistband, side tabs, leg-hole trim and a safety pin
+  mesh(hips, new THREE.CylinderGeometry(0.285, 0.29, 0.05, 14).scale(1.02, 1, 0.92).translate(0, 0.13, 0), P.diaper.clone().multiplyScalar(0.88));
+  for (const s of [-1, 1]) {
+    mesh(hips, new THREE.BoxGeometry(0.08, 0.07, 0.03).translate(s * 0.2, 0.08, 0.2).rotateY(s * -0.4), C(o.tabs ?? '#9ad8ff'));
+    mesh(hips, new THREE.TorusGeometry(0.1, 0.018, 4, 10).rotateX(Math.PI / 2).translate(s * 0.13, -0.13, 0), P.diaper.clone().multiplyScalar(0.85));
+  }
+  mesh(hips, new THREE.BoxGeometry(0.12, 0.025, 0.02).translate(0, 0.06, 0.26), P.gold);
+  mesh(hips, new THREE.TorusGeometry(0.02, 0.006, 3, 6).translate(0.065, 0.06, 0.265), P.gold);
 
   // ── torso (belly) ──
   const torso = group(hips, 'torso', 0, 0.15, 0);
   const torsoCol = P.shirt ?? P.skin;
   mesh(torso, new THREE.IcosahedronGeometry(0.25, 1).scale(1.0, 1.05, 0.92).translate(0, 0.1, 0), (p) => (p.y < -0.02 && !P.shirt ? P.skin : torsoCol));
+  if (!P.shirt) mesh(torso, new THREE.IcosahedronGeometry(0.018, 0).translate(0, -0.02, 0.235), P.cheek.clone().multiplyScalar(0.8)); // belly button
+  if (P.shirt) {
+    // collar + buttons
+    mesh(torso, new THREE.TorusGeometry(0.13, 0.03, 4, 12).rotateX(Math.PI / 2 - 0.25).translate(0, 0.3, 0.02), o.collar ? C(o.collar) : P.shirt.clone().multiplyScalar(1.15));
+    for (let i = 0; i < 3; i++) mesh(torso, new THREE.IcosahedronGeometry(0.018, 0).translate(0, 0.2 - i * 0.09, 0.235 - Math.abs(i - 1) * 0.01), C(o.buttons ?? '#d8d0c0'));
+  }
+  if (o.tie) {
+    mesh(torso, new THREE.BoxGeometry(0.06, 0.05, 0.03).translate(0, 0.27, 0.2), C(o.tie));
+    mesh(torso, new THREE.BoxGeometry(0.07, 0.2, 0.02).translate(0, 0.14, 0.235).rotateX(-0.05), C(o.tie));
+  }
+  if (o.suspenders) for (const s of [-1, 1]) mesh(torso, new THREE.BoxGeometry(0.035, 0.42, 0.02).translate(s * 0.1, 0.06, 0.225).rotateZ(s * 0.08), C(o.suspenders));
   if (o.chain) mesh(torso, new THREE.TorusGeometry(0.15, 0.022, 4, 10).rotateX(1.25).translate(0, 0.27, 0.07), P.gold);
-  if (o.vest) mesh(torso, new THREE.IcosahedronGeometry(0.26, 1).scale(1.03, 0.9, 0.95).translate(0, 0.08, -0.01), C(o.vest));
+  if (o.vest) {
+    mesh(torso, new THREE.IcosahedronGeometry(0.26, 1).scale(1.03, 0.9, 0.95).translate(0, 0.08, -0.01), C(o.vest));
+    for (const s of [-1, 1]) mesh(torso, new THREE.BoxGeometry(0.08, 0.07, 0.03).translate(s * 0.1, 0.0, 0.245), C(o.vest).multiplyScalar(0.75)); // pockets
+  }
+  if (o.bandolier) {
+    mesh(torso, new THREE.BoxGeometry(0.06, 0.6, 0.04).rotateZ(0.75).translate(0, 0.1, 0.24), C(o.bandolier));
+    for (let i = -2; i <= 2; i++) mesh(torso, new THREE.CylinderGeometry(0.017, 0.017, 0.07, 5).translate(i * 0.065, 0.1 - i * 0.06, 0.27), C('#c8281e'));
+  }
+  if (o.belt) {
+    mesh(torso, new THREE.CylinderGeometry(0.245, 0.25, 0.05, 12).scale(1, 1, 0.94).translate(0, -0.07, 0), C(o.belt));
+    mesh(torso, new THREE.BoxGeometry(0.07, 0.05, 0.02).translate(0, -0.07, 0.24), P.gold);
+  }
 
   // ── head ──
   const head = group(torso, 'head', 0, 0.52, 0.02);
@@ -65,14 +93,22 @@ export function buildBaby(o = {}) {
   for (const s of [-1, 1]) {
     mesh(head, new THREE.IcosahedronGeometry(0.075, 1).translate(s * 0.33, 0, 0), P.skin); // ears
     mesh(head, new THREE.IcosahedronGeometry(0.06, 0).scale(1, 0.6, 0.4).translate(s * 0.17, -0.1, 0.27), P.cheek);
-    // squinty tough-guy eyes + angry brows
-    mesh(head, new THREE.SphereGeometry(0.04, 6, 4).scale(1.2, 0.55, 0.5).translate(s * 0.12, 0.03, 0.29), P.dark);
+    // squinty tough-guy eyes (white, pupil, glint) + angry brows
+    mesh(head, new THREE.SphereGeometry(0.05, 8, 5).scale(1.2, 0.6, 0.45).translate(s * 0.12, 0.03, 0.285), C('#f8f4ee'));
+    mesh(head, new THREE.SphereGeometry(0.032, 6, 4).scale(1, 0.75, 0.5).translate(s * 0.115, 0.025, 0.3), C(o.eyes ?? '#3a2a1e'));
+    mesh(head, new THREE.IcosahedronGeometry(0.009, 0).translate(s * 0.105 + 0.01, 0.04, 0.312), C('#ffffff'));
+    // eyelid (the squint)
+    mesh(head, new THREE.SphereGeometry(0.052, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.25, 0.55, 0.5).translate(s * 0.12, 0.04, 0.285), P.skin.clone().multiplyScalar(0.93));
     const brow = new THREE.BoxGeometry(0.13, 0.03, 0.04).rotateZ(s * -0.35).translate(s * 0.12, 0.1, 0.29);
     mesh(head, brow, o.browColor ? C(o.browColor) : C('#5a3b28'));
   }
   mesh(head, new THREE.IcosahedronGeometry(0.045, 0).translate(0, -0.03, 0.32), P.skin); // nose
-  // smirk
+  // smirk + chin dimple + a curl of hair poking out
   mesh(head, new THREE.BoxGeometry(0.12, 0.018, 0.02).rotateZ(-0.15).translate(0.02, -0.14, 0.29), C('#7a3a35'));
+  mesh(head, new THREE.BoxGeometry(0.07, 0.014, 0.02).rotateZ(-0.1).translate(0.03, -0.165, 0.28), P.cheek.clone().multiplyScalar(0.85));
+  mesh(head, new THREE.TorusGeometry(0.045, 0.014, 4, 8, Math.PI * 1.5).rotateY(Math.PI / 2).translate(0, 0.27, 0.2), C(o.hair ?? '#6a4a2a'));
+  if (o.scar) mesh(head, new THREE.BoxGeometry(0.015, 0.12, 0.015).rotateZ(0.3).translate(-0.14, 0.02, 0.305), C('#c87a6a'));
+  if (o.freckles) for (const [x, y] of [[-0.18, -0.04], [-0.14, -0.07], [0.16, -0.05], [0.19, -0.03]]) mesh(head, new THREE.IcosahedronGeometry(0.01, 0).translate(x, y, 0.28), C('#b87a5a'));
 
   // mouth piece
   if (o.mouth === 'cigar') {
@@ -112,16 +148,22 @@ export function buildBaby(o = {}) {
     mesh(hat, new THREE.CylinderGeometry(0.25, 0.3, 0.26, 10).translate(0, 0.14, 0), (p) => (p.y > 0.25 ? P.hat.clone().multiplyScalar(0.85) : P.hat));
     mesh(hat, new THREE.CylinderGeometry(0.305, 0.305, 0.07, 10).translate(0, 0.05, 0), P.band);
     mesh(hat, new THREE.BoxGeometry(0.02, 0.06, 0.18).translate(0, 0.27, 0), P.hat.clone().multiplyScalar(0.7)); // crease
+    if (o.feather) mesh(hat, new THREE.BoxGeometry(0.03, 0.22, 0.06).rotateZ(-0.5).translate(0.3, 0.14, 0.05), C(o.feather));
+    mesh(hat, new THREE.TorusGeometry(0.46, 0.012, 3, 18).rotateX(Math.PI / 2).scale(1, 0.92, 1).translate(0, 0.01, 0), P.hat.clone().multiplyScalar(0.7)); // brim edge
   } else if (o.hat === 'beanie') {
     mesh(hat, new THREE.IcosahedronGeometry(0.33, 1).scale(1.02, 0.6, 1.02).translate(0, 0.0, 0), P.hat);
     mesh(hat, new THREE.CylinderGeometry(0.34, 0.34, 0.08, 10).translate(0, -0.08, 0), P.band);
+    mesh(hat, new THREE.IcosahedronGeometry(0.08, 1).translate(0, 0.21, 0), P.band); // pompom
   } else if (o.hat === 'hardhat') {
     mesh(hat, new THREE.IcosahedronGeometry(0.34, 1).scale(1.02, 0.62, 1.05).translate(0, 0.02, 0), P.hat);
     mesh(hat, new THREE.CylinderGeometry(0.4, 0.4, 0.03, 12).translate(0, -0.07, 0.03), P.hat);
     mesh(hat, new THREE.BoxGeometry(0.06, 0.06, 0.55).translate(0, 0.2, 0), P.band);
+    mesh(hat, new THREE.CylinderGeometry(0.06, 0.06, 0.05, 8).rotateX(Math.PI / 2).translate(0, 0.08, 0.33), C('#fff6c0')); // lamp
+    mesh(hat, new THREE.BoxGeometry(0.14, 0.08, 0.02).translate(0, 0.02, 0.34), C('#c8281e')); // sticker
   } else if (o.hat === 'beret') {
     mesh(hat, new THREE.CylinderGeometry(0.36, 0.33, 0.1, 12).translate(0.05, 0.02, 0), P.hat);
     mesh(hat, new THREE.CylinderGeometry(0.02, 0.02, 0.07, 4).translate(0.05, 0.1, 0), P.hat);
+    mesh(hat, new THREE.IcosahedronGeometry(0.035, 0).translate(-0.22, 0.04, 0.2), C(o.pin ?? '#c8c8d0')); // pin
   } else if (o.hat === 'brain') {
     mesh(hat, new THREE.IcosahedronGeometry(0.3, 1).scale(1.05, 0.75, 1.1).translate(0, 0.06, -0.02), P.hat);
     for (let i = -2; i <= 2; i++) mesh(hat, new THREE.BoxGeometry(0.02, 0.05, 0.5).translate(i * 0.09, 0.2, -0.02), P.band);
@@ -140,6 +182,9 @@ export function buildBaby(o = {}) {
     arm.rotation.z = s * 0.25;
     mesh(arm, new THREE.CapsuleGeometry(0.075, 0.18, 3, 6).translate(0, -0.13, 0), P.shirt ?? P.skin);
     mesh(arm, new THREE.IcosahedronGeometry(0.075, 1).translate(0, -0.29, 0), P.skin);
+    mesh(arm, new THREE.CapsuleGeometry(0.022, 0.04, 2, 4).rotateZ(s * 0.6).translate(s * -0.05, -0.27, 0.04), P.skin); // thumb
+    if (P.shirt) mesh(arm, new THREE.CylinderGeometry(0.085, 0.085, 0.04, 8).translate(0, -0.21, 0), P.shirt.clone().multiplyScalar(0.85)); // cuff
+    if (o.watch && s > 0) mesh(arm, new THREE.CylinderGeometry(0.08, 0.08, 0.035, 8).translate(0, -0.235, 0), C(o.watch));
   }
   // held prop (right hand). Points along -Y in arm space = forward when the arm is raised.
   const prop = group(nodes.armR, 'prop', 0, -0.3, 0.02);
@@ -181,6 +226,10 @@ export function buildBaby(o = {}) {
     const leg = group(hips, s < 0 ? 'legL' : 'legR', s * 0.13, -0.08, 0);
     mesh(leg, new THREE.CapsuleGeometry(0.085, 0.1, 3, 6).translate(0, -0.1, 0), P.skin);
     mesh(leg, new THREE.IcosahedronGeometry(0.09, 1).scale(1, 0.6, 1.4).translate(0, -0.22, 0.04), o.shoes ? C(o.shoes) : P.skin);
+    if (o.shoes) {
+      mesh(leg, new THREE.BoxGeometry(0.15, 0.025, 0.24).translate(0, -0.265, 0.04), C(o.soles ?? '#f4f1ea')); // sole
+      mesh(leg, new THREE.CylinderGeometry(0.09, 0.09, 0.04, 8).translate(0, -0.17, 0), C(o.shoes).multiplyScalar(1.2)); // cuff
+    } else for (let t = -1; t <= 1; t++) mesh(leg, new THREE.IcosahedronGeometry(0.022, 0).translate(t * 0.04, -0.23, 0.15), P.skin); // toes
   }
 
   return { root, nodes };

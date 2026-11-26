@@ -156,7 +156,7 @@ export const BOOM_ABILITIES = [
     desc: 'Pulls the big red lever. A massive blast centred on Boom-Boom (he\'s fine, mostly).',
     base: { damage: 90, cooldown: 22, area: 8 },
     upgrades: [DMG, CD, AREA],
-    ready: (run, a) => run.mobs.count(run.player.x, run.player.z, a.stat('area')) >= 15,
+    ready: (run, a) => run.crowd(a, a.stat('area'), 10),
     fire(run, a) {
       const p = run.player;
       run.fx.ring(p.x, p.z, a.stat('area'), '#ffef5a', 0.9);

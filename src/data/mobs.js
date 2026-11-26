@@ -7,6 +7,19 @@
  * (keep = distance the mob tries to hold) · radius: body size · xp · gold: drop chance
  */
 export const MOBS = {
+  // Chinatown
+  alley_cat: { name: 'Alley Cat', h: 0.7, model: 'alley_cat', speed: 6.0, hp: 10, dmg: 4, atkCd: 0.8, reach: 0.4, radius: 0.42, xp: 1, gold: 0.08 },
+  tourist: { name: 'Tourist', model: 'tourist', speed: 2.9, hp: 24, dmg: 5, atkCd: 1.2, reach: 0.5, radius: 0.55, xp: 3, gold: 0.25,
+    ranged: { dmg: 6, range: 12, cd: 2.4, speed: 12, keep: 9, color: '#ffffff', size: 0.3 } },
+  health_inspector: { name: 'Health Inspector', model: 'health_inspector', speed: 3.5, hp: 30, dmg: 9, atkCd: 1.1, reach: 0.6, radius: 0.55, xp: 2, gold: 0.16 },
+  line_cook: { name: 'Line Cook', model: 'line_cook', speed: 2.7, hp: 110, dmg: 18, atkCd: 1.5, reach: 0.9, radius: 0.75, xp: 5, gold: 0.3 },
+  // Coney Island
+  lifeguard: { name: 'Lifeguard', model: 'lifeguard', speed: 4.6, hp: 22, dmg: 7, atkCd: 1.0, reach: 0.6, radius: 0.55, xp: 2, gold: 0.14 },
+  clown: { name: 'Party Clown', model: 'clown', speed: 3.0, hp: 30, dmg: 6, atkCd: 1.2, reach: 0.5, radius: 0.55, xp: 3, gold: 0.22,
+    ranged: { dmg: 8, range: 11, cd: 2.6, speed: 9, keep: 8, color: '#ff8ad0', size: 0.4 } },
+  mascot: { name: 'Hot Dog Mascot', model: 'mascot', speed: 2.5, hp: 150, dmg: 19, atkCd: 1.7, reach: 0.9, radius: 0.85, xp: 6, gold: 0.35 },
+  beach_cop: { name: 'Beach Patrol', model: 'beach_cop', speed: 3.6, hp: 34, dmg: 9, atkCd: 1.2, reach: 0.6, radius: 0.55, xp: 2, gold: 0.16 },
+
   rat: { name: 'Sewer Rat', h: 0.7, model: 'rat', speed: 5.2, hp: 9, dmg: 4, atkCd: 0.9, reach: 0.4, radius: 0.45, xp: 1, gold: 0.08 },
   mallcop: { name: 'Mall Cop', model: 'mallcop', speed: 3.4, hp: 26, dmg: 8, atkCd: 1.2, reach: 0.6, radius: 0.55, xp: 2, gold: 0.15 },
   crossing_guard: { name: 'Crossing Guard', model: 'crossing_guard', speed: 2.6, hp: 70, dmg: 15, atkCd: 1.8, reach: 1.0, radius: 0.65, xp: 4, gold: 0.25 },
@@ -59,7 +72,72 @@ export const BOSSES = {
     ],
   },
 
+  maitre_d: {
+    name: "The Maître D'", title: 'No Reservation', model: 'maitre_d', scale: 1.9, hp: 2000, dmg: 24, speed: 3.4, radius: 1.2,
+    mechanics: [
+      { type: 'barrage', cd: 5, count: 6, dmg: 12, speed: 15, spread: 0.6, color: '#f2f2f2' },
+      { type: 'charge', cd: 8, length: 18, width: 2.6, delay: 1.0, dmg: 30 },
+    ],
+  },
+  ringmaster: {
+    name: 'The Ringmaster', title: 'Step Right Up', model: 'ringmaster', scale: 1.9, hp: 2100, dmg: 24, speed: 3.2, radius: 1.2,
+    mechanics: [
+      { type: 'nova', cd: 7, count: 16, dmg: 13, speed: 9, color: '#ff8ad0' },
+      { type: 'slam', cd: 6, radius: 3.8, delay: 1.2, dmg: 28, count: 2, spread: 4 },
+    ],
+  },
+
   // ── Titans ──
+  food_critic: {
+    name: 'Anton Grumble', title: 'The Food Critic', model: 'food_critic', scale: 3.0, hp: 10000, dmg: 30, speed: 2.8, radius: 2, titan: true,
+    mechanics: [
+      { type: 'cone', cd: 6, angle: 90, length: 12, delay: 1.1, dmg: 36, label: 'Scathing Review' },
+      { type: 'rain', cd: 9, count: 8, radius: 2.4, area: 10, delay: 1.4, dmg: 28, label: 'Sent Back' },
+      { type: 'summon', cd: 16, mob: 'alley_cat', count: 12 },
+    ],
+  },
+  landlord: {
+    name: 'The Landlord', title: 'Rent Is Due', model: 'landlord', scale: 3.0, hp: 12000, dmg: 32, speed: 3.0, radius: 2, titan: true,
+    mechanics: [
+      { type: 'donut', cd: 11, inner: 4, outer: 12, delay: 1.6, dmg: 40 },
+      { type: 'barrage', cd: 4, count: 7, dmg: 14, speed: 17, spread: 0.7, color: '#c9a227' },
+      { type: 'summon', cd: 17, mob: 'health_inspector', count: 6 },
+    ],
+  },
+  parade_dragon: {
+    name: 'The Golden Dragon', title: 'Parade Float Gone Rogue', model: 'parade_dragon', scale: 3.5, hp: 22000, dmg: 40, speed: 3.2, radius: 2.3, titan: true, final: true,
+    mechanics: [
+      { type: 'charge', cd: 7, length: 26, width: 3.4, delay: 1.0, dmg: 42 },
+      { type: 'cone', cd: 6, angle: 70, length: 14, delay: 1.0, dmg: 40, label: 'Firecracker Breath' },
+      { type: 'nova', cd: 8, count: 22, dmg: 16, speed: 10, color: '#ff6a1a' },
+      { type: 'summon', cd: 18, mob: 'line_cook', count: 5 },
+    ],
+  },
+  strongman: {
+    name: 'Iron Ivan', title: 'The Strongman', model: 'strongman', scale: 3.1, hp: 12000, dmg: 34, speed: 2.7, radius: 2.1, titan: true,
+    mechanics: [
+      { type: 'slam', cd: 5, radius: 4.8, delay: 1.3, dmg: 38 },
+      { type: 'slam', cd: 8, radius: 3.5, delay: 1.2, dmg: 32, count: 4, spread: 6 },
+      { type: 'charge', cd: 9, length: 20, width: 3, delay: 1.1, dmg: 38 },
+    ],
+  },
+  fortune_teller: {
+    name: 'Madame Zelda', title: 'Knows Your Future', model: 'fortune_teller', scale: 2.8, hp: 10000, dmg: 30, speed: 3.2, radius: 1.8, titan: true,
+    mechanics: [
+      { type: 'rain', cd: 7, count: 9, radius: 2.4, area: 11, delay: 1.4, dmg: 28, label: 'Bad Omens' },
+      { type: 'cross', cd: 10, length: 24, width: 2.6, delay: 1.3, dmg: 36 },
+      { type: 'nova', cd: 6, count: 16, dmg: 14, speed: 9, color: '#c08aff' },
+    ],
+  },
+  captain_coney: {
+    name: 'Captain Coney', title: 'Owner of the Boardwalk', model: 'captain_coney', scale: 3.5, hp: 23000, dmg: 41, speed: 2.9, radius: 2.3, titan: true, final: true,
+    mechanics: [
+      { type: 'donut', cd: 12, inner: 4.5, outer: 14, delay: 1.8, dmg: 45 },
+      { type: 'barrage', cd: 4, count: 8, dmg: 14, speed: 18, spread: 0.8, color: '#f2c037' },
+      { type: 'rain', cd: 9, count: 8, radius: 2.6, area: 11, delay: 1.5, dmg: 30, label: 'Fireworks' },
+      { type: 'summon', cd: 17, mob: 'mascot', count: 4 },
+    ],
+  },
   lunch_lady: {
     name: 'Big Bertha', title: 'The Lunch Lady', model: 'lunch_lady', scale: 3.0, hp: 9000, dmg: 30, speed: 2.6, radius: 2, titan: true,
     mechanics: [

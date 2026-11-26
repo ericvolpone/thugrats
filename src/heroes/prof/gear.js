@@ -2,7 +2,7 @@
 export const PROF_GEAR = [
   {
     id: 'prof_goggles', slot: 'Head', name: 'Lab Goggles', icon: '🥽', map: 'little_italy',
-    desc: (t) => `Science abilities +${8 + 8 * t}% damage.${t >= 2 ? ' +6% cooldown speed.' : ''}${t >= 4 ? ' Tesla Coil +2 jumps.' : ''}`,
+    desc: (t) => `Science abilities +${8 + 8 * t}% damage.${t >= 2 ? ' +6% Recharge Rate.' : ''}${t >= 4 ? ' Tesla Coil +2 jumps.' : ''}`,
     apply(c, t) {
       c.abil('#science', 'damage', 'pct', 8 + 8 * t);
       if (t >= 2) c.stat('haste', 0.06);

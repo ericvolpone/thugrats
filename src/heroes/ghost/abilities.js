@@ -1,6 +1,6 @@
 import { sfx } from '../../audio.js';
 import { TAU, rand } from '../../util.js';
-import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, line, nova, chill, buff } from '../common.js';
+import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, line, nova, chill, buff, AURA_UPS } from '../common.js';
 
 /**
  * Lucy "The Ghost" — the Spy. Precise, sneaky, crit-hungry. Lots of control
@@ -44,7 +44,7 @@ export const GHOST_ABILITIES = [
     base: { cooldown: 12, area: 4.2, duration: 4, power: 0.35 },
     upgrades: [DUR, AREA, CD, scUp('power', 'Evasion', 0.06, (v) => `+${Math.round(v * 100)}% dodge in smoke`)],
     useless: permanentUptime,
-    ready: (run) => run.mobs.count(run.player.x, run.player.z, 3) >= 2,
+    ready: (run, a) => run.crowd(a, 3, 2),
     fire(run, a) {
       const p = run.player, pw = a.stat('power');
       run.zone({ x: p.x, z: p.z, r: a.stat('area'), life: a.stat('duration'), slow: 0.5, kind: 'smoke', ability: a });
@@ -86,8 +86,12 @@ export const GHOST_ABILITIES = [
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'nearest'),
     fire(run, a, t) {
       const ex = a.stat('execute');
-      const dmg = t.tier === 0 && t.hp / t.maxHp <= ex ? t.hp + 1 : a.stat('damage');
+      const exec = t.tier === 0 && t.hp / t.maxHp <= ex;
+      const dmg = exec ? t.hp + 1 : a.stat('damage');
+      if (exec && run.stats.execHeal) run.heal(run.stats.execHeal);
       run.hit(t, dmg, a, { knock: 0 });
+      const p = run.player, d = Math.hypot(t.x - p.x, t.z - p.z);
+      run.combat.shadow({ x: p.x, z: p.z, angle: angleTo(run, t), len: Math.max(0, d - 0.8), dur: 0.14, color: '#c32020' });
       run.fx.burst(t.x, 1, t.z, '#c32020', 10, 4);
       run.player.aim(t.x, t.z, 0.2);
     },
@@ -97,7 +101,7 @@ export const GHOST_ABILITIES = [
     desc: 'Leaves a cardboard cut-out of herself that thugs beat on, then it explodes.',
     base: { damage: 40, cooldown: 12, duration: 6, area: 3.6 },
     upgrades: [DMG, DUR, CD, AREA],
-    ready: (run) => run.mobs.count(run.player.x, run.player.z, 6) >= 5,
+    ready: (run, a) => run.crowd(a, 6, 5),
     fire(run, a) {
       const p = run.player, x = p.x, z = p.z, r = 7;
       run.zone({ x, z, r, life: a.stat('duration'), pull: 2.5, kind: 'smoke', color: '#3a3f4a', ability: a, onTick: (zn) => {
@@ -112,7 +116,7 @@ export const GHOST_ABILITIES = [
     base: { cooldown: 15, duration: 4, power: 0.3 },
     upgrades: [DUR, CD, scUp('power', 'Lethality', 0.08, (v) => `+${Math.round(v * 100)}% cloak crit`)],
     useless: permanentUptime,
-    ready: (run) => run.mobs.count(run.player.x, run.player.z, 10) >= 3,
+    ready: (run, a) => run.crowd(a, 10, 3),
     fire(run, a) {
       const pw = a.stat('power');
       buff(run, a, { fx: '#bfc8ff', stats: (s) => { s.crit += pw; s.critDmg += pw * 2; s.dodge += 0.15; } });
@@ -146,15 +150,11 @@ export const GHOST_ABILITIES = [
     },
   },
   {
-    id: 'shuriken', name: 'Shuriken Ring', icon: '✴️', tags: ['orbit'],
-    desc: 'Throwing stars circle her at high speed.',
-    base: { damage: 10, cooldown: 8, duration: 5, count: 3, area: 2.8 },
-    upgrades: [addUp('count', 'Stars', [1, 1, 1, 2, 2], null, 8), DMG, DUR, AREA, CD],
-    useless: permanentUptime,
-    ready: (run, a) => !run.orbits.some((o) => o.ability === a) && run.mobs.count(run.player.x, run.player.z, a.stat('area') + 4) > 0,
-    fire(run, a) {
-      run.orbit({ ability: a, count: a.stat('count'), r: a.stat('area'), life: a.stat('duration'), color: '#c9d2dc', spark: '#ffffff', spin: 7, knock: 1 });
-    },
+    id: 'shuriken', name: 'Shuriken Ring', icon: '✴️', tags: ['orbit', 'aura'],
+    desc: 'Throwing stars circle her nonstop at high speed.',
+    base: { damage: 5, count: 3, area: 2.8 },
+    upgrades: AURA_UPS('Stars'),
+    aura: { color: '#c9d2dc', spark: '#ffffff', spin: 7, knock: 1 },
   },
   {
     id: 'laser_watch', name: 'Laser Watch', icon: '⌚', tags: ['beam'],

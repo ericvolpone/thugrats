@@ -1,6 +1,6 @@
 import { sfx } from '../../audio.js';
 import { TAU, rand } from '../../util.js';
-import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, line, nova, chain, chill, buff } from '../common.js';
+import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, line, nova, chain, chill, buff, AURA_UPS } from '../common.js';
 
 /**
  * Professor Pudding — the Mastermind. Weird science: lightning, freeze rays,
@@ -96,15 +96,11 @@ export const PROF_ABILITIES = [
     },
   },
   {
-    id: 'drones', name: 'Drone Swarm', icon: '🛸', tags: ['orbit', 'science'],
-    desc: 'Little drones buzz around him, ramming anything close.',
-    base: { damage: 12, cooldown: 8, duration: 5, count: 3, area: 3.2 },
-    upgrades: [addUp('count', 'Drones', [1, 1, 1, 2, 2], null, 8), DMG, DUR, AREA, CD],
-    useless: permanentUptime,
-    ready: (run, a) => !run.orbits.some((o) => o.ability === a) && run.mobs.count(run.player.x, run.player.z, a.stat('area') + 4) > 0,
-    fire(run, a) {
-      run.orbit({ ability: a, count: a.stat('count'), r: a.stat('area'), life: a.stat('duration'), color: '#9aa4b4', spark: '#9ad8ff', spin: 4.5, knock: 2 });
-    },
+    id: 'drones', name: 'Drone Swarm', icon: '🛸', tags: ['orbit', 'science', 'aura'],
+    desc: 'Little drones buzz around him nonstop, ramming anything close.',
+    base: { damage: 5, count: 2, area: 3.2 },
+    upgrades: AURA_UPS('Drones'),
+    aura: { color: '#9aa4b4', spark: '#9ad8ff', spin: 4.5, knock: 2 },
   },
   {
     id: 'force_field', name: 'Force Field', icon: '🔵', tags: ['defense', 'science'],
@@ -123,9 +119,9 @@ export const PROF_ABILITIES = [
     id: 'big_brain', name: 'Big Brain Time', icon: '🧠', tags: ['buff'],
     desc: 'Thinks really hard. Every other ability cools down much faster for a while.',
     base: { cooldown: 18, duration: 5, power: 0.5 },
-    upgrades: [DUR, scUp('power', 'Brainpower', 0.1, (v) => `+${Math.round(v * 100)}% cooldown speed`), CD],
+    upgrades: [DUR, scUp('power', 'Brainpower', 0.1, (v) => `+${Math.round(v * 100)}% Recharge Rate`), CD],
     useless: permanentUptime,
-    ready: (run) => run.mobs.count(run.player.x, run.player.z, 12) >= 4,
+    ready: (run, a) => run.crowd(a, 12, 4),
     fire(run, a) {
       buff(run, a, { fx: '#ff8fd0', rate: a.stat('power') });
       run.fx.ring(run.player.x, run.player.z, 3, '#ff8fd0', 0.5);

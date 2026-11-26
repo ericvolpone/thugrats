@@ -18,7 +18,9 @@ const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
-const ELITE_TINT = new THREE.Color(1.25, 1.05, 0.55);
+const ELITE_TINT = new THREE.Color(1.3, 0.75, 0.85);
+const RING_ELITE = new THREE.Color('#ff3b6b');
+const RING_BOSS = new THREE.Color('#ff9a1f');
 const WHITE = new THREE.Color(1, 1, 1);
 
 export const TIER_NAMES = ['Thug', 'Elite', 'Boss', 'Titan'];
@@ -41,7 +43,7 @@ export class MobManager {
     this.scene.add(this.blobs);
 
     const ringGeo = new THREE.TorusGeometry(1, 0.08, 4, 18).rotateX(Math.PI / 2);
-    this.rings = new THREE.InstancedMesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#ffd23f' }), 80);
+    this.rings = new THREE.InstancedMesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#ffffff' }), 80);
     this.rings.frustumCulled = false;
     this.scene.add(this.rings);
   }
@@ -418,6 +420,7 @@ export class MobManager {
       if (!m.dead && m.tier >= 1 && rings < 80) {
         const r = m.radius * 1.25 + Math.sin(t * 4) * 0.05;
         _m.makeScale(r, 1, r).setPosition(m.x, 0.08, m.z);
+        this.rings.setColorAt(rings, m.tier === 1 ? RING_ELITE : RING_BOSS);
         this.rings.setMatrixAt(rings++, _m);
       }
     }
@@ -430,6 +433,7 @@ export class MobManager {
     this.blobs.instanceMatrix.needsUpdate = true;
     this.rings.count = rings;
     this.rings.instanceMatrix.needsUpdate = true;
+    if (this.rings.instanceColor) this.rings.instanceColor.needsUpdate = true;
   }
 
   dispose() {

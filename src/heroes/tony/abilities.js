@@ -1,6 +1,6 @@
 import { sfx } from '../../audio.js';
 import { TAU, rand } from '../../util.js';
-import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, cone, line, nova, chill, buff } from '../common.js';
+import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, cone, line, nova, chill, buff, AURA_UPS } from '../common.js';
 
 /**
  * Tiny Tony Two-Fists — the Brute. Up close and personal: big cones, knockback,
@@ -30,7 +30,7 @@ export const TONY_ABILITIES = [
     desc: 'Jumps and belly-flops. Damages, knocks back and stuns everything around.',
     base: { damage: 34, cooldown: 6, area: 4.6, duration: 0.8 },
     upgrades: [DMG, AREA, CD, pctUp('duration', 'Stun', 20)],
-    ready: (run, a) => run.mobs.count(run.player.x, run.player.z, a.stat('area')) >= 3,
+    ready: (run, a) => run.crowd(a, a.stat('area'), 3),
     fire(run, a) {
       const p = run.player;
       nova(run, a, { r: a.stat('area'), dmg: a.stat('damage'), knock: 8, root: a.stat('duration'), color: '#e8c89a' });
@@ -57,7 +57,7 @@ export const TONY_ABILITIES = [
   },
   {
     id: 'bull_rush', name: 'Bull Rush', icon: '🐂', tags: ['melee'],
-    desc: 'Charges headfirst through a crowd, bowling everyone over in a line.',
+    desc: 'A shadow of Tony charges headfirst through a crowd, bowling everyone over in a line.',
     base: { damage: 40, cooldown: 5.5, range: 9, area: 1.3 },
     upgrades: [DMG, CD, pctUp('range', 'Charge Length', 15), AREA],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
@@ -65,12 +65,17 @@ export const TONY_ABILITIES = [
       const p = run.player;
       const ang = angleTo(run, t);
       const len = a.stat('range');
-      line(run, a, { angle: ang, len, width: a.stat('area'), dmg: a.stat('damage'), knock: 9, color: '#ffcf9a', y: 0.4 });
-      // Tony actually travels part of the way
-      const step = Math.min(len * 0.45, Math.hypot(t.x - p.x, t.z - p.z));
-      p.x += Math.sin(ang) * step;
-      p.z += Math.cos(ang) * step;
-      run.world.collide(p, p.radius, p.y);
+      const w = a.stat('area'), dmg = a.stat('damage');
+      // a shadow copy does the charge; everything it runs into gets bowled over once
+      const hit = new Set();
+      run.combat.shadow({ x: p.x, z: p.z, angle: ang, len, dur: 0.3, color: '#ffcf9a', onStep: (x, z) => {
+        for (const m of run.mobs.near(x, z, w + 0.8)) {
+          if (hit.has(m.id)) continue;
+          hit.add(m.id);
+          run.hit(m, dmg, a, { knock: 9, fromX: x - Math.sin(ang), fromZ: z - Math.cos(ang) });
+        }
+      } });
+      run.fx.beam(p.x, p.z, p.x + Math.sin(ang) * len, p.z + Math.cos(ang) * len, '#ffcf9a', w * 1.2, 0.3, 0.4);
       run.fx.burst(p.x, 0.3, p.z, '#b49a78', 14, 5);
       sfx('tantrum', 0.1);
     },
@@ -81,7 +86,7 @@ export const TONY_ABILITIES = [
     base: { cooldown: 18, duration: 6, power: 0.3 },
     upgrades: [DUR, scUp('power', 'Rage', 0.08, (v) => `+${Math.round(v * 100)}% rage damage`), CD],
     useless: permanentUptime,
-    ready: (run) => run.mobs.count(run.player.x, run.player.z, 8) >= 4,
+    ready: (run, a) => run.crowd(a, 8, 4),
     fire(run, a) {
       const pw = a.stat('power');
       buff(run, a, { fx: '#ff7a3a', stats: (s) => { s.dmg += pw; s.armor += 0.15; s.regen += 3 + pw * 10; } });
@@ -90,15 +95,11 @@ export const TONY_ABILITIES = [
     },
   },
   {
-    id: 'lariat', name: 'Spinning Lariat', icon: '🌀', tags: ['melee', 'orbit'],
-    desc: 'Spins with his arms out. Gloves whirl around him, smacking anything close.',
-    base: { damage: 14, cooldown: 7, duration: 4, count: 2, area: 2.2 },
-    upgrades: [DMG, addUp('count', 'Fists', [1, 1, 1, 2, 2], null, 6), DUR, AREA, CD],
-    useless: permanentUptime,
-    ready: (run, a) => !run.orbits.some((o) => o.ability === a) && run.mobs.count(run.player.x, run.player.z, a.stat('area') + 3) > 0,
-    fire(run, a) {
-      run.orbit({ ability: a, count: a.stat('count'), r: a.stat('area'), life: a.stat('duration'), color: '#d8302a', spark: '#ffb0a0', spin: 6, knock: 5 });
-    },
+    id: 'lariat', name: 'Spinning Lariat', icon: '🌀', tags: ['melee', 'orbit', 'aura'],
+    desc: 'Boxing gloves on strings whirl around him nonstop, smacking anything close.',
+    base: { damage: 6, count: 2, area: 2.2 },
+    upgrades: AURA_UPS('Fists'),
+    aura: { color: '#d8302a', spark: '#ffb0a0', spin: 6, knock: 5 },
   },
   {
     id: 'folding_chair', name: 'Folding Chair', icon: '🪑', tags: ['melee'],
@@ -161,7 +162,7 @@ export const TONY_ABILITIES = [
     desc: 'Claps so hard everything nearby gets dizzy (stunned) and takes a hit.',
     base: { damage: 16, cooldown: 8, area: 6, duration: 1.5 },
     upgrades: [AREA, CD, pctUp('duration', 'Stun', 20), DMG],
-    ready: (run, a) => run.mobs.count(run.player.x, run.player.z, a.stat('area')) >= 6,
+    ready: (run, a) => run.crowd(a, a.stat('area'), 6),
     fire(run, a) {
       nova(run, a, { r: a.stat('area'), dmg: a.stat('damage'), knock: 2, root: a.stat('duration'), color: '#fff6a0' });
       sfx('tantrum');

@@ -20,7 +20,7 @@ export const TONY_GEAR = [
   },
   {
     id: 'tony_gloves', slot: 'Feet', name: 'Boxing Booties', icon: '🥾', map: 'casino_row',
-    desc: (t) => `+${4 + 3 * t}% move speed, Bull Rush cools down ${8 + 6 * t}% faster.${t >= 2 ? ' +8 luck.' : ''}`,
+    desc: (t) => `+${4 + 3 * t}% move speed, Bull Rush +${8 + 6 * t}% Recharge Rate.${t >= 2 ? ' +8 luck.' : ''}`,
     apply(c, t) {
       c.stat('speedPct', 0.04 + 0.03 * t);
       c.abil('bull_rush', 'cooldown', 'pct', 8 + 6 * t);

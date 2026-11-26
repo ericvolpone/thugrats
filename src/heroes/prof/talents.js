@@ -2,7 +2,7 @@
 export const PROF_TREES = [
   { id: 'mad', name: 'Mad Science', icon: '⚗️', color: '#b07aff', blurb: 'Lightning, beams and things best left alone.' },
   { id: 'robotics', name: 'Robotics', icon: '🤖', color: '#7ad0ff', blurb: 'Let the machines do the work.' },
-  { id: 'brain', name: 'Big Brain', icon: '🧠', color: '#ff8fd0', blurb: 'Cooldowns, luck and learning.' },
+  { id: 'brain', name: 'Big Brain', icon: '🧠', color: '#ff8fd0', blurb: 'Recharge, luck and learning.' },
 ];
 
 export const PROF_TALENTS = [
@@ -30,7 +30,7 @@ export const PROF_TALENTS = [
   { id: 'p_life', tree: 'robotics', row: 0, col: 2, max: 3, name: 'Long-Life Batteries', icon: '🔋',
     desc: (r) => `Robo-Nanny lasts ${2 * r}s longer.`, apply: (c, r) => c.abil('robo', 'duration', 'add', 2 * r) },
   { id: 'p_hp', tree: 'robotics', row: 1, col: 0, max: 3, name: 'Lab Coat', icon: '🥼',
-    desc: (r) => `+${12 * r} max HP.`, apply: (c, r) => c.stat('maxHp', 12 * r) },
+    desc: (r) => `+${12 * r} max HP. Drone Swarm hits heal you for ${2 * r}% of their damage.`, apply: (c, r) => { c.stat('maxHp', 12 * r); c.stat('auraLeech', 0.02 * r); } },
   { id: 'p_drones', tree: 'robotics', row: 1, col: 2, max: 2, name: 'Spare Parts', icon: '🛸',
     desc: (r) => `Drone Swarm +${r} drone${r > 1 ? 's' : ''}.`, apply: (c, r) => c.abil('drones', 'count', 'add', r) },
   { id: 'p_shield', tree: 'robotics', row: 2, col: 0, max: 3, name: 'Shield Generator', icon: '🔵',
@@ -44,7 +44,7 @@ export const PROF_TALENTS = [
 
   // ── Big Brain ──
   { id: 'p_think', tree: 'brain', row: 0, col: 0, max: 5, name: 'Quick Thinking', icon: '💭',
-    desc: (r) => `All abilities cool down ${2 * r}% faster.`, apply: (c, r) => c.stat('haste', 0.02 * r) },
+    desc: (r) => `+${2 * r}% Recharge Rate on all abilities.`, apply: (c, r) => c.stat('haste', 0.02 * r) },
   { id: 'p_xp', tree: 'brain', row: 0, col: 2, max: 3, name: 'Gifted', icon: '📚',
     desc: (r) => `+${7 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.07 * r) },
   { id: 'p_luck', tree: 'brain', row: 1, col: 0, max: 3, name: 'Probability', icon: '🎲',

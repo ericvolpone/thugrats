@@ -97,6 +97,98 @@ export const LAYOUTS = {
     w.scatter(['crate', 'crate', 'barrel', 'barrel', 'lamp', 'container'], 60, { maxZ: QUAY - 3 });
   },
 
+  // ── Chinatown: a lantern avenue under two gates, a night market, a temple garden, tight shophouse alleys ──
+  chinatown(w, rnd) {
+    const H = w.half;
+    w.road(-8, -H - 30, 8, H + 30, 'z');
+    w.road(-H - 30, 16, H + 30, 26, 'x');
+    w.deco('gate', 0, 44, 0, 18);
+    w.deco('gate', 0, -42, 0, 18);
+    for (let z = -66; z <= 66; z += 14) if (Math.abs(z - 21) > 7) w.deco('lanterns', -10, z, 10, z + 2, 7.5);
+    // night market: stalls along the cross street, lanterns zig-zagging overhead
+    for (let x = -70; x <= 70; x += 7) {
+      if (Math.abs(x) < 13) continue;
+      w.prop('stall', x, 12.5, Math.PI, ['#c8281e', '#f2c037', '#2f7a4a', '#e8e2d0'][Math.floor(rnd() * 4)]);
+      w.prop('stall', x + 3, 29.5, 0, ['#c8281e', '#f2c037', '#2f7a4a', '#e8e2d0'][Math.floor(rnd() * 4)]);
+      if (Math.round(x / 7) % 2 === 0) w.deco('lanterns', x, 14, x + 7, 28, 7);
+    }
+    // west: temple garden with a pagoda, a koi pond, bonsai and mahjong tables
+    w.patch(-74, -40, -16, 6, '#5a6a4a', 0.015);
+    w.deco('pagoda', -52, -24, 14);
+    w.pond(-32, -10, 7);
+    for (let i = 0; i < 10; i++) w.prop('bonsai', -70 + i * 6, -38 + (i % 2) * 2);
+    for (const [x, z] of [[-60, -4], [-50, 2], [-62, -12], [-44, -4]]) w.prop('mahjong', x, z);
+    w.patch(-22, -36, -18, 4, '#8a8078', 0.016); // stone path
+    // east: shophouses packed tight, with narrow alleys between
+    w.rowhouses(30, -58, 18, 12);
+    w.rowhouses(58, -58, 16, 12);
+    w.rowhouses(44, -14, 12, 16);
+    w.rowhouses(66, -14, 8, 16);
+    for (let z = -28; z <= 2; z += 6) if (rnd() < 0.7) w.prop(rnd() < 0.5 ? 'crate' : 'barrel', 55, z);
+    for (let z = -26; z <= 0; z += 7) w.deco('lanterns', 50, z, 60, z + 2, 5.5);
+    // south: shophouses and a mahjong courtyard
+    w.rowhouses(-34, 56, 22, 12);
+    w.rowhouses(34, 56, 22, 12);
+    w.patch(18, 34, 50, 44, '#6a5a52', 0.016);
+    for (const [x, z] of [[24, 38], [32, 40], [40, 38], [46, 41]]) w.prop('mahjong', x, z);
+    w.rowhouses(-44, 40, 18, 8);
+    w.building(24, -2, 8, 10, 7, '#8a2a22', '#ffb070'); // dim sum hall
+    w.deco('lanterns', 20, 4, 28, 4, 7.5);
+    // north
+    w.rowhouses(-34, -62, 20, 12);
+    w.rowhouses(36, -36, 16, 8);
+    w.perimeter(12, { palette: ['#8a2a22', '#6a3a2a', '#3a4a3a', '#5a2a2a'] });
+    w.scatter(['crate', 'barrel', 'trashcan', 'lamp', 'bonsai', 'vespa', 'dumpster'], 70);
+  },
+
+  // ── Coney Island: amusement park up top, the boardwalk, the beach and a pier ──
+  coney_island(w, rnd) {
+    const H = w.half;
+    const SHORE = 64;
+    // sea + pier
+    w.water(-H - 30, SHORE, -5, H + 30);
+    w.water(5, SHORE, H + 30, H + 30);
+    w.pier(-5, SHORE, 5, H + 4);
+    // beach
+    w.patch(-H, 30, H, SHORE, '#d8c08a', 0.015);
+    for (let i = 0; i < 26; i++) {
+      const x = -70 + rnd() * 140, z = 36 + rnd() * 24;
+      w.prop('umbrella', x, z, rnd() * 6, ['#2c6bb8', '#e0281e', '#f2c037', '#2f8a3a', '#ff4fd8'][Math.floor(rnd() * 5)]);
+    }
+    for (const x of [-48, -24, 24, 48]) w.building(x, 46, 4, 4, 4.5, '#f4f1ea'); // lifeguard huts
+    // the boardwalk: planks, booths along the north edge, lamps
+    for (let z = 18; z < 28; z += 1.25) w.patch(-H, z, H, z + 1.15, Math.floor(z / 1.25) % 2 ? '#9a7450' : '#8a6644', 0.02, false);
+    w.mm.push({ x0: -H, z0: 18, x1: H, z1: 28, color: '#9a7450' });
+    for (let x = -72; x <= 72; x += 9) {
+      if (Math.abs(x) < 8) continue;
+      w.prop(rnd() < 0.6 ? 'booth' : 'stall', x, 13.5, Math.PI, ['#e0281e', '#2c6bb8', '#f2c037', '#2f8a3a', '#ff4fd8'][Math.floor(rnd() * 5)]);
+    }
+    for (let x = -76; x <= 76; x += 12) { w.prop('lamp', x, 28.6); w.prop('bench', x + 6, 28.8); }
+    // amusement park
+    w.patch(-H, -50, H, 10, '#5a5a56', 0.012);
+    w.deco('ferris', -42, -12, Math.PI / 2, 11);
+    w.prop('carousel', 30, -2);
+    // bumper cars: a fenced rink full of jumpable cars
+    w.patch(-9, -36, 9, -24, '#3a3a5a', 0.016);
+    w.deco('fence', 0, -36, 0, 18);
+    w.deco('fence', -9, -30, Math.PI / 2, 12);
+    w.deco('fence', 9, -30, Math.PI / 2, 12);
+    for (const [x, z, r] of [[-5, -32, 0.4], [3, -28, 2], [5, -33, 1.2]]) w.prop('car', x, z, r, ['#e0281e', '#2c6bb8', '#f2c037'][Math.floor(rnd() * 3)]);
+    w.building(62, -4, 4, 4, 24, '#e0281e', '#ffe0a0'); // drop tower
+    w.building(-62, 2, 10, 8, 6, '#5a2a6a', '#c08aff'); // haunted house
+    w.deco('coaster', -70, -40, 70, -40, 5);
+    w.deco('coaster', 70, -40, 70, -24, 5.5);
+    w.deco('coaster', -70, -40, -70, -24, 5.5);
+    w.deco('lights', -60, 4, 60, 4, 7);
+    for (const [x, z] of [[-14, -26], [14, -26], [-14, 2], [14, 2]]) w.prop('stall', x, z, 0, ['#e0281e', '#f2c037'][Math.floor(rnd() * 2)]);
+    // north: arcades and a funhouse
+    w.building(-22, -62, 18, 12, 8, '#c84a3a', '#ffe0a0');
+    w.building(22, -62, 18, 12, 9, '#3a7aa8', '#ff8af0');
+    w.casino(0, -68, 12, 8, 10, '#e8c050', '#ff4fd8');
+    w.perimeter(12, { skipSouth: true, palette: ['#e0e0d0', '#c84a3a', '#3a7aa8', '#e8c050'] });
+    w.scatter(['trashcan', 'bench', 'booth', 'lamp', 'planter'], 40, { maxZ: 12 });
+  },
+
   // ── Casino Row: the Strip, giant casinos, a fountain show, a parking lot ──
   casino_row(w, rnd) {
     const H = w.half;

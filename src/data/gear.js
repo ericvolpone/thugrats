@@ -31,7 +31,7 @@ export const SHARED_GEAR = [
   },
   {
     id: 'light_up_sneakers', slot: 'Feet', name: 'Light-Up Sneakers', icon: '👟',
-    desc: (t) => `+${4 + 3 * t}% cooldown speed, +${3 + 2 * t}% move speed.`,
+    desc: (t) => `+${4 + 3 * t}% Recharge Rate, +${3 + 2 * t}% move speed.`,
     apply(c, t) { c.stat('haste', 0.04 + 0.03 * t); c.stat('speedPct', 0.03 + 0.02 * t); },
   },
   {

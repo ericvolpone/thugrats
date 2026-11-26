@@ -14,7 +14,7 @@ import { TAU, rand } from '../../util.js';
  *           whole-number upgrades like extra bullets. `max` caps the total.
  * useless(a, stat) — return true to stop offering a stat that no longer helps.
  */
-import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime } from '../common.js';
+import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, AURA_UPS, permanentUptime } from '../common.js';
 
 /** Fire one bullet from Lenny's gun at angle `ang`. */
 function bullet(run, a, ang, extra = {}) {
@@ -193,7 +193,7 @@ export const LENNY_ABILITIES = [
     upgrades: [DMG, AREA, CD],
     ready: (run, a) => {
       const p = run.player;
-      return run.mobs.count(p.x, p.z, a.stat('area')) >= 3 || run.mobs.count(p.x, p.z, 2.2) > 0;
+      return run.crowd(a, a.stat("area"), 3) || run.mobs.count(p.x, p.z, 2.2) > 0;
     },
     fire(run, a) {
       const p = run.player;
@@ -216,16 +216,11 @@ export const LENNY_ABILITIES = [
     },
   },
   {
-    id: 'make_it_rain', name: 'Make It Rain', icon: '💸', tags: ['orbit'],
-    desc: 'Stacks of cash whirl around you, smacking anyone who gets close.',
-    base: { damage: 11, cooldown: 9, duration: 5, count: 3, area: 3 },
-    upgrades: [addUp('count', 'Cash Stacks', [1, 1, 2, 2, 3], null, 9), DMG, AREA, DUR, CD],
-    useless: permanentUptime,
-    ready: (run, a) => !run.orbits.some((o) => o.ability === a) && run.mobs.count(run.player.x, run.player.z, a.stat('area') + 4) > 0,
-    fire(run, a) {
-      run.orbit({ ability: a, count: a.stat('count'), r: a.stat('area'), life: a.stat('duration') });
-      sfx('gold');
-    },
+    id: 'make_it_rain', name: 'Make It Rain', icon: '💸', tags: ['orbit', 'aura'],
+    desc: 'Stacks of cash whirl around you nonstop, smacking anyone who gets close.',
+    base: { damage: 5, count: 2, area: 2.8 },
+    upgrades: AURA_UPS('Cash Stacks'),
+    aura: { color: '#3da35a', spark: '#7be495', spin: 3.6, knock: 3 },
   },
   {
     id: 'contract', name: 'Hit Contract', icon: '📜', tags: ['gun'],
@@ -237,7 +232,9 @@ export const LENNY_ABILITIES = [
       run.mark(t, 1.0, () => {
         if (t.dead) return;
         const ex = a.stat('execute');
-        const dmg = ex > 0 && t.tier < 3 && t.hp / t.maxHp <= ex ? t.hp + 1 : a.stat('damage');
+        const exec = ex > 0 && t.tier < 3 && t.hp / t.maxHp <= ex;
+        const dmg = exec ? t.hp + 1 : a.stat('damage');
+        if (exec && run.stats.execHeal) run.heal(run.stats.execHeal);
         run.hit(t, dmg, a, { noCrit: false });
         run.fx.tracer(t.x, t.z);
         run.fx.burst(t.x, 1, t.z, '#ff3030', 16, 6);
