@@ -320,6 +320,28 @@ export class World {
     return false;
   }
 
+  /** Can the player walk up to (x, z)? Nothing taller than a step (or water) within `pad`. */
+  freeAt(x, z, pad = 1) {
+    const lim = this.half - 3;
+    if (Math.abs(x) > lim || Math.abs(z) > lim) return false;
+    for (const r of this.rects) if (r.h > 0.3 && x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad) return false;
+    for (const c of this.circles) if (c.h > 0.3 && Math.hypot(x - c.x, z - c.z) < c.r + pad) return false;
+    return true;
+  }
+
+  /** Nearest free spot to (x, z), spiralling outwards (falls back to (x, z)). */
+  freeSpot(x, z, pad = 1) {
+    if (this.freeAt(x, z, pad)) return [x, z];
+    for (let r = 1; r < 30; r += 0.75) {
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + r;
+        const px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
+        if (this.freeAt(px, pz, pad)) return [px, pz];
+      }
+    }
+    return [x, z];
+  }
+
   /** Is (x,z) inside a building/large prop? pad grows the test. */
   solidAt(x, z, pad = 0, y = 0.7) {
     for (const r of this.rects) {

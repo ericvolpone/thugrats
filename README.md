@@ -52,28 +52,42 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
 - **Auras** (Make It Rain, Spinning Lariat, Shuriken Ring, Drone Swarm) are always
   on: no cooldown or duration, only damage, radius and how many things orbit.
 - **Dashes** are done by a shadow copy of your hero; you never lose control.
+- **Cards** show the ability's kind (GUN · PROJECTILE, MELEE · AURA...) in the top
+  left, so you can see what talents and Contraband boost it. A card that would max
+  an upgrade or item gets a glowing **MAXED OUT** border.
+- **Hover** any ability or item (HUD or pause screen) for everything about it: stats,
+  every upgrade with its current total and cap, and what maxes it.
 - **Banish:** 3 per run, shared between abilities and items. Banishing rerolls the
   cards for free.
 - **Caps:** chance-based items stop at 100% (dodge at 60%) and luck at 150. A maxed
   item is retired from offers for free, without using a banish.
 - **Lifesteal** comes from some talents (Frenzy, melee, crits, drones) and the Blood
   Money reputation; it heals at most 6% of max HP per second.
-- **Items (7 slots):** 2 Rings, 1 Crime Title, 2 Reputations, 2 Contraband, from
-  chests (cost gold, rising each time), elites (25% free chest) and boss kills.
-  Picking one you own levels it up. Reputations are always in the pool.
-  **Contraband** changes how one kind of ability plays (Drum Magazine for guns, Det
-  Cord for explosives, Lead Pipe for melee, Spinning Top for auras, Bear Trap Spool,
-  Rolodex, Sugar Cube, Chalk Outline, Nitro Can, Car Battery, Toe Tag, Hollow Tips,
-  Grandpa's Grappa) and is only offered once you own an ability of that kind.
+- **Items (7 slots):** 2 Rings, 1 Crime Title, 2 Reputations from loot, plus 2
+  Contraband. On desktop they're listed down the left side with a short readout
+  (`+72 LCK`, `+25% GUN RECHARGE / +1 GUN PIERCE`).
+  - **Chests** that show up on their own cost gold (the price floats over them and
+    rises each time). Chests dropped by elites (25%) are free and glow green.
+  - Boss kills give a guaranteed loot pick. Picking an item you own levels it up.
+    Reputations are always in the pool.
+- **Contraband & the Black Market:** each map has a shady stall near the start ($ on
+  the minimap). Killing a Crime Titan completes a contract (📜); bring it to the stall
+  and pick one of two random Contraband. Contraband has its own red rarity and stacks
+  linearly: getting one you already own doubles its effect (×3 triples it...). Contraband changes how one kind of ability plays (Drum
+  Magazine for guns, Det Cord for explosives, Lead Pipe for melee, Spinning Top for
+  auras, Bear Trap Spool, Rolodex, Sugar Cube, Chalk Outline, Nitro Can, Car Battery,
+  Toe Tag, Hollow Tips, Grandpa's Grappa) and only shows up for kinds you own.
+- **Magnets** pull every gem and coin on the map to you. Every boss drops one, elites
+  drop one 5% of the time and any thug about 1 in 800. Biscuit fetches magnets first.
 - **Bosses** spawn every 2:30 at a pad shown on the minimap (30 s warning) and
   give a full level plus a guaranteed loot pick.
-- **Titans (3 per map)** are summoned by standing in their altar's beam once their
+- **Crime Titans (3 per map)** are summoned by standing in their altar's beam once their
   conditions are met (reach level X, bribe N gold, kill bosses, kill the other
-  titans). Killing the **final titan** clears the map.
+  titans). Killing the **final Crime Titan** clears the map.
 - At **12:00 the Feds arrive**: everything gets nastier every second.
 - **Rep (account-wide):** every run earns Rep (time survived, bosses, titans, clears,
   difficulty). Spend it in the hideout's **Rep** tab: adopt **Biscuit the Bulldog**,
-  who fetches gems and gold far outside your pickup range (upgrade his leash and
+  who ignores walls and fetches magnets, gems and gold far outside your pickup range (upgrade his leash and
   speed), and buy up to +50% run XP, +50% run gold and +20% move speed.
 - **After the run:** hero XP → hero levels → talent points.
 - **Gear (per hero):** three slots (Head, Chest, Feet), one piece worn in each, three

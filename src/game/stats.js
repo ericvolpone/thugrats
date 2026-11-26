@@ -117,6 +117,27 @@ export class AbilityInst {
     return true;
   }
 
+  /** Would taking this upgrade leave nothing more of it to offer (it hits its max)? */
+  wouldMax(up, gain) {
+    const bag = up.kind === 'pct' ? this.inc : this.add;
+    const d = up.kind === 'pct' ? gain / 100 : gain;
+    const was = bag[up.stat];
+    bag[up.stat] = (was ?? 0) + d;
+    const maxed = ![0, 1, 2, 3, 4].some((t) => this.canOffer(up, t));
+    if (was === undefined) delete bag[up.stat]; else bag[up.stat] = was;
+    return maxed;
+  }
+
+  /** {label, have, max, maxed} for each upgrade of this ability (tooltips). */
+  upgradeInfo() {
+    return this.def.upgrades.map((up) => {
+      const have = up.kind === 'pct' ? (this.inc[up.stat] ?? 0) * 100 : (this.add[up.stat] ?? 0);
+      const max = up.max ?? null;
+      const maxed = ![0, 1, 2, 3, 4].some((t) => this.canOffer(up, t));
+      return { up, have, max, maxed };
+    });
+  }
+
   applyUpgrade(up, tier, gain = this.gainFor(up, tier)) {
     if (up.kind === 'pct') this.inc[up.stat] = (this.inc[up.stat] ?? 0) + gain / 100;
     else this.add[up.stat] = (this.add[up.stat] ?? 0) + gain;

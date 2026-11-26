@@ -99,7 +99,7 @@ export const TONY_ABILITIES = [
     desc: 'Boxing gloves on strings whirl around him nonstop, smacking anything close.',
     base: { damage: 6, count: 2, area: 2.2 },
     upgrades: AURA_UPS('Fists'),
-    aura: { color: '#d8302a', spark: '#ffb0a0', spin: 6, knock: 5 },
+    aura: { model: 'glove', color: '#d8302a', spark: '#ffb0a0', spin: 6, knock: 5 },
   },
   {
     id: 'folding_chair', name: 'Folding Chair', icon: '🪑', tags: ['melee'],

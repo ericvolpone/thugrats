@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { propGeometry, MATS, createHeroModel } from '../assets/models.js';
+import { zoneTexture, ZONE_LOOK } from './zoneTex.js';
 import { rand, TAU, paint, C } from '../util.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sfx } from '../audio.js';
 
 /**
@@ -15,6 +17,66 @@ const _e = new THREE.Euler();
 const _v = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
+
+/**
+ * Aura models (full colour; instance colour stays white). `face`: point along the
+ * orbit instead of tumbling. Every model is built around the origin, ~0.8m across.
+ */
+const AURA_MODELS = {
+  cash() {
+    const g = C('#3d8a4a'), g2 = C('#5fb06a'), band = C('#f2e6c4'), ink = C('#1f4f2a');
+    const parts = [];
+    for (let i = 0; i < 4; i++) parts.push(paint(new THREE.BoxGeometry(0.62, 0.06, 0.3).translate((i % 2) * 0.03 - 0.015, i * 0.065, (i % 3) * 0.02 - 0.02), i % 2 ? g : g2, 0.04));
+    parts.push(paint(new THREE.BoxGeometry(0.14, 0.28, 0.32).translate(0, 0.1, 0), band, 0.02));
+    parts.push(paint(new THREE.BoxGeometry(0.12, 0.01, 0.1).translate(0.2, 0.235, 0), ink, 0));
+    parts.push(paint(new THREE.BoxGeometry(0.12, 0.01, 0.1).translate(-0.2, 0.235, 0), ink, 0));
+    // a loose bill fluttering on top
+    parts.push(paint(new THREE.BoxGeometry(0.6, 0.015, 0.28).rotateY(0.5).rotateZ(0.2).translate(0.05, 0.32, 0), g2, 0.03));
+    return mergeGeometries(parts).translate(0, -0.12, 0);
+  },
+  glove() {
+    const red = C('#d42a22'), dark = C('#8a1812'), white = C('#f4f0e6'), lace = C('#f2f2f2');
+    return mergeGeometries([
+      paint(new THREE.SphereGeometry(0.3, 12, 10).scale(1, 0.95, 1.15).translate(0, 0, 0.12), red, 0.04), // fist
+      paint(new THREE.SphereGeometry(0.13, 10, 8).scale(1, 1, 1.5).translate(0.24, -0.05, 0.08), red, 0.04), // thumb
+      paint(new THREE.BoxGeometry(0.42, 0.05, 0.2).translate(0, 0.27, 0.12), dark, 0.02), // knuckle seam
+      paint(new THREE.CylinderGeometry(0.2, 0.22, 0.32, 12).rotateX(Math.PI / 2).translate(0, -0.02, -0.22), red, 0.04), // cuff
+      paint(new THREE.CylinderGeometry(0.225, 0.225, 0.08, 12).rotateX(Math.PI / 2).translate(0, -0.02, -0.38), white, 0.02), // cuff band
+      paint(new THREE.BoxGeometry(0.04, 0.03, 0.26).translate(0, 0.2, -0.22), lace, 0),
+      paint(new THREE.BoxGeometry(0.16, 0.03, 0.03).translate(0, 0.2, -0.16), lace, 0),
+      paint(new THREE.BoxGeometry(0.16, 0.03, 0.03).translate(0, 0.2, -0.27), lace, 0),
+      // the string back to the hero
+      paint(new THREE.CylinderGeometry(0.02, 0.02, 0.9, 4).rotateX(Math.PI / 2).translate(0, 0, -0.85), C('#c8b088'), 0),
+    ]); // +Z (the fist) points away from the hero
+  },
+  shuriken() {
+    const steel = C('#c9d2dc'), edge = C('#f4f8ff'), dark = C('#3a3f4a');
+    const parts = [paint(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 12), steel, 0.02), paint(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), dark, 0)];
+    for (let i = 0; i < 4; i++) {
+      const blade = new THREE.ConeGeometry(0.11, 0.42, 3).rotateZ(-Math.PI / 2).scale(1, 0.25, 1).translate(0.3, 0, 0);
+      parts.push(paint(blade.rotateY((i / 4) * TAU), (p) => (Math.hypot(p.x, p.z) > 0.36 ? edge : steel), 0.02));
+    }
+    return mergeGeometries(parts);
+  },
+  drone() {
+    const body = C('#3a3f4a'), arm = C('#6a7080'), rotor = C('#c8d0dc'), cam = C('#111'), led = C('#ff3b3b'), led2 = C('#5dff9a');
+    const parts = [
+      paint(new THREE.BoxGeometry(0.28, 0.1, 0.34), body, 0.03),
+      paint(new THREE.BoxGeometry(0.2, 0.05, 0.22).translate(0, 0.07, 0), C('#9aa4b4'), 0.02),
+      paint(new THREE.SphereGeometry(0.07, 8, 6).translate(0, -0.07, 0.14), cam, 0),
+      paint(new THREE.BoxGeometry(0.04, 0.04, 0.04).translate(0.08, 0.02, 0.18), led2, 0),
+      paint(new THREE.BoxGeometry(0.04, 0.04, 0.04).translate(-0.08, 0.02, 0.18), led, 0),
+    ];
+    for (const [x, z] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      parts.push(paint(new THREE.BoxGeometry(0.05, 0.04, 0.36).rotateY(Math.atan2(x, z)).translate(x * 0.13, 0, z * 0.13), arm, 0));
+      parts.push(paint(new THREE.CylinderGeometry(0.035, 0.035, 0.08, 6).translate(x * 0.25, 0.04, z * 0.25), body, 0));
+      parts.push(paint(new THREE.CylinderGeometry(0.15, 0.15, 0.012, 14).translate(x * 0.25, 0.09, z * 0.25), rotor, 0.04));
+      parts.push(paint(new THREE.BoxGeometry(0.3, 0.015, 0.03).rotateY(x * z * 0.6).translate(x * 0.25, 0.1, z * 0.25), C('#2a2a2a'), 0));
+    }
+    return mergeGeometries(parts).scale(1.5, 1.5, 1.5);
+  },
+};
+const AURA_MOTION = { cash: 'tumble', glove: 'radial', shuriken: 'flat', drone: 'face' };
 
 const LOB_COLORS = { grenade: '#4f7d2f', molotov: '#d9a441', cement: '#a9a49a', dynamite: '#c8281e', bottle: '#3a8f4a', pipe: '#8a8f99', pudding: '#e8b86b', gas: '#7fc24a', smoke: '#555a60', c4: '#e8e2cf', firework: '#ff4fa3', slime: '#7dff7a', knife: '#c9d2dc' };
 const ZONE_COLORS = { fire: '#ff6a1a', cement: '#9c978c', gas: '#7fc24a', ice: '#8fd8ff', smoke: '#6b6f78', slime: '#62e05a', void: '#5a2a8a', glass: '#bfe8d0' };
@@ -39,6 +101,8 @@ export class Combat {
     this.lMesh = inst(new THREE.IcosahedronGeometry(0.24, 0), new THREE.MeshLambertMaterial({ flatShading: true }), MAX_L);
     this.orbits = [];
     this.oMesh = inst(paint(new THREE.BoxGeometry(0.7, 0.3, 0.45), C('#ffffff')), MATS.flat, MAX_O);
+    this.auraMeshes = {}; // model -> InstancedMesh (made on first use)
+    this.inst = inst;
     this.zones = [];
     this.traps = [];
     this.cars = [];
@@ -80,9 +144,12 @@ export class Combat {
 
   zone(o) {
     const color = o.color ?? ZONE_COLORS[o.kind] ?? '#888';
-    const mesh = new THREE.Mesh(this.zoneGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false }));
-    mesh.position.set(o.x, 0.07, o.z);
+    const map = zoneTexture(o.kind);
+    const mesh = new THREE.Mesh(this.zoneGeo, new THREE.MeshBasicMaterial({ color: map && o.kind === 'fire' ? '#ffffff' : color, map, transparent: true, opacity: 0.45, depthWrite: false }));
+    mesh.position.set(o.x, 0.07 + (this.zoneY = ((this.zoneY ?? 0) + 0.002) % 0.02), o.z);
+    mesh.rotation.y = rand(0, TAU);
     mesh.scale.setScalar(o.r);
+    mesh.renderOrder = 1;
     this.scene.add(mesh);
     this.zones.push({ ...o, t: 0, tick: 0, mesh });
   }
@@ -278,7 +345,28 @@ export class Combat {
       const zn = this.zones[i];
       zn.t += dt;
       const fade = Math.min(1, (zn.life - zn.t) / 0.4);
-      zn.mesh.material.opacity = 0.4 * fade + (zn.kind === 'fire' ? Math.sin(run.time * 18 + i) * 0.06 : 0);
+      const look = ZONE_LOOK[zn.kind];
+      const base = zn.mesh.material.map ? 0.88 : 0.4;
+      zn.mesh.material.opacity = base * fade + (zn.kind === 'fire' ? Math.sin(run.time * 18 + i) * 0.08 : 0);
+      if (look) {
+        zn.mesh.rotation.y += look.spin * dt;
+        // splat in, then a slow breathing wobble for gooey stuff
+        const grow = look.splat ? Math.min(1, 0.55 + zn.t * 4) : Math.min(1, 0.3 + zn.t * 3);
+        const wob = zn.kind === 'slime' ? 1 + Math.sin(run.time * 4 + i) * 0.025 : 1;
+        zn.mesh.scale.set(zn.r * grow * wob, 1, zn.r * grow / wob);
+        if (look.bubble && Math.random() < dt * 5 * zn.r) {
+          const a = rand(0, TAU), r = Math.sqrt(Math.random()) * zn.r * 0.9;
+          run.fx.burst(zn.x + Math.sin(a) * r, 0.15, zn.z + Math.cos(a) * r, zn.mesh.material.color.getStyle(), 2, 1.2, 0.35, 0.8, 6);
+        }
+        if (look.puff && Math.random() < dt * 3 * zn.r) {
+          const a = rand(0, TAU), r = Math.sqrt(Math.random()) * zn.r * 0.8;
+          run.fx.burst(zn.x + Math.sin(a) * r, 0.4, zn.z + Math.cos(a) * r, zn.mesh.material.color.getStyle(), 1, 0.6, 1.1, 2.2, -1.2);
+        }
+        if (look.inward && Math.random() < dt * 10) {
+          const a = rand(0, TAU);
+          run.fx.burst(zn.x + Math.sin(a) * zn.r, 0.3, zn.z + Math.cos(a) * zn.r, '#c08cff', 1, 0.3, 0.5, 0.8, 0);
+        }
+      }
       if (zn.slow) mobs.each(zn.x, zn.z, zn.r, (m) => { m.zoneSlow = Math.max(m.zoneSlow, m.tier >= 2 ? zn.slow * 0.4 : zn.slow); });
       if (zn.pull) mobs.each(zn.x, zn.z, zn.r, (m) => {
         if (m.tier >= 2) return;
@@ -338,8 +426,9 @@ export class Combat {
       }
     }
 
-    // orbiting cash
+    // orbits / auras (cash, gloves, stars, drones; plain boxes for anything else)
     n = 0;
+    const used = {};
     for (let i = this.orbits.length - 1; i >= 0; i--) {
       const o = this.orbits[i];
       o.t += dt;
@@ -349,6 +438,11 @@ export class Combat {
       const dmg = o.ability.stat('damage');
       const spin = o.spin ?? 3.6;
       o.angle += dt * (spin - 3.6);
+      let mesh = this.oMesh, motion = 'tumble';
+      if (o.model && AURA_MODELS[o.model]) {
+        mesh = this.auraMeshes[o.model] ??= this.inst(AURA_MODELS[o.model](), MATS.flat, MAX_O);
+        motion = AURA_MOTION[o.model];
+      }
       for (let k = 0; k < o.count; k++) {
         const a = o.angle + (k / o.count) * TAU;
         const x = p.x + Math.sin(a) * o.r * grow, z = p.z + Math.cos(a) * o.r * grow;
@@ -359,19 +453,28 @@ export class Combat {
           run.hit(m, dmg, o.ability, { knock: o.knock ?? 3, fromX: p.x, fromZ: p.z });
           o.onHit?.(m);
         });
-        if (n < MAX_O) {
-          _e.set(0, a + run.time * 4, 0.3);
+        const c = used[mesh.uuid] ?? 0;
+        if (c < MAX_O) {
+          const bob = Math.sin(run.time * 5 + k) * 0.15;
+          if (motion === 'face') _e.set(Math.sin(run.time * 3 + k) * 0.15, a + (spin >= 0 ? Math.PI / 2 : -Math.PI / 2), Math.sign(spin) * -0.35, 'YXZ');
+          else if (motion === 'radial') _e.set(0.1, a, Math.sin(run.time * 6 + k) * 0.2);
+          else if (motion === 'flat') _e.set(0.25, run.time * 14 + k, 0);
+          else _e.set(0, a + run.time * 4, 0.3);
           _q.setFromEuler(_e);
-          _m.compose(_v.set(x, 0.8 + Math.sin(run.time * 5 + k) * 0.15, z), _q, _s.set(grow, grow, grow));
-          this.oMesh.setColorAt(n, _c.set(o.color ?? '#3da35a'));
-          this.oMesh.setMatrixAt(n++, _m);
+          _e.order = 'XYZ';
+          _m.compose(_v.set(x, (motion === 'flat' ? 0.9 : 0.8) + bob, z), _q, _s.set(grow, grow, grow));
+          if (mesh === this.oMesh) mesh.setColorAt(c, _c.set(o.color ?? '#3da35a'));
+          mesh.setMatrixAt(c, _m);
+          used[mesh.uuid] = c + 1;
         }
         if (Math.random() < dt * 3) run.fx.burst(x, 0.8, z, o.spark ?? '#7be495', 1, 1.5, 0.6, 0.7, 2);
       }
     }
-    this.oMesh.count = n;
-    this.oMesh.instanceMatrix.needsUpdate = true;
-    if (this.oMesh.instanceColor) this.oMesh.instanceColor.needsUpdate = true;
+    for (const mesh of [this.oMesh, ...Object.values(this.auraMeshes)]) {
+      mesh.count = used[mesh.uuid] ?? 0;
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
 
     // hit-contract marks
     for (let i = this.marks.length - 1; i >= 0; i--) {
@@ -465,6 +568,7 @@ export class Combat {
 
   dispose() {
     for (const k of ['bMesh', 'eMesh', 'lMesh', 'oMesh']) this.scene.remove(this[k]);
+    for (const m of Object.values(this.auraMeshes)) this.scene.remove(m);
     for (const z of this.zones) this.scene.remove(z.mesh);
     for (const t of this.traps) this.scene.remove(t.mesh);
     for (const c of this.cars) this.scene.remove(c.mesh);

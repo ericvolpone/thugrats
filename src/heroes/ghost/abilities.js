@@ -154,7 +154,7 @@ export const GHOST_ABILITIES = [
     desc: 'Throwing stars circle her nonstop at high speed.',
     base: { damage: 5, count: 3, area: 2.8 },
     upgrades: AURA_UPS('Stars'),
-    aura: { color: '#c9d2dc', spark: '#ffffff', spin: 7, knock: 1 },
+    aura: { model: 'shuriken', color: '#c9d2dc', spark: '#ffffff', spin: 7, knock: 1 },
   },
   {
     id: 'laser_watch', name: 'Laser Watch', icon: '⌚', tags: ['beam'],

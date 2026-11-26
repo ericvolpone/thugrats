@@ -100,7 +100,7 @@ export const PROF_ABILITIES = [
     desc: 'Little drones buzz around him nonstop, ramming anything close.',
     base: { damage: 5, count: 2, area: 3.2 },
     upgrades: AURA_UPS('Drones'),
-    aura: { color: '#9aa4b4', spark: '#9ad8ff', spin: 4.5, knock: 2 },
+    aura: { model: 'drone', color: '#9aa4b4', spark: '#9ad8ff', spin: 4.5, knock: 2 },
   },
   {
     id: 'force_field', name: 'Force Field', icon: '🔵', tags: ['defense', 'science'],

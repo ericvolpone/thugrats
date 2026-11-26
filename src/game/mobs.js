@@ -23,7 +23,7 @@ const RING_ELITE = new THREE.Color('#ff3b6b');
 const RING_BOSS = new THREE.Color('#ff9a1f');
 const WHITE = new THREE.Color(1, 1, 1);
 
-export const TIER_NAMES = ['Thug', 'Elite', 'Boss', 'Titan'];
+export const TIER_NAMES = ['Thug', 'Elite', 'Boss', 'Crime Titan'];
 
 let nextId = 1;
 

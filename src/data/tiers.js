@@ -8,10 +8,14 @@ export const TIERS = [
   { id: 'rare', name: 'Rare', color: '#2f8cff', weight: 15 },
   { id: 'epic', name: 'Epic', color: '#b14cff', weight: 6.2 },
   { id: 'legendary', name: 'Legendary', color: '#ff9a1f', weight: 1.8 },
+  // never rolled: Contraband's own rarity (flat, linear stacks from the Black Market)
+  { id: 'contraband', name: 'Contraband', color: '#ff3b3b', weight: 0 },
 ];
+/** Contraband's rarity index. */
+export const CONTRA_TIER = 5;
 
 /** How much bigger each tier's roll is than a common one. */
-export const TIER_MULT = [1, 1.5, 2.2, 3, 4];
+export const TIER_MULT = [1, 1.5, 2.2, 3, 4, 1];
 
 /**
  * Diminishing returns. `u` = how much of this stat you already have, counted in
@@ -48,4 +52,4 @@ export function rollTier(luck = 0, minTier = 0, maxTier = 4) {
   return minTier;
 }
 
-export const tierColor = (i) => TIERS[Math.max(0, Math.min(4, i))].color;
+export const tierColor = (i) => TIERS[Math.max(0, Math.min(TIERS.length - 1, i))].color;

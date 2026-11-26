@@ -1,7 +1,18 @@
 import { TIERS, tierColor } from '../data/tiers.js';
 import { SLOTS, SLOT_NAMES, itemById } from '../data/items.js';
 
-const SLOT_LABEL = { ring: 'RING', title: 'TITLE', rep: 'REP', stash: 'STASH' };
+const SLOT_LABEL = { ring: 'RING', title: 'TITLE', rep: 'REP', stash: 'CONTRA' };
+/** Friendly names for ability stats in tooltips. */
+const STAT_NAME = { damage: 'Damage', cooldown: 'Cooldown', area: 'Area', duration: 'Duration', count: 'Count', pierce: 'Pierce', range: 'Range',
+  power: 'Power', execute: 'Execute', bounce: 'Bounces', speed: 'Speed', jumps: 'Jumps', knock: 'Knockback', slow: 'Slow', crit: 'Crit' };
+const fmtStat = (k, v) => {
+  if (k === 'cooldown' || k === 'duration') return `${v.toFixed(1)}s`;
+  if (k === 'area' || k === 'range') return `${v.toFixed(1)}m`;
+  if (k === 'execute' || k === 'slow' || k === 'crit' || (k === 'power' && v < 2)) return `${Math.round(v * 100)}%`;
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+};
+/** The tags worth showing on cards (what talents and Contraband key off). */
+const kindText = (def) => def.tags.filter((t) => t !== 'orbit').join(' · ').toUpperCase();
 import { upgradeText } from '../game/stats.js';
 import { banishKind } from '../game/upgrades.js';
 import { fmtTime, fmtNum, el } from '../util.js';
@@ -43,6 +54,17 @@ export class Hud {
       if (e.code === 'Escape' || e.code === 'KeyP') this.togglePause();
     });
 
+    // hover tooltips for abilities/items (HUD slots and the pause screen)
+    this.tip = el('div', 'tip hidden', '');
+    document.body.appendChild(this.tip);
+    addEventListener('mouseover', (e) => {
+      const t = e.target.closest?.('[data-tip]');
+      const html = t && this.run ? this.tipHtml(t.dataset.tip) : '';
+      this.tip.classList.toggle('hidden', !html);
+      if (html) { this.tip.innerHTML = html; this.placeTip(e); }
+    });
+    addEventListener('mousemove', (e) => { if (!this.tip.classList.contains('hidden')) this.placeTip(e); });
+
     // the API the Run talks to
     this.api = {
       toast: (m) => this.toast(m),
@@ -58,6 +80,42 @@ export class Hud {
     };
   }
 
+  placeTip(e) {
+    const w = this.tip.offsetWidth, h = this.tip.offsetHeight;
+    let x = e.clientX + 16, y = e.clientY + 16;
+    if (x + w > innerWidth - 8) x = e.clientX - w - 16;
+    if (y + h > innerHeight - 8) y = Math.max(8, innerHeight - h - 8);
+    this.tip.style.transform = `translate(${Math.max(8, x)}px, ${y}px)`;
+  }
+
+  /** 'ab:<index>' · 'it:<item id>' · 'is:<slot>:<index>' -> tooltip HTML ('' = none). */
+  tipHtml(key) {
+    const r = this.run;
+    const [kind, a1, a2] = key.split(':');
+    if (kind === 'ab') {
+      const a = r.abilities[+a1];
+      if (!a) return '';
+      const d = a.def;
+      const stats = Object.keys(d.base).filter((k) => STAT_NAME[k]).map((k) => `<span>${STAT_NAME[k]} <b>${fmtStat(k, a.stat(k))}</b></span>`).join('');
+      const ups = a.upgradeInfo().map(({ up, have, max, maxed }) => {
+        const tot = up.fmt ? up.fmt(have) : up.kind === 'pct' ? `+${Math.round(have)}%` : `+${Math.round(have * 10) / 10}`;
+        const cap = max != null ? ` <i>(max +${max})</i>` : '';
+        return `<div class="up ${maxed ? 'mx' : ''}"><span>${up.label}</span><b>${have ? tot : '—'}${cap}</b>${maxed ? '<em>MAXED</em>' : ''}</div>`;
+      }).join('');
+      return `<div class="th">${d.icon} ${d.name} <small>Lv ${a.level}</small></div><div class="tk">${kindText(d)}${d.aura ? ' · ALWAYS ON' : ''}</div>
+        <div class="td">${d.desc}</div><div class="ts">${stats}</div><div class="tu"><div class="tl">Upgrades</div>${ups}</div>
+        ${r.banished.has(d.id) ? '<div class="tn">Banished: no more upgrades will be offered.</div>' : ''}`;
+    }
+    const it = kind === 'it' ? r.findItem(a1) : kind === 'is' ? r.items[a1]?.[+a2] : null;
+    if (!it) return kind === 'is' ? `<div class="th">Empty ${SLOT_NAMES[a1]} slot</div><div class="td">${a1 === 'stash' ? 'Contraband is sold at the Black Market ($ on the minimap). Kill a Crime Titan to complete a contract, then trade it there.' : 'Open chests and kill elites and bosses for items.'}</div>` : '';
+    const d = it.def;
+    const maxed = r.maxed.has(d.id);
+    return `<div class="th">${d.icon} ${d.name} <small>${d.slot === 'stash' ? `×${it.level}` : `Lv ${it.level}`}</small></div><div class="tk" style="color:${tierColor(it.tier)}">${d.slot === 'stash' ? 'Contraband' : `${TIERS[it.tier].name} ${SLOT_NAMES[d.slot]}`}${d.needsLabel ? ` · FOR ${String(d.needsLabel).toUpperCase()}` : ''}</div>
+      <div class="td">${d.desc(it.power)}</div>${d.slot === 'stash' ? `<div class="tn">Stacks linearly: another copy from the Black Market adds the same again (×${it.level + 1}).</div>` : ''}<div class="ts"><span>Now <b>${d.short(it.power, r, it)}</b></span></div>
+      ${d.cap ? `<div class="tn">${maxed ? '<em>MAXED</em> ' : ''}Caps at ${d.cap}. Once it does, it stops being offered (no banish used).</div>` : ''}
+      ${d.needsLabel ? `<div class="tn">Only affects abilities tagged ${String(d.needsLabel).toUpperCase()}.</div>` : ''}`;
+  }
+
   attach(run) {
     this.run = run;
     this.mmBase = null;
@@ -71,6 +129,7 @@ export class Hud {
 
   detach() {
     this.run = null;
+    this.tip.classList.add('hidden');
     this.root.classList.add('hidden');
     for (const id of ['end', 'choice', 'pause']) this.$(id).classList.add('hidden');
   }
@@ -107,6 +166,7 @@ export class Hud {
     this.abSlots = [];
     for (let i = 0; i < 5; i++) {
       const s = el('div', 'slot empty', '');
+      s.dataset.tip = `ab:${i}`;
       ab.appendChild(s);
       this.abSlots.push(s);
     }
@@ -115,11 +175,13 @@ export class Hud {
     this.itSlots = [];
     for (const [slot, n] of Object.entries(SLOTS)) {
       for (let i = 0; i < n; i++) {
-        const s = el('div', 'slot empty', `<span class="sl">${SLOT_LABEL[slot]}</span>`);
-        s.dataset.slot = slot;
-        s.dataset.i = i;
-        ib.appendChild(s);
-        this.itSlots.push(s);
+        // a row: the icon slot + a thin readout of what it's giving you (desktop)
+        const row = el('div', 'it-row empty', `<div class="slot empty"><span class="sl">${SLOT_LABEL[slot]}</span></div><span class="it-txt"></span>`);
+        row.dataset.slot = slot;
+        row.dataset.i = i;
+        row.dataset.tip = `is:${slot}:${i}`;
+        ib.appendChild(row);
+        this.itSlots.push(row);
       }
     }
     this.slotKey = '';
@@ -138,6 +200,9 @@ export class Hud {
     hp.querySelector('span').textContent = `${Math.ceil(p.hp)} / ${Math.round(s.maxHp)}${p.shield > 0 ? ` (+${Math.ceil(p.shield)})` : ''}`;
     this.$('hud-gold').textContent = `💰 ${Math.floor(r.gold)}`;
     this.$('hud-kills').textContent = `💀 ${fmtNum(r.kills)}`;
+    const ct = this.$('hud-contracts');
+    ct.classList.toggle('hidden', !r.contracts);
+    ct.textContent = `📜 ${r.contracts}`;
     const tm = this.$('hud-time');
     const left = r.cfg.duration - r.time;
     tm.textContent = left > 0 ? fmtTime(left) : `FEDS +${fmtTime(-left)}`;
@@ -153,13 +218,24 @@ export class Hud {
         sl.innerHTML = a ? `${a.def.icon}<div class="cd"></div><span class="lv">${a.level}</span>` : '';
         sl.title = a ? a.def.name : '';
       });
-      const counters = { ring: 0, title: 0, rep: 0 };
-      for (const sl of this.itSlots) {
-        const slot = sl.dataset.slot;
-        const it = r.items[slot][counters[slot]++];
+      for (const row of this.itSlots) {
+        const it = r.items[row.dataset.slot][+row.dataset.i];
+        const sl = row.firstElementChild;
+        row.classList.toggle('empty', !it);
         sl.className = it ? 'slot' : 'slot empty';
         sl.style.borderColor = it ? tierColor(it.tier) : '';
-        sl.innerHTML = it ? `${it.def.icon}<span class="lv">${it.level}</span>` : `<span class="sl">${SLOT_LABEL[slot]}</span>`;
+        sl.innerHTML = it ? `${it.def.icon}<span class="lv">${it.level}</span>` : `<span class="sl">${SLOT_LABEL[row.dataset.slot]}</span>`;
+      }
+    }
+    // item readouts (some change every frame: Street Cred stacks, Bagman gold)
+    this.txtT = (this.txtT ?? 0) - dt;
+    if (this.txtT <= 0) {
+      this.txtT = 0.25;
+      for (const row of this.itSlots) {
+        const it = r.items[row.dataset.slot][+row.dataset.i];
+        const t = it ? it.def.short(it.power, r, it) : '';
+        const tx = row.lastElementChild;
+        if (tx.textContent !== t) { tx.textContent = t; tx.style.color = it ? tierColor(it.tier) : ''; }
       }
     }
     r.abilities.forEach((a, i) => {
@@ -278,6 +354,12 @@ export class Hud {
       ctx.fillStyle = '#fff';
       ctx.fillText(String(Math.ceil(r.bossWarn.at - t)), px, pz + 1);
     }
+    const mk = r.pickups.market;
+    if (mk) {
+      const [mx, mz] = dot(mk.x, mk.z, 8, r.contracts > 0 ? `rgba(93,255,154,${0.7 + Math.sin(t * 5) * 0.3})` : '#3a2a50');
+      ctx.fillStyle = r.contracts > 0 ? '#000' : '#c9b8e0';
+      ctx.fillText('$', mx, mz + 1);
+    }
     if (r.pet) dot(r.pet.x, r.pet.z, 3, '#c9a27a');
     const p = r.player;
     const [px, pz] = P(p.x, p.z);
@@ -307,9 +389,10 @@ export class Hud {
   showChoice(c) {
     const r = this.run;
     this.$('choice-reason').textContent = c.reason ?? '';
-    this.$('choice-title').textContent = c.kind === 'level' ? 'Level Up — pick one' : 'Loot — pick one';
+    this.$('choice-title').textContent = c.kind === 'level' ? 'Level Up — pick one' : c.kind === 'market' ? '🕶️ Black Market — pick one' : 'Loot — pick one';
     const box = this.$('choice-cards');
     box.innerHTML = '';
+    box.style.setProperty('--cols', c.cards.length);
     c.cards.forEach((card, i) => {
       const b = el('button', 'card');
       const tier = card.tier ?? 0;
@@ -317,23 +400,25 @@ export class Hud {
       let html = '';
       if (card.type === 'newAbility') {
         col = '#f2c037';
-        html = `<span class="tag">NEW ABILITY</span><div class="tier">Ability ${r.abilities.length + 1}/5</div><div class="ic">${card.def.icon}</div><div class="nm">${card.def.name}</div><div class="what">${card.def.desc}</div>`;
+        html = `<span class="kind">${kindText(card.def)}</span><span class="tag">NEW ABILITY</span><div class="tier">Ability ${r.abilities.length + 1}/5</div><div class="ic">${card.def.icon}</div><div class="nm">${card.def.name}</div><div class="what">${card.def.desc}</div>`;
       } else if (card.type === 'abilityUp') {
         const a = card.ability, up = card.up;
         const have = up.kind === 'pct' ? (a.inc[up.stat] ?? 0) * 100 : (a.add[up.stat] ?? 0);
         const fmtTot = (v) => (up.fmt ? up.fmt(v) : up.kind === 'pct' ? `+${Math.round(v)}%` : `+${Math.round(v * 10) / 10}`);
-        html = `<div class="tier">${TIERS[tier].name}</div><div class="ic">${a.def.icon}</div><div class="nm">${a.def.name}</div><div class="eff">${upgradeText(up, card.gain)}</div>
+        html = `<span class="kind">${kindText(a.def)}</span><div class="tier">${TIERS[tier].name}</div><div class="ic">${a.def.icon}</div><div class="nm">${a.def.name}</div><div class="eff">${upgradeText(up, card.gain)}</div>
           <div class="lvl">${have > 0 ? `${up.label}: ${fmtTot(have)} → ${fmtTot(have + card.gain)}` : `Lv ${a.level} → ${a.level + 1}`}</div>`;
       } else if (card.type === 'item') {
         const d = card.def;
         const cur = card.owned?.power ?? 0;
         const next = cur + card.gain;
-        html = `<span class="tag">${card.owned ? `LV ${card.owned.level + 1}` : 'NEW'}</span><div class="tier">${TIERS[tier].name} ${SLOT_NAMES[d.slot]}</div><div class="ic">${d.icon}</div><div class="nm">${d.name}</div>
+        const stack = d.slot === 'stash' && card.owned ? `×${card.owned.level + 1}` : null;
+        html = `${d.needsLabel ? `<span class="kind">FOR ${String(d.needsLabel).toUpperCase()}</span>` : ''}<span class="tag">${stack ?? (card.owned ? `LV ${card.owned.level + 1}` : 'NEW')}</span><div class="tier">${d.slot === 'stash' ? 'Contraband' : `${TIERS[tier].name} ${SLOT_NAMES[d.slot]}`}</div><div class="ic">${d.icon}</div><div class="nm">${d.name}</div>
           <div class="eff">${d.desc(next)}</div>${card.owned ? `<div class="lvl">was: ${d.desc(cur)}</div>` : ''}`;
       } else {
         html = `<div class="ic">💰</div><div class="nm">Pocket Money</div><div class="eff">+${card.amount} gold</div>`;
       }
       b.style.setProperty('--tc', col);
+      if (card.maxes) { b.classList.add('maxout'); html = `<span class="maxed">MAXED OUT</span>${html}`; }
       const banishable = c.banishing && banishKind(card);
       if (c.banishing) { b.classList.add(banishable ? 'banish' : 'nobanish'); b.disabled = !banishable; }
       b.innerHTML = `<span class="kb">${i + 1}</span>${html}${banishable ? '<span class="ban">🚫 BANISH</span>' : ''}`;
@@ -349,6 +434,7 @@ export class Hud {
     bb.textContent = c.banishing ? '✖ Cancel banish' : `🚫 Banish (${r.banishes} left)`;
     bb.disabled = !c.banishing && r.banishes <= 0;
     bb.classList.toggle('on', !!c.banishing);
+    if (c.kind === 'market') this.$('choice-reason').textContent = c.reason;
     const names = [...r.banished].map((id) => r.hero.abilities.find((a) => a.id === id)?.name ?? itemById(id)?.name).filter(Boolean);
     this.$('choice-banish-note').textContent = c.banishing ? `Pick the ${kind} to remove from this run's offers (the cards reroll for free).` : names.length ? `Banished: ${names.join(', ')}` : '';
     // brief pick lock so a click/tap/button meant for the fight doesn't take a card
@@ -365,8 +451,8 @@ export class Hud {
 
   buildHtml(r) {
     const s = r.stats;
-    const abil = r.abilities.map((a) => `<div class="line"><span class="ic">${a.def.icon}</span><div><b>${a.def.name}</b> Lv ${a.level}<div class="d">${a.history.map((h) => `<span style="color:${tierColor(h.tier)}">${h.label}</span>`).join(', ') || 'base'}</div></div></div>`).join('');
-    const items = r.allItems().map((it) => `<div class="line"><span class="ic">${it.def.icon}</span><div><b style="color:${tierColor(it.tier)}">${it.def.name}</b> Lv ${it.level}<div class="d">${it.def.desc(it.power)}</div></div></div>`).join('') || '<div class="d">No items yet — open chests and kill bosses.</div>';
+    const abil = r.abilities.map((a, i) => `<div class="line" data-tip="ab:${i}"><span class="ic">${a.def.icon}</span><div><b>${a.def.name}</b> Lv ${a.level}<div class="d">${a.history.map((h) => `<span style="color:${tierColor(h.tier)}">${h.label}</span>`).join(', ') || 'base'}</div></div></div>`).join('');
+    const items = r.allItems().map((it) => `<div class="line" data-tip="it:${it.def.id}"><span class="ic">${it.def.icon}</span><div><b style="color:${tierColor(it.tier)}">${it.def.name}</b> Lv ${it.level}<div class="d">${it.def.desc(it.power)}</div></div></div>`).join('') || '<div class="d">No items yet — open chests and kill bosses.</div>';
     const pct = (v) => `${Math.round(v * 100)}%`;
     return `<div class="build"><div><h3>Abilities</h3>${abil}</div><div><h3>Items</h3>${items}</div></div>
       <h3 style="color:var(--gold);font-size:16px;margin:12px 0 6px">Stats</h3>

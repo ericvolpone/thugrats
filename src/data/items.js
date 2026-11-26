@@ -1,6 +1,9 @@
 /**
- * In-run items (lost when the run ends). 5 slots: 2 Rings, 1 Crime Title,
- * 2 Reputations. `v` is the power a common roll gives; higher tiers roll bigger
+ * Contraband has its own red rarity: no rolls, no diminishing returns. Every
+ * copy adds exactly `v` (two copies = double the effect, three = triple...).
+ *
+ * In-run items (lost when the run ends). 7 slots: 2 Rings, 1 Crime Title,
+ * 2 Reputations, 2 Contraband (only from the Black Market). `v` is the power a common roll gives; higher tiers roll bigger
  * and every roll shrinks the more power the item already has (tiers.scaledGain),
  * so an early purple matters far more than a fifth grey.
  * room(run, it) — optional: how much more power still does something (chance
@@ -87,8 +90,8 @@ export const ITEMS = [
 
   // ── Contraband: changes how one kind of ability plays (offered once you own one) ──
   { id: 'drum_mag', slot: 'stash', name: 'Drum Magazine', icon: '🥁', v: 15, needs: 'gun',
-    desc: (v) => `Gun abilities: +${pct(v)} Recharge Rate and +${1 + Math.floor(v / 30)} pierce`,
-    abil: (v, a, k) => has(a, 'gun') && (k === 'cooldown' ? [v / 100, 0] : k === 'pierce' ? [0, 1 + Math.floor(v / 30)] : null) },
+    desc: (v) => `Gun abilities: +${pct(v)} Recharge Rate and +${Math.round(v / 15)} pierce`,
+    abil: (v, a, k) => has(a, 'gun') && (k === 'cooldown' ? [v / 100, 0] : k === 'pierce' ? [0, Math.round(v / 15)] : null) },
   { id: 'hollow_tips', slot: 'stash', name: 'Hollow Tips', icon: '🔩', v: 15, needs: 'projectile',
     desc: (v) => `Projectile hits have a ${pct(v)} chance to burst, hitting everything nearby for 60% of the damage`,
     stats: (v, s) => { s.projBurst += v / 100; }, room: (run, it) => 100 - (it?.power ?? 0) },
@@ -103,15 +106,15 @@ export const ITEMS = [
     abil: (v, a, k) => has(a, 'melee') && (k === 'damage' ? [v / 100, 0] : k === 'area' ? [v / 200, 0] : null),
     stats: (v, s) => { s.meleeLeech += v / 800; } },
   { id: 'rolodex', slot: 'stash', name: 'Rolodex', icon: '📇', v: 20, needs: 'summon',
-    desc: (v) => `Summons: +${pct(v)} damage and duration, and +1 extra summon`,
-    abil: (v, a, k) => has(a, 'summon') && (k === 'damage' || k === 'duration' ? [v / 100, 0] : k === 'count' ? [0, 1] : null) },
+    desc: (v) => `Summons: +${pct(v)} damage and duration, and +${Math.round(v / 20)} extra summon${v >= 30 ? 's' : ''}`,
+    abil: (v, a, k) => has(a, 'summon') && (k === 'damage' || k === 'duration' ? [v / 100, 0] : k === 'count' ? [0, Math.round(v / 20)] : null) },
   { id: 'spinning_top', slot: 'stash', name: 'Spinning Top', icon: '🪀', v: 15, needs: 'aura',
-    desc: (v) => `Auras: +${pct(v)} damage and radius, and +${1 + Math.floor(v / 25)} orbiting object${v >= 25 ? 's' : ''}`,
-    abil: (v, a, k) => has(a, 'aura') && (k === 'damage' || k === 'area' ? [v / 100, 0] : k === 'count' ? [0, 1 + Math.floor(v / 25)] : null) },
+    desc: (v) => `Auras: +${pct(v)} damage and radius, and +${Math.round(v / 15)} orbiting object${v >= 23 ? 's' : ''}`,
+    abil: (v, a, k) => has(a, 'aura') && (k === 'damage' || k === 'area' ? [v / 100, 0] : k === 'count' ? [0, Math.round(v / 15)] : null) },
   { id: 'bear_trap', slot: 'stash', name: 'Bear Trap Spool', icon: '🪤', v: 20, needs: 'trap',
-    desc: (v) => `Traps: +${pct(v)} damage and area, +${1 + Math.floor(v / 30)} max traps. Triggered traps root for 1s.`,
-    abil: (v, a, k) => has(a, 'trap') && (k === 'damage' || k === 'area' ? [v / 100, 0] : k === 'count' ? [0, 1 + Math.floor(v / 30)] : null),
-    stats: (v, s) => { s.trapRoot = 1; } },
+    desc: (v) => `Traps: +${pct(v)} damage and area, +${Math.round(v / 20)} max traps. Triggered traps root for ${(v / 20).toFixed(0)}s.`,
+    abil: (v, a, k) => has(a, 'trap') && (k === 'damage' || k === 'area' ? [v / 100, 0] : k === 'count' ? [0, Math.round(v / 20)] : null),
+    stats: (v, s) => { s.trapRoot = Math.max(s.trapRoot ?? 0, v / 20); } },
   { id: 'sugar_cube', slot: 'stash', name: 'Sugar Cube', icon: '🧊', v: 15, needs: 'buff',
     desc: (v) => `Self-buffs last ${pct(v)} longer. While one is up: +${pct(v)} move speed and damage.`,
     abil: (v, a, k) => has(a, 'buff') && k === 'duration' && [v / 100, 0],
@@ -121,17 +124,67 @@ export const ITEMS = [
     stats: (v, s) => { s.ctrlDmg += v / 100; },
     abil: (v, a, k) => has(a, 'control') && k === 'duration' && [v / 200, 0] },
   { id: 'nitro', slot: 'stash', name: 'Nitro Can', icon: '🛢️', v: 20, needs: 'vehicle',
-    desc: (v) => `Vehicles: +${pct(v)} damage and they explode at the end of their run (${pct(60 + v)} of their damage)`,
+    desc: (v) => `Vehicles: +${pct(v)} damage and they explode at the end of their run (${pct(v * 3)} of their damage)`,
     abil: (v, a, k) => has(a, 'vehicle') && k === 'damage' && [v / 100, 0],
-    stats: (v, s) => { s.nitro = Math.max(s.nitro, 0.6 + v / 100); } },
+    stats: (v, s) => { s.nitro = Math.max(s.nitro, (v * 3) / 100); } },
   { id: 'tesla_battery', slot: 'stash', name: 'Car Battery', icon: '🔋', v: 15, needs: 'science',
-    desc: (v) => `Science gadgets: +${pct(v)} damage and Recharge Rate. Chains and robots jump +1 extra target.`,
+    desc: (v) => `Science gadgets: +${pct(v)} damage and Recharge Rate. Chains and robots jump +${Math.round(v / 15)} extra target${v >= 23 ? 's' : ''}.`,
     abil: (v, a, k) => has(a, 'science') && (k === 'damage' || k === 'cooldown' ? [v / 100, 0] : null),
-    stats: (v, s) => { s.extraJumps = 1; } },
+    stats: (v, s) => { s.extraJumps = Math.round(v / 15); } },
   { id: 'toe_tag', slot: 'stash', name: 'Toe Tag', icon: '🏷️', v: 4, needs: (a) => a.def.base.execute != null,
-    desc: (v) => `Executes reach +${pct(v)} more HP, and every execute heals 4 HP`,
+    desc: (v) => `Executes reach +${pct(v)} more HP, and every execute heals ${Math.round(v)} HP`,
     abil: (v, a, k) => k === 'execute' && (a.def.base.execute != null) && [0, v / 100],
-    stats: (v, s) => { s.execHeal = 4; }, room: (run, it) => 30 - (it?.power ?? 0) },
+    stats: (v, s) => { s.execHeal = v; }, room: (run, it) => 30 - (it?.power ?? 0) },
 ];
+
+/** Compact HUD readouts: short(v, run, it) -> 'abbreviated value / value'. */
+const n = (v) => Math.round(v);
+const SHORT = {
+  brass_ring: (v) => `+${n(v)}% DMG`,
+  pinky_ring: (v) => `+${n(v)}% CRIT`,
+  dice_ring: (v) => `+${n(v)} LCK`,
+  gold_ring: (v) => `+${n(v)}% GOLD / +${n(v / 2)}% PICKUP`,
+  mood_ring: (v) => `+${n(v)}% AREA`,
+  teething_ring: (v) => `+${n(v)} HP / +${(v / 40).toFixed(1)} HP/S`,
+  diamond_ring: (v) => `+${n(v)}% RECHARGE`,
+  kingpin: (v) => `+${n(v)}% DMG VS BIG`,
+  hitman: (v) => `+${n(v)}% CRIT DMG / +${n(v / 5)}% CRIT`,
+  bagman: (v, run) => `+${n(Math.min(60, ((run?.gold ?? 0) / 25) * v))}% DMG / +${n(v * 10)}% GOLD`,
+  getaway: (v) => `+${n(v)}% SPD / +${n(v * 1.5)}% DMG MOVING`,
+  arsonist: (v) => `${n(v)}% IGNITE`,
+  street_cred: (v, run, it) => `+${n((it?.stacks ?? 0) * v)}% DMG (${Math.floor(it?.stacks ?? 0)}/30)`,
+  feared: (v) => `${(2.5 + v).toFixed(1)}M FEAR`,
+  snitch: (v) => `+${n(v)}% XP / +${n(v)}% CHESTS`,
+  untouchable: (v) => `${n(v)}% DODGE`,
+  loan_shark: (v) => `${n(v)}% HEAL ON KILL`,
+  made_man: (v) => `-${v.toFixed(2)}S CD / KILL`,
+  omerta: (v) => `${n(v)} SHIELD / 12S`,
+  blood_money: (v) => `${(+v.toFixed(1))}% LIFESTEAL`,
+  drum_mag: (v) => `+${n(v)}% GUN RECHARGE / +${Math.round(v / 15)} GUN PIERCE`,
+  hollow_tips: (v) => `${n(v)}% PROJ BURST`,
+  det_cord: (v) => `+${n(v)}% BLAST / ${n(v * 1.5)}% BURN`,
+  grappa: (v) => `+${n(v)}% BURN / +${n(v / 2)}% VS BURNING`,
+  lead_pipe: (v) => `+${n(v)}% MELEE DMG / +${n(v / 2)}% AREA`,
+  rolodex: (v) => `+${n(v)}% SUMMON DMG / +${Math.round(v / 20)} SUMMON`,
+  spinning_top: (v) => `+${n(v)}% AURA DMG / +${Math.round(v / 15)} ORBIT`,
+  bear_trap: (v) => `+${n(v)}% TRAP DMG / +${Math.round(v / 20)} TRAPS`,
+  sugar_cube: (v) => `+${n(v)}% BUFF DUR`,
+  chalk: (v) => `+${n(v)}% VS CC`,
+  nitro: (v) => `+${n(v)}% CAR DMG / ${n(v * 3)}% BLAST`,
+  tesla_battery: (v) => `+${n(v)}% SCIENCE DMG / +${Math.round(v / 15)} JUMP`,
+  toe_tag: (v) => `+${n(v)}% EXECUTE`,
+};
+/** What "maxed" means for items with a room() cap (shown in tooltips). */
+const CAP = {
+  pinky_ring: '100% crit chance', dice_ring: `${MAX_LUCK} luck`, arsonist: '100% ignite chance', untouchable: '60% dodge',
+  loan_shark: '100% chance', blood_money: '20% lifesteal', hollow_tips: '100% burst chance', toe_tag: '+30% execute',
+};
+/** Which ability tags a Contraband item works with (for tooltips/cards). */
+const NEEDS_LABEL = { toe_tag: 'execute' };
+for (const it of ITEMS) {
+  it.short = SHORT[it.id] ?? ((v) => it.desc(v));
+  it.cap = CAP[it.id];
+  if (it.needs) it.needsLabel = NEEDS_LABEL[it.id] ?? it.needs;
+}
 
 export const itemById = (id) => ITEMS.find((i) => i.id === id);

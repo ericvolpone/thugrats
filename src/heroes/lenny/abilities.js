@@ -220,7 +220,7 @@ export const LENNY_ABILITIES = [
     desc: 'Stacks of cash whirl around you nonstop, smacking anyone who gets close.',
     base: { damage: 5, count: 2, area: 2.8 },
     upgrades: AURA_UPS('Cash Stacks'),
-    aura: { color: '#3da35a', spark: '#7be495', spin: 3.6, knock: 3 },
+    aura: { model: 'cash', color: '#3da35a', spark: '#7be495', spin: 3.6, knock: 3 },
   },
   {
     id: 'contract', name: 'Hit Contract', icon: '📜', tags: ['gun'],

@@ -62,6 +62,7 @@ export class Run {
     this.bossKills = 0;
     this.titanKills = 0;
     this.chestsOpened = 0;
+    this.contracts = 0; // completed Crime Titan contracts, spent at the Black Market
     this.levelBonus = { hp: 0, dmg: 0, luck: 0 };
     this.banished = new Set(); // ability / item ids never offered again this run
     this.banishes = 3; // shared between abilities and items
@@ -273,13 +274,18 @@ export class Run {
       if (m.tier === 1) for (let i = 0; i < 5; i++) this.pickups.coin(m.x + rand(-1, 1), m.z + rand(-1, 1), 2);
       else if (Math.random() < gc) this.pickups.coin(m.x, m.z, 1);
       if (Math.random() < (m.tier === 1 ? 0.08 : 0.004)) this.pickups.special('heal', m.x, m.z);
-      if (Math.random() < 0.0012) this.pickups.special('magnet', m.x, m.z);
-      if (m.tier === 1 && Math.random() < 0.25) this.pickups.chest(m.x, m.z, true);
+      if (Math.random() < (m.tier === 1 ? 0.05 : 0.0012)) this.pickups.special('magnet', m.x, m.z);
+      if (m.tier === 1 && Math.random() < 0.25) {
+        const [x, z] = this.world.freeSpot(m.x, m.z, 1.4);
+        this.pickups.chest(x, z, true);
+        if (!this.seenFreeChest) { this.seenFreeChest = true; this.toast('🎁 Chests dropped by elites are FREE. Chests that show up on their own cost gold.'); }
+      }
     }
     if (m.tier === 2) {
       this.bossKills++;
       this.ui.banner(`${def.name} is down!`, 'Free level + loot');
       for (let i = 0; i < 12; i++) this.pickups.coin(m.x + rand(-2, 2), m.z + rand(-2, 2), 3);
+      this.pickups.special('magnet', m.x + 1, m.z);
       this.addXp(this.xpNext - this.xp + 0.01, true);
       this.queue.push({ kind: 'item', minTier: 1, reason: `${def.name} dropped loot` });
       sfx('victory', 0.5);
@@ -298,8 +304,11 @@ export class Run {
         sfx('victory');
         this.later(2.2, () => this.end(true));
       } else {
-        this.ui.banner(`${def.name} has fallen!`, 'Titan loot');
-        this.queue.push({ kind: 'item', minTier: 2, reason: `${def.name}'s stash` });
+        this.ui.banner(`${def.name} has fallen!`, 'Contract complete — cash it in at the Black Market');
+        this.contracts++;
+        this.pickups.market.open = true;
+        this.toast('📜 Contract complete! Take it to the Black Market ($ on the minimap) for Contraband.');
+        for (let i = 0; i < 8; i++) this.pickups.coin(m.x + rand(-3, 3), m.z + rand(-3, 3), 5);
         sfx('victory');
       }
     }
@@ -389,10 +398,25 @@ export class Run {
     return true;
   }
 
-  // ── choices (level-up / loot) ──────────────────────────────
+  // ── choices (level-up / loot / black market) ───────────────
+  offersFor(q) {
+    if (q.kind === 'level') return levelOffers(this);
+    if (q.kind === 'market') return itemOffers(this, 2, 0, 'stash');
+    return itemOffers(this, 3, q.minTier ?? 0);
+  }
+
+  /** Spend a contract at the Black Market for one Contraband pick. */
+  tryMarket() {
+    if (this.contracts <= 0) return false;
+    this.contracts--;
+    sfx('chest');
+    this.queue.push({ kind: 'market', reason: 'Black Market: one piece of Contraband for your contract. One you already own doubles up.' });
+    return true;
+  }
+
   openNextChoice() {
     const q = this.queue.shift();
-    const cards = q.kind === 'level' ? levelOffers(this) : itemOffers(this, 3, q.minTier ?? 0);
+    const cards = this.offersFor(q);
     this.choice = { ...q, cards, lockUntil: performance.now() + PICK_LOCK_MS };
     this.paused = true;
     this.ui.showChoice(this.choice);
@@ -402,7 +426,7 @@ export class Run {
     if (!this.choice || (!free && this.rerolls <= 0) || this.choiceLocked()) return;
     if (!free) this.rerolls--;
     const q = this.choice;
-    q.cards = q.kind === 'level' ? levelOffers(this) : itemOffers(this, 3, q.minTier ?? 0);
+    q.cards = this.offersFor(q);
     q.banishing = false;
     this.ui.showChoice(q);
   }
@@ -458,7 +482,7 @@ export class Run {
     if (c.level) parts.push({ ok: this.level >= c.level, text: `Reach level ${c.level}` });
     if (c.gold) parts.push({ ok: this.gold >= c.gold, text: `Bribe ${c.gold} gold` });
     if (c.bosses) parts.push({ ok: this.bossKills >= c.bosses, text: `Kill ${c.bosses} boss${c.bosses > 1 ? 'es' : ''}` });
-    if (c.titans) parts.push({ ok: this.titanKills >= c.titans, text: `Defeat ${c.titans} titans` });
+    if (c.titans) parts.push({ ok: this.titanKills >= c.titans, text: `Defeat ${c.titans} Crime Titans` });
     return parts;
   }
 
@@ -498,7 +522,7 @@ export class Run {
     this.world.altars[t.i].beam.material.opacity = 0.35;
     const a = Math.atan2(this.player.x - t.pos[0], this.player.z - t.pos[1]);
     t.mob = this.mobs.spawnBoss(t.boss, t.pos[0] - Math.sin(a) * 1, t.pos[1] - Math.cos(a) * 1, t);
-    this.ui.banner(`${t.def.name}`, `TITAN — ${t.def.title}`, true);
+    this.ui.banner(`${t.def.name}`, `CRIME TITAN — ${t.def.title}`, true);
     this.shake(0.5);
     sfx('titan');
   }
@@ -570,7 +594,7 @@ export class Run {
           const a = rand(0, TAU), r = rand(22, 55);
           const x = clamp(p.x + Math.sin(a) * r, -this.world.half + 5, this.world.half - 5);
           const z = clamp(p.z + Math.cos(a) * r, -this.world.half + 5, this.world.half - 5);
-          if (this.world.solidAt(x, z, 2)) continue;
+          if (!this.world.freeAt(x, z, 2)) continue;
           this.pickups.chest(x, z);
           this.toast('📦 A chest dropped somewhere nearby');
           break;

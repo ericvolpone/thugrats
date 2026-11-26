@@ -200,7 +200,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* ── choice cards ─────────────────────── */
 #choice-reason { text-align: center; color: var(--blue); font: 18px 'Lilita One'; margin: 0; }
-#choice-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 10px; }
+#choice-cards { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); max-width: calc(var(--cols, 3) * 280px); margin-left: auto; margin-right: auto; gap: 12px; margin-top: 10px; }
 .card { background: var(--panel2); border: 2px solid var(--tc, #555); border-radius: 16px; padding: 14px 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: transform 0.1s; position: relative; min-height: 200px; }
 .card:hover { transform: translateY(-4px); }
 .card .tier { font: 12px 'Lilita One'; color: var(--tc); text-transform: uppercase; letter-spacing: 0.1em; }
@@ -306,3 +306,45 @@ body.padnav .pad-hint { display: block; }
 #choice.picklock #choice-cards { position: relative; }
 #choice.picklock #choice-cards::after { content: ''; position: absolute; left: 0; bottom: -6px; height: 3px; width: 100%; background: var(--gold); transform-origin: left; animation: picklock var(--lock, 1000ms) linear forwards; border-radius: 2px; }
 @keyframes picklock { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ── item rows: icon + thin readout (desktop shows the list down the left side) ── */
+.it-row { display: flex; align-items: center; gap: 6px; }
+.it-row .it-txt { display: none; }
+@media (min-width: 1101px) and (min-height: 701px) {
+  #item-bar { position: fixed; left: calc(12px + var(--sal)); bottom: calc(14px + var(--sab)); flex-direction: column; align-items: flex-start; gap: 4px; }
+  #item-bar .slot { width: 40px; height: 40px; font-size: 21px; border-radius: 10px; }
+  #item-bar .slot .sl { top: 13px; font-size: 8px; }
+  .it-row .it-txt { display: block; font: 600 12px/1.2 system-ui, sans-serif; letter-spacing: 0.04em; text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8); max-width: 300px; opacity: 0.92; }
+  .it-row.empty { opacity: 0.6; }
+}
+@media (hover: hover) and (pointer: fine) {
+  #ability-bar .slot, .it-row { pointer-events: auto; cursor: help; }
+}
+
+/* ── hover tooltip ── */
+.tip { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; width: 300px; background: rgba(18,14,24,0.96); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; padding: 10px 12px; font-size: 13px; box-shadow: 0 8px 28px rgba(0,0,0,0.6); }
+.tip .th { font: 17px 'Lilita One'; }
+.tip .th small { font: 600 12px system-ui, sans-serif; color: var(--muted); margin-left: 4px; }
+.tip .tk { font-size: 10px; letter-spacing: 0.1em; color: #fff; opacity: 0.8; margin: 2px 0 6px; font-weight: 700; }
+.tip .td { color: #ddd; margin-bottom: 6px; }
+.tip .ts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); margin-bottom: 6px; }
+.tip .ts b { color: #fff; }
+.tip .tl { font: 12px 'Lilita One'; color: var(--gold); letter-spacing: 0.08em; margin-bottom: 2px; }
+.tip .up { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
+.tip .up span { flex: 1; color: #ccc; }
+.tip .up i { color: var(--muted); font-style: normal; font-size: 11px; }
+.tip .up.mx span, .tip .up.mx b { color: var(--muted); }
+.tip em { font-style: normal; font-size: 10px; font-weight: 800; color: #111; background: linear-gradient(90deg, #fff6a8, #ff9a1f, #ff4fd8); border-radius: 4px; padding: 0 4px; }
+.tip .tn { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.build .line { cursor: help; }
+
+/* ── card type keyword + Maxed Out ── */
+.card .kind { position: absolute; top: 9px; left: 26px; right: 74px; text-align: left; font: 700 9px/1.2 system-ui, sans-serif; letter-spacing: 0.08em; color: #fff; opacity: 0.85; }
+@media (max-width: 640px) { .card .kind { left: 10px; top: 4px; } }
+.card.maxout { border-color: transparent; background: linear-gradient(var(--panel2), var(--panel2)) padding-box, conic-gradient(from var(--ma, 0deg), #fff6a8, #ff9a1f, #ff4fd8, #7a5cff, #58c4ff, #fff6a8) border-box; border-width: 3px; box-shadow: 0 0 22px rgba(255, 160, 60, 0.55), 0 0 44px rgba(255, 79, 216, 0.3); animation: maxspin 2.4s linear infinite; }
+.card .maxed { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 13px 'Lilita One'; letter-spacing: 0.12em; color: #1a1020; padding: 2px 10px; border-radius: 8px; background: linear-gradient(90deg, #fff6a8, #ff9a1f, #ff4fd8); box-shadow: 0 0 12px rgba(255,160,60,0.8); z-index: 1; }
+@property --ma { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes maxspin { to { --ma: 360deg; } }
+#choice-cards { padding-top: 8px; }
+.card:has(.kind) { padding-top: 26px; }
+@media (max-width: 640px) { .card:has(.kind) { padding-top: 18px; } }

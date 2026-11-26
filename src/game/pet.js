@@ -4,8 +4,8 @@ import { petRange, petSpeed } from '../data/account.js';
 import { Save } from '../save.js';
 
 /**
- * Biscuit the bulldog (account Rep unlock). Runs to the nearest XP gem, coin or
- * goodie within its leash range of the player and "fetches" it — the pickup then
+ * Biscuit the bulldog (account Rep unlock). Ignores walls. Runs to any magnet in
+ * range first, otherwise the nearest XP gem, coin or goodie within its leash range of the player and "fetches" it — the pickup then
  * flies to the player like anything inside the normal pickup range.
  */
 export class Pet {
@@ -42,7 +42,8 @@ export class Pet {
     };
     for (const g of run.pickups.gems) consider(g, g.v >= 5 ? 20 : 0);
     for (const c of run.pickups.coins) consider(c, 10);
-    for (const s of run.pickups.specials) consider(s, 60);
+    // magnets first (they bring everything else), then goodies
+    for (const s of run.pickups.specials) consider(s, s.kind === 'magnet' ? 1e6 : 60);
     this.target = best;
   }
 
@@ -82,7 +83,7 @@ export class Pet {
       this.x = p.x + 1;
       this.z = p.z + 1;
     }
-    run.world.collide(this);
+    // no collision: Biscuit squeezes under fences and through stalls to fetch
     this.phase += dt * (moving ? 18 : 3);
     this.mesh.position.set(this.x, Math.abs(Math.sin(this.phase)) * (moving ? 0.12 : 0.02), this.z);
     this.mesh.rotation.set(moving ? 0.1 : 0, this.facing, Math.sin(this.phase) * (moving ? 0.12 : 0.03));

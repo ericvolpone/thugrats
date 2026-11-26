@@ -169,7 +169,7 @@ export class HomeScreen {
   }
 
   renderPlay(body, h) {
-    body.appendChild(el('div', 'note', 'Clear a map by killing its final titan. Each clear upgrades that map\'s gear for this hero; harder difficulties raise the cap.'));
+    body.appendChild(el('div', 'note', 'Clear a map by killing its final Crime Titan. Each clear upgrades that map\'s gear for this hero; harder difficulties raise the cap.'));
     for (const m of MAPS) {
       const locked = m.requires && Save.bestClear(m.requires) < 0;
       const best = Save.bestClear(m.id);
@@ -302,7 +302,7 @@ export class HomeScreen {
   }
 
   renderRep(body) {
-    body.appendChild(el('div', 'note', `<b style="color:var(--gold);font-size:15px">🤝 ${Save.rep} Rep</b> · Rep is shared by your whole crew. Every run earns some (more for time survived, bosses, titans, clears and harder difficulties).`));
+    body.appendChild(el('div', 'note', `<b style="color:var(--gold);font-size:15px">🤝 ${Save.rep} Rep</b> · Rep is shared by your whole crew. Every run earns some (more for time survived, bosses, Crime Titans, clears and harder difficulties).`));
     let group = null;
     for (const u of ACCOUNT_UPGRADES) {
       if (u.group !== group) {
