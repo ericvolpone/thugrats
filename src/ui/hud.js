@@ -14,6 +14,7 @@ const fmtStat = (k, v) => {
 /** The tags worth showing on cards (what talents and Contraband key off). */
 const kindText = (def) => def.tags.filter((t) => t !== 'orbit').join(' · ').toUpperCase();
 import { upgradeText } from '../game/stats.js';
+import { CHEST_LIFE } from '../game/pickups.js';
 import { banishKind } from '../game/upgrades.js';
 import { fmtTime, fmtNum, el } from '../util.js';
 import { heroXpToNext } from '../save.js';
@@ -66,6 +67,13 @@ export class Hud {
       const h = e.target.closest?.('[data-tip],[data-hl]');
       this.highlight(h && this.run ? this.affected(h.dataset.hl ?? h.dataset.tip) : [], !!h?.dataset.hl);
     });
+    // controller / keyboard focus highlights the same way hovering does
+    const onFocus = (e) => {
+      const h = e.target.closest?.('[data-tip],[data-hl]');
+      if (h && this.run) this.highlight(this.affected(h.dataset.hl ?? h.dataset.tip), !!h.dataset.hl);
+    };
+    addEventListener('focusin', onFocus);
+    addEventListener('padfocus', onFocus);
     addEventListener('mousemove', (e) => { if (!this.tip.classList.contains('hidden')) this.placeTip(e); });
 
     // the API the Run talks to
@@ -239,6 +247,10 @@ export class Hud {
     hp.querySelector('b').style.width = `${Math.min(100, (p.shield / s.maxHp) * 100)}%`;
     hp.querySelector('span').textContent = `${Math.ceil(p.hp)} / ${Math.round(s.maxHp)}${p.shield > 0 ? ` (+${Math.ceil(p.shield)})` : ''}`;
     this.$('hud-gold').textContent = `💰 ${Math.floor(r.gold)}`;
+    const cc = this.$('hud-chest'), cost = r.chestCost();
+    cc.textContent = `📦 ${cost}`;
+    cc.classList.toggle('ok', r.gold >= cost);
+    cc.classList.toggle('no', r.gold < cost);
     this.$('hud-kills').textContent = `💀 ${fmtNum(r.kills)}`;
     const ct = this.$('hud-contracts');
     ct.classList.toggle('hidden', !r.contracts);
@@ -410,6 +422,7 @@ export class Hud {
       dot(m.x, m.z, 6, m.tier === 2 ? '#ff3030' : '#ff4fd8');
     }
     for (const c of r.pickups.chests) {
+      if (c.t > CHEST_LIFE - 10 && Math.sin(c.t * 14) > 0) continue;
       const [px, pz] = P(c.x, c.z);
       ctx.fillStyle = '#8a5a2a';
       ctx.fillRect(px - 5, pz - 4, 10, 8);

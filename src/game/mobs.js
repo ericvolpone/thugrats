@@ -213,6 +213,7 @@ export class MobManager {
     const run = this.run;
     const p = run.player;
     const fearR = run.stats.fearRadius;
+    const decoys = run.combat.decoys;
     this.rebuildGrid();
 
     for (const m of this.list) {
@@ -233,11 +234,21 @@ export class MobManager {
       }
       m.rootT -= dt;
       m.slowT -= dt;
-      const dx = p.x - m.x, dz = p.z - m.z;
-      const dist = Math.hypot(dx, dz) || 0.001;
-      m.fear = fearR > 0 && dist < fearR + m.radius;
+      const pdist = Math.hypot(p.x - m.x, p.z - m.z) || 0.001;
+      m.fear = fearR > 0 && pdist < fearR + m.radius;
+      if (m.brain) m.brain.update(dt, pdist);
 
-      if (m.brain) m.brain.update(dt, dist);
+      // chase the player, or a cardboard decoy that's closer (bosses aren't fooled)
+      let tgt = p;
+      if (m.tier < 2 && decoys.length) {
+        let best = Infinity;
+        for (const d of decoys) {
+          const dd = Math.hypot(d.x - m.x, d.z - m.z);
+          if (dd < d.lure && dd < best) { best = dd; tgt = d; }
+        }
+      }
+      const dx = tgt.x - m.x, dz = tgt.z - m.z;
+      const dist = tgt === p ? pdist : Math.hypot(dx, dz) || 0.001;
 
       // movement
       let sp = m.speed;
@@ -245,7 +256,7 @@ export class MobManager {
       if (m.zoneSlow) sp *= 1 - m.zoneSlow;
       if (m.fear) sp *= 0.7;
       if (m.rootT > 0 || m.wind > 0 || m.brain?.busy) sp = 0;
-      const touch = m.radius + p.radius;
+      const touch = m.radius + tgt.radius;
       let want = 1;
       const r = m.def.ranged;
       if (r && dist < r.keep) want = dist < r.keep * 0.7 ? -0.6 : 0;
@@ -298,7 +309,8 @@ export class MobManager {
         if (m.wind <= 0) {
           if (m.windKind === 'melee') {
             // short mobs can't reach you on top of a car; fliers and grown-ups can reach a bit up
-            if (Math.hypot(p.x - m.x, p.z - m.z) <= touch + (m.def.reach ?? 0.5) + 0.4 && p.y <= m.height * 0.85 + (m.def.fly ?? 0)) run.hurtPlayer(m.dmg, m);
+            if (tgt !== p) { if (dist <= touch + (m.def.reach ?? 0.5) + 0.4) run.combat.hitDecoy(tgt); }
+            else if (Math.hypot(p.x - m.x, p.z - m.z) <= touch + (m.def.reach ?? 0.5) + 0.4 && p.y <= m.height * 0.85 + (m.def.fly ?? 0)) run.hurtPlayer(m.dmg, m);
           } else if (m.windKind === 'ranged') {
             this.fireRanged(m);
           }
@@ -309,7 +321,7 @@ export class MobManager {
           m.wind = 0.28;
           m.windKind = 'melee';
           m.atkT = m.def.atkCd ?? 1.2;
-        } else if (r && dist <= r.range && (m.rangedT -= dt) <= 0) {
+        } else if (r && tgt === p && dist <= r.range && (m.rangedT -= dt) <= 0) {
           m.wind = 0.4;
           m.windKind = 'ranged';
           m.rangedT = r.cd * rand(0.85, 1.2);
@@ -317,7 +329,7 @@ export class MobManager {
       }
 
       // leash: stragglers far behind get recycled back into the fight
-      if (m.tier < 2 && dist > 62) {
+      if (m.tier < 2 && pdist > 62) {
         const a = Math.atan2(p.x - m.x, p.z - m.z) + Math.PI + rand(-0.6, 0.6);
         const [sx, sz] = run.spawnPoint(a);
         m.x = sx;

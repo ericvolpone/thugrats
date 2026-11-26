@@ -98,14 +98,19 @@ export const GHOST_ABILITIES = [
   },
   {
     id: 'decoy', name: 'Cardboard Decoy', icon: '🎭', tags: ['summon'],
-    desc: 'Leaves a cardboard cut-out of herself that thugs beat on, then it explodes.',
+    desc: 'Props up a cardboard cut-out of herself. Thugs nearby go beat on it instead of her (bosses aren\'t fooled), then it explodes.',
     base: { damage: 40, cooldown: 12, duration: 6, area: 3.6 },
     upgrades: [DMG, DUR, CD, AREA],
     ready: (run, a) => run.crowd(a, 6, 5),
     fire(run, a) {
-      const p = run.player, x = p.x, z = p.z, r = 7;
-      run.zone({ x, z, r, life: a.stat('duration'), pull: 2.5, kind: 'smoke', color: '#3a3f4a', ability: a, onTick: (zn) => {
-        if (zn.t + 0.02 >= zn.life && !zn.done) { zn.done = true; run.explode(x, z, a.stat('area'), a.stat('damage'), a); }
+      const p = run.player;
+      // set it down a couple of steps toward the crowd so they pile up away from her
+      const t = run.mobs.target(p.x, p.z, 8, 'cluster');
+      const ang = t ? Math.atan2(t.x - p.x, t.z - p.z) : p.facing;
+      const [x, z] = run.world.freeSpot(p.x + Math.sin(ang) * 2.5, p.z + Math.cos(ang) * 2.5, 0.6);
+      run.combat.decoy({ x, z, life: a.stat('duration'), lure: 9, ability: a, onEnd: (d) => {
+        run.explode(d.x, d.z, a.stat('area'), a.stat('damage'), a);
+        run.fx.burst(d.x, 1, d.z, '#c8a060', 18, 5);
       } });
       run.fx.burst(x, 0.8, z, '#c8a060', 16, 3);
     },

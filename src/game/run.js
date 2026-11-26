@@ -277,8 +277,7 @@ export class Run {
       if (Math.random() < (m.tier === 1 ? 0.05 : 0.0012)) this.pickups.special('magnet', m.x, m.z);
       if (m.tier === 1 && Math.random() < 0.25) {
         const [x, z] = this.world.freeSpot(m.x, m.z, 1.4);
-        this.pickups.chest(x, z, true);
-        if (!this.seenFreeChest) { this.seenFreeChest = true; this.toast('🎁 Chests dropped by elites are FREE. Chests that show up on their own cost gold.'); }
+        this.pickups.chest(x, z);
       }
     }
     if (m.tier === 2) {
@@ -378,11 +377,12 @@ export class Run {
   }
 
   chestCost() {
-    return Math.round((20 + 14 * this.chestsOpened + 2 * this.chestsOpened ** 2) * (1 - this.stats.chestDiscount));
+    // every chest costs gold, so the price climbs gently: 20, 29, 40, 52, 66 ... ~200 by the 10th
+    return Math.round((20 + 8 * this.chestsOpened + this.chestsOpened ** 2) * (1 - this.stats.chestDiscount));
   }
 
   tryOpenChest(c) {
-    const cost = c.free ? 0 : this.chestCost();
+    const cost = this.chestCost();
     if (this.gold < cost) {
       if (!c.warned || this.time - c.warned > 3) {
         c.warned = this.time;
@@ -391,10 +391,10 @@ export class Run {
       return false;
     }
     this.gold -= cost;
-    if (!c.free) this.chestsOpened++;
+    this.chestsOpened++;
     sfx('chest');
     this.fx.burst(c.x, 1, c.z, '#ffd23f', 24, 6);
-    this.queue.push({ kind: 'item', minTier: 0, reason: c.free ? 'Dropped by an elite' : `Chest opened (${cost} gold)` });
+    this.queue.push({ kind: 'item', minTier: 0, reason: `Chest opened (${cost} gold)` });
     return true;
   }
 
@@ -550,7 +550,7 @@ export class Run {
       for (let i = 0; i < pack; i++) this.mobs.spawn(r.mob, x + rand(-1.5, 1.5), z + rand(-1.5, 1.5), elite);
       if (elite && !this.seenElite) {
         this.seenElite = true;
-        this.toast('💀 Elite thug (red ring): 7× HP, drops 10 gold and has a 25% chance to drop a free chest');
+        this.toast('💀 Elite thug (red ring): 7× HP, drops 10 gold and has a 25% chance to drop a chest');
       }
       this.spawnAcc -= pack - 1;
     }

@@ -70,8 +70,10 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
 - **Items (7 slots):** 2 Rings, 1 Crime Title, 2 Reputations from loot, plus 2
   Contraband. On desktop they're listed down the left side with a short readout
   (`+72 LCK`, `+25% GUN RECHARGE / +1 GUN PIERCE`).
-  - **Chests** that show up on their own cost gold (the price floats over them and
-    rises each time). Chests dropped by elites (25%) are free and glow green.
+  - **Chests** show up every ~45s and from elites (25%). They all cost gold: the price
+    floats over them, rises gently each time, and the 📦 chip next to your gold shows
+    it (green border: you can afford one, red: you can't). Unopened chests vanish after
+    90s (the last 15s count down and blink).
   - Boss kills give a guaranteed loot pick. Picking an item you own levels it up.
     Reputations are always in the pool.
 - **Contraband & the Black Market:** each map has a shady stall near the start ($ on

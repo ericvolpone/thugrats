@@ -9,6 +9,8 @@ import { sfx } from '../audio.js';
  * your pickup range flies to you.
  */
 const MAX_G = 700, MAX_C = 250;
+/** Seconds before an unopened chest disappears. */
+export const CHEST_LIFE = 90;
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
@@ -166,20 +168,19 @@ export class Pickups {
     this.specials.push({ kind, x, z, mesh, pull: false, sp: 0, t: 0 });
   }
 
-  chest(x, z, free = false) {
+  chest(x, z) {
     const mesh = new THREE.Mesh(this.chestGeo, MATS.flat);
     mesh.position.set(x, 0, z);
     mesh.rotation.y = rand(0, TAU);
     const glow = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 6, 12, 1, true), new THREE.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
     glow.position.y = 3;
-    if (free) glow.material.color.set('#7dff9a');
     mesh.add(glow);
     this.scene.add(mesh);
     const label = labelSprite();
     label.position.set(x, 2.2, z);
     label.scale.set(2, 0.75, 1);
     this.scene.add(label);
-    const c = { x, z, mesh, label, free, t: 0, near: false };
+    const c = { x, z, mesh, label, glow, t: 0, near: false };
     this.chests.push(c);
     return c;
   }
@@ -271,13 +272,23 @@ export class Pickups {
     for (const c of this.chests) {
       c.t += dt;
       c.mesh.position.y = Math.abs(Math.sin(c.t * 2)) * 0.1;
-      if (c.free) c.label.userData.set('FREE', '#7dff9a');
-      else c.label.userData.set(`${cost} 💰`, run.gold >= cost ? '#ffd23f' : '#ff8a7a');
+      // chests expire: the last 15s show a countdown and blink
+      const left = CHEST_LIFE - c.t;
+      c.label.userData.set(left < 15 ? `${cost} 💰 · ${Math.ceil(left)}s` : `${cost} 💰`, run.gold >= cost ? '#ffd23f' : '#ff8a7a');
+      const blink = left < 10 && Math.sin(c.t * 14) > 0;
+      c.mesh.visible = !blink;
+      c.glow.material.opacity = left < 15 ? 0.1 : 0.18;
       const d = Math.hypot(p.x - c.x, p.z - c.z);
       c.near = d < 1.8;
     }
     for (let i = this.chests.length - 1; i >= 0; i--) {
       const c = this.chests[i];
+      if (c.t >= CHEST_LIFE) {
+        run.fx.burst(c.x, 0.6, c.z, '#c8a060', 10, 3);
+        this.scene.remove(c.mesh, c.label);
+        this.chests.splice(i, 1);
+        continue;
+      }
       if (!c.near) continue;
       if (run.tryOpenChest(c)) {
         this.scene.remove(c.mesh, c.label);

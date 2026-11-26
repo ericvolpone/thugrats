@@ -108,6 +108,8 @@ export class Combat {
     this.cars = [];
     this.marks = [];
     this.goons = [];
+    this.decoys = []; // cardboard cut-outs thugs walk to and beat on instead of you
+    this.decoyPool = [];
     this.shadows = []; // shadow copies of the hero that do dashes (the real hero stays put)
     this.shadowPool = [];
     this.shadowMat = new THREE.MeshBasicMaterial({ color: '#2a1840', transparent: true, opacity: 0.6, depthWrite: false });
@@ -194,6 +196,48 @@ export class Combat {
     model.root.visible = true;
     this.scene.add(model.root);
     this.shadows.push({ model, x0: x, z0: z, angle, len, dur, t: 0, onStep, color: color ?? '#8a5ac8' });
+  }
+
+  /**
+   * A flat cardboard cut-out of the hero on a stand. Thugs within `lure` of it
+   * walk over and beat on it instead of you (bosses don't fall for it). When its
+   * time is up it explodes (onEnd).
+   */
+  decoy({ x, z, life, lure = 9, ability, onEnd }) {
+    let d = this.decoyPool.pop();
+    if (!d) {
+      const g = new THREE.Group();
+      const model = createHeroModel(this.run.hero.model);
+      model.root.scale.set(1.15, 1.15, 0.12); // pressed flat: printed cardboard
+      model.root.position.z = 0.08;
+      g.add(model.root);
+      const brown = C('#b88a52'), dark = C('#8a6234');
+      const back = mergeGeometries([
+        paint(new THREE.BoxGeometry(1.25, 1.75, 0.05).translate(0, 0.95, 0), brown, 0.06), // board behind the print
+        paint(new THREE.BoxGeometry(0.08, 1.2, 0.7).rotateX(-0.5).translate(0, 0.55, -0.32), dark, 0.05), // easel leg
+        paint(new THREE.BoxGeometry(1.3, 0.06, 0.5).translate(0, 0.03, -0.05), dark, 0.05), // base
+      ]);
+      g.add(new THREE.Mesh(back, MATS.flat));
+      // a dashed ring shows how far it lures
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 48, 1).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: '#ffd98a', transparent: true, opacity: 0.35, depthWrite: false }));
+      ring.position.y = 0.06;
+      d = { g, ring };
+    }
+    d.g.position.set(x, 0, z);
+    d.g.rotation.set(0, Math.atan2(this.run.camera.position.x - x, this.run.camera.position.z - z), 0); // face the camera
+    d.ring.position.set(x, 0.06, z);
+    d.ring.scale.setScalar(lure);
+    this.scene.add(d.g, d.ring);
+    Object.assign(d, { x, z, life, lure, ability, onEnd, t: 0, hitT: 0, radius: 0.5 });
+    this.decoys.push(d);
+    return d;
+  }
+
+  /** A thug landed a hit on a decoy: it wobbles and sheds cardboard. */
+  hitDecoy(d) {
+    d.hitT = 0.25;
+    this.run.fx.burst(d.x, 1, d.z, '#c8a060', 2, 2.5, 0.35, 0.8);
   }
 
   /** Keep an always-on aura (def.aura) spinning for ability `a`; its count/radius follow the ability's stats. */
@@ -476,6 +520,21 @@ export class Combat {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
 
+    // cardboard decoys
+    for (let i = this.decoys.length - 1; i >= 0; i--) {
+      const d = this.decoys[i];
+      d.t += dt;
+      d.hitT = Math.max(0, d.hitT - dt);
+      d.g.rotation.z = d.hitT > 0 ? Math.sin(d.t * 50) * 0.12 : 0;
+      d.ring.material.opacity = 0.2 + 0.15 * Math.sin(d.t * 4);
+      if (d.t >= d.life) {
+        this.scene.remove(d.g, d.ring);
+        this.decoys.splice(i, 1);
+        this.decoyPool.push(d);
+        d.onEnd?.(d);
+      }
+    }
+
     // hit-contract marks
     for (let i = this.marks.length - 1; i >= 0; i--) {
       const mk = this.marks[i];
@@ -570,6 +629,7 @@ export class Combat {
     for (const k of ['bMesh', 'eMesh', 'lMesh', 'oMesh']) this.scene.remove(this[k]);
     for (const m of Object.values(this.auraMeshes)) this.scene.remove(m);
     for (const z of this.zones) this.scene.remove(z.mesh);
+    for (const d of this.decoys) this.scene.remove(d.g, d.ring);
     for (const t of this.traps) this.scene.remove(t.mesh);
     for (const c of this.cars) this.scene.remove(c.mesh);
     for (const m of this.marks) this.scene.remove(m.mesh);

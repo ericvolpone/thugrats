@@ -58,6 +58,8 @@ export class PadNav {
     if (layer) this.lastIndex = this.items(layer).indexOf(el);
     el.focus({ preventScroll: true });
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // tell the HUD even when the window itself isn't focused (no native focus events then)
+    el.dispatchEvent(new CustomEvent('padfocus', { bubbles: true }));
   }
 
   /** Spatial move: best element whose centre lies in direction (dx, dy). */
