@@ -155,6 +155,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .titan-row.ready { border-left-color: var(--gold); background: rgba(80,60,10,0.6); }
 .titan-row.active { border-left-color: var(--red); }
 .titan-row.dead { opacity: 0.45; text-decoration: line-through; }
+.titan-row.evac { border-left-color: #5dff9a; background: rgba(10,60,30,0.6); }
 .titan-row b { font-size: 13px; }
 .titan-row .c { color: var(--muted); }
 .titan-row .c.ok { color: var(--green); }

@@ -14,6 +14,8 @@ import { levelOffers, itemOffers, itemGain, itemMaxed, banishKind, banishId } fr
 import { MOBS, BOSSES } from '../data/mobs.js';
 import { DIFFICULTIES, MAP_DEFAULTS } from '../data/maps.js';
 import { Save } from '../save.js';
+import { RunLog } from './runlog.js';
+import { Evac, EVAC_BONUS } from './evac.js';
 import { sfx } from '../audio.js';
 import { rand, TAU, pick, weighted, clamp } from '../util.js';
 
@@ -79,6 +81,10 @@ export class Run {
     this.dmgBy = {};
     this.fedsArrived = false;
     this.leech = 0;
+    this.clearedAt = null; // run time the final Crime Titan died
+    this.evac = null; // the chopper, once the map is cleared
+    this.evacuating = false;
+    this.log = new RunLog(this); // playtest recorder (runlog.js)
 
     this.loadout = buildLoadout(hero);
     this.flags = { ...this.loadout.flags };
@@ -170,6 +176,7 @@ export class Run {
     if (!def || this.abilityById(def.id)) return;
     const a = new AbilityInst(def, this);
     this.abilities.push(a);
+    this.log.ability(def);
     return a;
   }
 
@@ -299,9 +306,13 @@ export class Run {
       for (let i = 0; i < 25; i++) this.pickups.coin(m.x + rand(-3, 3), m.z + rand(-3, 3), 4);
       this.addXp(this.xpNext - this.xp + 0.01, true);
       if (def.final) {
-        this.ui.banner(`${def.name} has fallen!`, 'The map is yours');
+        // the clear is banked now; the run goes on until you evacuate (or don't make it)
+        this.clearedAt = this.time;
+        Save.recordClear(this.map.id, this.diffIndex);
+        this.ui.banner(`${def.name} has fallen!`, 'Map cleared — evac chopper inbound');
+        this.toast('🚁 Get to the chopper (H on the minimap) to get out with a bonus — or stay and see how long you last against the Feds.');
         sfx('victory');
-        this.later(2.2, () => this.end(true));
+        this.later(2.5, () => { if (!this.ended) this.evac = new Evac(this); });
       } else {
         this.ui.banner(`${def.name} has fallen!`, 'Contract complete — cash it in at the Black Market');
         this.contracts++;
@@ -320,7 +331,7 @@ export class Run {
 
   hurtPlayer(amount, src) {
     const p = this.player;
-    if (p.dead || this.ended) return;
+    if (p.dead || this.ended || this.evacuating) return;
     if (Math.random() < this.stats.dodge) {
       this.fx.number(p.x, 1.8, p.z, 'dodge', '#9ad8ff');
       return;
@@ -335,6 +346,7 @@ export class Run {
     const thorns = this.flags.thorns ?? 0;
     if (thorns && src && src.hp != null && !src.dead && amount > 0) this.hit(src, amount * thorns * this.stats.dmg, null, { noCrit: true, color: '#ffb0a0' });
     if (dmg <= 0) return;
+    this.log.hurt(Math.min(dmg, p.hp), src);
     p.hp -= dmg;
     p.hurtT = 1;
     this.fx.number(p.x, 1.9, p.z, dmg, '#ff5a5a');
@@ -344,7 +356,7 @@ export class Run {
       p.hp = 0;
       p.dead = true;
       sfx('defeat');
-      this.later(1.6, () => this.end(false));
+      this.later(1.6, () => this.end('died'));
     }
   }
 
@@ -426,6 +438,7 @@ export class Run {
     if (!this.choice || (!free && this.rerolls <= 0) || this.choiceLocked()) return;
     if (!free) this.rerolls--;
     const q = this.choice;
+    if (!free) this.log.push('reroll', { kind: q.kind, offered: q.cards.map((c) => this.log.card(c)) });
     q.cards = this.offersFor(q);
     q.banishing = false;
     this.ui.showChoice(q);
@@ -446,6 +459,7 @@ export class Run {
     if (!kind || this.banishes <= 0) return;
     this.banishes--;
     this.banished.add(banishId(card));
+    this.log.push('banish', { kind: this.choice?.kind, card: this.log.card(card) });
     this.toast(`🚫 ${card.def?.name ?? card.ability.def.name} banished for this run`);
     sfx('select');
     this.reroll(true);
@@ -459,6 +473,7 @@ export class Run {
   choose(card) {
     if (this.choiceLocked()) return;
     if (card && this.choice?.banishing) return this.banish(card);
+    this.log.pick(this.choice, card);
     if (!card) {
       this.addGold(10 + this.level * 2, true);
     } else if (card.type === 'newAbility') {
@@ -644,7 +659,7 @@ export class Run {
     }
 
     // abilities
-    if (!p.dead) {
+    if (!p.dead && !this.evacuating) {
       const power = this.buffs.frenzy?.power ?? 0;
       for (const a of this.abilities) {
         let rate = a.def.id === 'frenzy' ? 1 : a.def.id === 'pistol' ? 1 + power * 1.6 : 1 + power;
@@ -678,7 +693,9 @@ export class Run {
     this.combat.update(dt);
     this.telegraphs.update(dt);
     this.pickups.update(dt);
+    this.evac?.update(dt);
     this.fx.update(dt);
+    this.log.update();
     this.updateCamera(dt);
   }
 
@@ -703,12 +720,16 @@ export class Run {
   }
 
   // ── ending ─────────────────────────────────────────────────
-  end(victory) {
+  /** outcome: 'evac' (took the chopper) | 'died' | 'quit'. Clearing the map is what counts as a victory. */
+  end(outcome = 'quit') {
     if (this.ended) return;
     this.ended = true;
+    const victory = this.clearedAt != null;
+    const evac = outcome === 'evac';
+    const bonus = evac ? EVAC_BONUS : 1;
     const d = this.diff;
     const mins = this.time / 60;
-    const heroXp = Math.round((this.kills * 0.5 + mins * 25 + this.bossKills * 60 + this.titanKills * 150 + (victory ? 300 : 0)) * d.heroXp);
+    const heroXp = Math.round((this.kills * 0.5 + mins * 25 + this.bossKills * 60 + this.titanKills * 150 + (victory ? 300 : 0)) * d.heroXp * bonus);
     const before = Save.hero(this.hero.id).level;
     const levels = Save.addHeroXp(this.hero.id, heroXp);
     Save.recordRun(this.hero.id, this.kills);
@@ -724,7 +745,6 @@ export class Run {
     const heroGear = this.hero.gear ?? [];
     let sig = null;
     if (victory) {
-      Save.recordClear(this.map.id, this.diffIndex);
       sig = heroGear.find((g) => g.map === this.map.id);
       if (sig) gear.push(grant(sig));
     }
@@ -733,9 +753,10 @@ export class Run {
       const pool = heroGear.filter((g) => !g.map && !gear.some((x) => x.def === g) && Save.gearTier(this.hero.id, g.id) < d.gearCap);
       if (pool.length) gear.push({ ...grant(pick(pool)), drop: true });
     }
-    const rep = repForRun({ minutes: mins, bossKills: this.bossKills, titanKills: this.titanKills, victory, diffIndex: this.diffIndex });
+    const rep = Math.round(repForRun({ minutes: mins, bossKills: this.bossKills, titanKills: this.titanKills, victory, diffIndex: this.diffIndex }) * bonus);
     Save.addRep(rep);
-    this.result = { victory, rep, heroXp, levels, before, after: before + levels, gear, time: this.time, kills: this.kills, level: this.level, gold: Math.round(this.goldTotal), dmgBy: this.dmgBy };
+    this.log.save(outcome);
+    this.result = { victory, outcome, evac, overtime: victory ? this.time - this.clearedAt : 0, rep, heroXp, levels, before, after: before + levels, gear, time: this.time, kills: this.kills, level: this.level, gold: Math.round(this.goldTotal), dmgBy: this.dmgBy };
     this.ui.showEnd(this.result, this);
   }
 
@@ -747,6 +768,7 @@ export class Run {
     this.telegraphs.dispose();
     this.player.dispose();
     this.pet?.dispose();
+    this.evac?.dispose();
     this.world.dispose();
   }
 }

@@ -38,7 +38,7 @@ export class Hud {
     this.$('pause').addEventListener('click', (e) => {
       const act = e.target.dataset?.act;
       if (act === 'resume') this.togglePause(false);
-      if (act === 'quit') { this.togglePause(false); this.run?.end(false); }
+      if (act === 'quit') { this.togglePause(false); this.run?.end('quit'); }
     });
     this.$('choice-reroll').addEventListener('click', () => this.run?.reroll());
     this.$('choice-skip').addEventListener('click', () => this.run?.choose(null));
@@ -306,6 +306,11 @@ export class Hud {
       const st = t.state === 'ready' ? ' — stand in the beam!' : t.state === 'active' ? ' — FIGHT' : '';
       return `<div class="titan-row ${t.state}"><b>🗿 ${t.def.name}</b>${t.def.final ? ' <span class="c">(final)</span>' : ''}${st}<br>${conds}</div>`;
     }).join('');
+    if (r.clearedAt != null) {
+      const ev = r.evac;
+      const msg = !ev ? 'inbound…' : ev.state === 'inbound' ? `landing in ${Math.ceil(9 - ev.t)}s` : 'stand on the H to get out (bonus), or keep fighting';
+      tl.innerHTML += `<div class="titan-row evac"><b>🚁 Evac chopper</b> — ${msg}<br><span class="c ok">✓ Map cleared ${fmtTime(r.time - r.clearedAt)} ago</span></div>`;
+    }
 
     // boss bars
     const bosses = r.mobs.list.filter((m) => m.tier >= 2 && !m.dead);
@@ -453,6 +458,12 @@ export class Hud {
       ctx.fillStyle = r.contracts > 0 ? '#000' : '#c9b8e0';
       ctx.fillText('$', mx, mz + 1);
     }
+    if (r.evac && r.evac.state !== 'gone') {
+      const ev = r.evac;
+      const [hx, hz] = dot(ev.x, ev.z, 10, ev.landed ? `rgba(93,255,154,${0.7 + Math.sin(t * 6) * 0.3})` : '#f2c037');
+      ctx.fillStyle = '#000';
+      ctx.fillText('H', hx, hz + 1);
+    }
     if (r.pet) dot(r.pet.x, r.pet.z, 3, '#c9a27a');
     const p = r.player;
     const [px, pz] = P(p.x, p.z);
@@ -575,8 +586,9 @@ export class Hud {
       : `<div class="reward">${g.def.icon} ${g.drop ? 'Gear drop! ' : ''}${g.from < 0 ? 'New gear' : 'Gear upgraded'}: <b style="color:${tierColor(g.to)}">${g.def.name} (${TIERS[g.to].name})</b> <span style="color:var(--muted);font-size:13px">${g.def.slot}</span><br><span style="color:var(--muted);font-size:13px">${g.def.desc(g.to)}${g.from < 0 ? ' · equip it in the Gear tab' : ''}</span></div>`)).join('');
     const lvl = res.levels > 0 ? ` — <b style="color:var(--gold)">LEVEL UP! ${res.before} → ${res.after}</b> (+${res.levels} talent point${res.levels > 1 ? 's' : ''})` : '';
     panel.innerHTML = `
-      <div class="end-head ${res.victory ? '' : 'lose'}"><h2>${res.victory ? 'Map Cleared!' : 'Busted!'}</h2>
-      <p style="color:var(--muted);margin:0">${res.victory ? `${run.map.name} (${run.diff.name}) belongs to the family now.` : `${run.hero.name.split(' ')[0]} got put in time-out. The family remembers.`}</p></div>
+      <div class="end-head ${res.victory ? '' : 'lose'}"><h2>${res.evac ? 'Got Out Clean!' : res.victory ? 'Map Cleared!' : 'Busted!'}</h2>
+      <p style="color:var(--muted);margin:0">${res.victory ? `${run.map.name} (${run.diff.name}) belongs to the family now.` : `${run.hero.name.split(' ')[0]} got put in time-out. The family remembers.`}</p>
+      ${res.victory ? `<p style="margin:4px 0 0">${res.evac ? `🚁 Evacuated after ${fmtTime(res.overtime)} of overtime — <b style="color:var(--gold)">+25% hero XP & Rep</b>` : res.outcome === 'died' ? `💀 Lasted ${fmtTime(res.overtime)} after the clear, but missed the chopper (no evac bonus)` : 'Left without the chopper (no evac bonus)'}</p>` : ''}</div>
       <div class="end-sum"><div>${fmtTime(res.time)}<span>time</span></div><div>${fmtNum(res.kills)}<span>kills</span></div><div>${res.level}<span>level</span></div><div>${fmtNum(res.gold)}<span>gold</span></div><div>${run.titanKills}/${run.titans.length}<span>titans</span></div></div>
       <div class="reward">⭐ +${res.heroXp} hero XP${lvl}</div>
       <div class="reward">🤝 +${res.rep} Rep <span style="color:var(--muted);font-size:13px">(account-wide — spend it in the hideout's Rep tab)</span></div>

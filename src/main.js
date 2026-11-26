@@ -5,6 +5,8 @@ import { loadManifest, exportHeroGLB } from './assets/models.js';
 import { heroById } from './heroes/index.js';
 import { mapById } from './data/maps.js';
 import { Input } from './input.js';
+import { storedRuns, exportRuns } from './game/runlog.js';
+import { Evac } from './game/evac.js';
 import { Run } from './game/run.js';
 import { Hud } from './ui/hud.js';
 import { HomeScreen } from './ui/home.js';
@@ -123,6 +125,9 @@ window.thugrats = {
   time: (s) => { if (run) { run.time += s; run.nextWave = Math.max(run.nextWave, run.time + 5); } },
   ability: (id) => run?.addAbility(run.hero.abilities.find((a) => a.id === id)),
   god: () => { if (run) run.hurtPlayer = () => {}; },
+  runs: () => storedRuns(),               // run logs kept in this browser
+  exportRuns: () => exportRuns(),         // download them as one JSON file
+  clear: () => { if (run && run.clearedAt == null) { run.clearedAt = run.time; run.evac = new Evac(run); } }, // skip to the evac
   touch: IS_TOUCH,
   play: (mapId = 'little_italy', diff = 0, hero = home.heroId) => transition(() => startRun(hero, mapId, diff)),
 };

@@ -89,7 +89,12 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
   give a full level plus a guaranteed loot pick.
 - **Crime Titans (3 per map)** are summoned by standing in their altar's beam once their
   conditions are met (reach level X, bribe N gold, kill bosses, kill the other
-  titans). Killing the **final Crime Titan** clears the map.
+  titans). Killing the **final Crime Titan** clears the map (the clear is banked on
+  the spot).
+- **Evac:** after the clear an evac chopper lands somewhere on the map (H on the
+  minimap). Stand on its pad for 2 s to get out with **+25% hero XP and Rep**, or stay
+  and see how far into the Feds you can last: overtime still earns XP and Rep, but
+  dying (or quitting) forfeits the evac bonus. The clear and its gear are kept either way.
 - At **12:00 the Feds arrive**: everything gets nastier every second.
 - **Rep (account-wide):** every run earns Rep (time survived, bosses, titans, clears,
   difficulty). Spend it in the hideout's **Rep** tab: adopt **Biscuit the Bulldog**,
@@ -164,6 +169,8 @@ src/
     bossBrain.js       boss/titan mechanics → telegraphs.js (ground warnings)
     combat.js          bullets, lobs, zones, traps, cars, orbits, marks, goons
     world.js           arena drawing + collision helpers; layouts.js = one layout per map
+    evac.js            the evac chopper after the final Crime Titan
+    runlog.js          playtest recorder (scripts/runs-report.mjs summarises the logs)
     pickups.js, fx.js, player.js, pet.js, upgrades.js (card offers, banish)
   ui/                  home.js (hideout), hud.js (HUD, minimap, cards, end screen)
 ```
@@ -174,6 +181,21 @@ glasses, props...). Abilities are small objects with `base` stats, `upgrades`, a
 `ready()` targeting check and a `fire()` that calls the run API (`shoot`, `lob`,
 `explode`, `zone`, `car`, `orbit`, `mark`, `spawnGoon`, `hit`...).
 
+## Playtest logs
+
+Every run records a JSON log for balancing: each pick with what else was offered
+(rarity, roll size, time, level), rerolls and banishes, damage per ability every 10 s,
+final ability stats and upgrade history, items, damage taken by source, and how the
+run ended (`evac`, `died`, `quit`) plus the build (git hash).
+
+- With `npm run dev`, each log is written to `playtests/runs/` (git-ignored).
+- `npm run runs` summarises them: every run, then per hero each ability's average
+  damage share, upgrades taken, and **damage share per pick** (high = punching above
+  its investment). Filter with `-- --hero babyface`, `--map the_docks`, `--last 10`.
+- The browser also keeps the last 40 logs, including runs on the deployed site:
+  `thugrats.exportRuns()` downloads them, and `npm run runs -- thugrats-runs-….json`
+  reads the download.
+
 ## Debug (browser console)
 
 ```js
@@ -181,6 +203,8 @@ thugrats.play('the_docks', 1, 'ghost')   // start a run (map id, difficulty 0-2,
 thugrats.god()                  // no damage this run
 thugrats.xp(200)  thugrats.gold(500)  thugrats.time(120)  thugrats.ability('driveby')
 thugrats.heroXp(1000)           // hero levels for talent testing
+thugrats.clear()                // count the map as cleared and call the evac chopper
+thugrats.runs()  thugrats.exportRuns()   // playtest logs kept in this browser
 thugrats.exportGLB('lenny')     // download a model for Blender
 thugrats.Save.wipe()            // reset progress
 ```

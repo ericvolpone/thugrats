@@ -20,7 +20,7 @@ const _c = new THREE.Color();
 const GEM_COLORS = [[1, '#58c4ff'], [5, '#4fe07a'], [20, '#c06cff'], [80, '#ff9a1f']];
 
 /** A floating text label (chest prices, the Black Market sign). */
-function labelSprite(w = 256, h = 96) {
+export function labelSprite(w = 256, h = 96) {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const tex = new THREE.CanvasTexture(canvas);
