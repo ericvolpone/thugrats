@@ -378,7 +378,21 @@ export class MobManager {
           m.x += (dx / d) * overlap * wm;
           m.z += (dz / d) * overlap * wm;
         });
+        const bx = m.x, bz = m.z;
         world.collide(m, m.radius, m.y);
+        // wall slam: a thug knocked hard into a wall (m.slam set by an ability) takes damage
+        if (m.slam && !m.dead) {
+          if (m.slam.until < run.time) m.slam = null;
+          else if ((bx !== m.x || bz !== m.z) && Math.hypot(m.kx, m.kz) > 2.5) {
+            const s = m.slam;
+            m.slam = null;
+            m.kx = m.kz = 0;
+            run.fx.burst(m.x, 0.8, m.z, '#d8d2c8', 10, 4, 0.35);
+            run.shake(0.08);
+            run.hit(m, s.dmg, s.ability, { noCrit: false, color: '#ffb0a0', slam: true });
+            s.onSlam?.(m);
+          }
+        }
       }
       const dx = m.x - p.x, dz = m.z - p.z;
       const d = Math.hypot(dx, dz) || 0.01;
@@ -446,6 +460,7 @@ export class MobManager {
         _c.copy(m.tier === 1 ? ELITE_TINT : WHITE);
         if (m.burnT > 0) _c.lerp(new THREE.Color(1.4, 0.6, 0.3), 0.35 + 0.2 * Math.sin(t * 20));
         if (m.rootT > 0 || m.slowT > 0) _c.lerp(new THREE.Color(0.6, 0.65, 0.75), 0.5);
+        if (m.tintUntil > t) _c.lerp(m.tintColor, 0.45); // status tint (heroes/common.js tint())
         if (m.flash > 0) _c.lerp(new THREE.Color(3, 3, 3), Math.min(1, m.flash));
         b.mesh.setColorAt(b.n, _c);
         b.n++;

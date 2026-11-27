@@ -1,4 +1,4 @@
-# Hero identity: proposal (not built yet)
+# Hero identity (built; this is the design it follows)
 
 **The problem:** every kit has a gun or projectile, a melee option, an aura, a summon, an AOE and a nuke, so the heroes blur together. Some abilities never get picked because they don't feel like that hero.
 

@@ -1,4 +1,3 @@
-import { TAU, rand } from '../../util.js';
 import { freeCast, boltFrom, ringShot } from '../common.js';
 
 /**
@@ -16,15 +15,18 @@ import { freeCast, boltFrom, ringShot } from '../common.js';
  *   ctx.amp(fn)                    conditional damage multiplier
  */
 
-/** Talent-planted Claymores alive right now (capped so they can't carpet the map). */
-const extraMines = (run, p) => run.traps.filter((t) => t.ability === p && t.extra).length;
-const MAX_EXTRA_MINES = 8;
 /** Is this thug on the Hit List right now? (abilities.js sets m.listedUntil when run.flags.listMark is on) */
 const listed = (run, m) => m.listedUntil > run.time;
+/** Add Focus (Babyface's meter, run.res; no-op if it isn't wired). */
+const focus = (run, n) => { if (run.res?.id === 'focus') run.gainRes(n); };
+
+// Talent ids are kept per slot from the old tree so spent points carry over,
+// even where the talent in that slot is new (h_double, h_mines, h_boom, h_tripwire,
+// h_stand_in, h_rain, h_scatter).
 
 export const BABYFACE_TREES = [
   { id: 'marksman', name: 'Marksman', icon: '🔭', color: '#ffd36b', blurb: 'One shot, one nap.' },
-  { id: 'cleaner', name: 'Cleaner', icon: '🧹', color: '#ff6b5a', blurb: 'Close-range cleanup and loud exits.' },
+  { id: 'cleaner', name: 'Cleaner', icon: '🧹', color: '#ff6b5a', blurb: 'Close work, clean getaways. Never flinch.' },
   { id: 'professional', name: 'Professional', icon: '💼', color: '#8fd0ff', blurb: 'Planning, contacts, getting paid.' },
 ];
 
@@ -44,11 +46,15 @@ export const BABYFACE_TALENTS = [
     desc: (r) => `+${8 * r}% damage to elites, bosses and titans.`, apply: (c, r) => c.stat('bigDmg', 0.08 * r) },
   { id: 'h_list', tree: 'marksman', row: 3, col: 1, max: 2, name: 'Long List', icon: '📋',
     desc: (r) => `Hit List marks +${r} more name${r > 1 ? 's' : ''}.`, apply: (c, r) => c.abil('hit_list', 'count', 'add', r) },
-  { id: 'h_double', tree: 'marksman', row: 4, col: 1, max: 1, name: 'Double Tap', icon: '✌️', capstone: true,
-    desc: () => '30% chance the Sniper Rifle fires a second shot.', apply: (c) => c.flag('doubleTap', 0.3) },
+  { id: 'h_double', tree: 'marksman', row: 4, col: 1, max: 1, name: 'Patience', icon: '⏳', capstone: true,
+    desc: () => 'The Sniper Rifle fires 35% slower but deals +60% damage, and Focused shots cost 15 less Focus.',
+    apply: (c) => { c.abil('rifle', 'cooldown', 'pct', -35); c.abil('rifle', 'damage', 'pct', 60); c.flagAdd('focusDiscount', 15); } },
   { id: 'h_silver_lining', tree: 'marksman', row: 5, col: 0, max: 3, name: 'Silver Lining', icon: '🥈', pair: 'silver_bullet',
-    desc: (r) => `Sniper Rifle crits take ${(0.6 * r).toFixed(1)}s off Silver Bullet's cooldown.`,
-    apply: (c, r) => c.link('rifle', 'silver_bullet', 'crit', 1, (run, p) => { p.cd = Math.max(0, p.cd - 0.6 * r); }, { icd: 0.2 }) },
+    desc: (r) => `Sniper Rifle crits take ${(0.6 * r).toFixed(1)}s off Silver Bullet's cooldown, and Silver Bullet kills restore ${10 * r} Focus.`,
+    apply: (c, r) => {
+      c.link('rifle', 'silver_bullet', 'crit', 1, (run, p) => { p.cd = Math.max(0, p.cd - 0.6 * r); }, { icd: 0.2 });
+      c.link('silver_bullet', null, 'kill', 1, (run) => focus(run, 10 * r), { icd: 0.1 });
+    } },
   { id: 'h_lock_on', tree: 'marksman', row: 5, col: 2, max: 3, name: 'Lock On', icon: '🎯', pair: 'hit_list',
     desc: (r) => `The Sniper Rifle aims at Hit List names first (from 25% farther away) and deals +${12 * r}% damage to them for 8s after they're marked.`,
     apply: (c, r) => {
@@ -63,9 +69,10 @@ export const BABYFACE_TALENTS = [
       c.amp((run, m, a) => (a?.def?.id === 'rifle' && run.buffs.focus ? 0.1 * r : 0));
     } },
   { id: 'h_one_shot', tree: 'marksman', row: 7, col: 1, max: 1, name: 'One Shot, One Kill', icon: '💀', capstone: true,
-    desc: () => 'Sniper Rifle shots execute thugs left under 20% HP (bosses under 10%, never titans), and every Rifle kill cuts its remaining cooldown by 40%.',
+    desc: () => 'Sniper Rifle shots execute thugs left under 20% HP (bosses under 10%, never titans) and each execute restores 8 Focus. Every Rifle kill cuts its remaining cooldown by 40%.',
     apply: (c) => {
       c.flag('oneShot', 0.2);
+      c.flag('execFocus', 8);
       c.link('rifle', null, 'kill', 1, (run, p, ev) => { ev.src.cd *= 0.6; }, { icd: 0.15 });
     } },
 
@@ -76,10 +83,10 @@ export const BABYFACE_TALENTS = [
     desc: (r) => `Take ${4 * r}% less damage.`, apply: (c, r) => c.stat('armor', 0.04 * r) },
   { id: 'h_hp', tree: 'cleaner', row: 1, col: 0, max: 3, name: 'Tough Guy', icon: '❤️',
     desc: (r) => `+${12 * r} max HP.`, apply: (c, r) => c.stat('maxHp', 12 * r) },
-  { id: 'h_mines', tree: 'cleaner', row: 1, col: 2, max: 2, name: 'Mine Field', icon: '🧱',
-    desc: (r) => `+${r} Claymore.`, apply: (c, r) => c.abil('claymore', 'count', 'add', r) },
-  { id: 'h_boom', tree: 'cleaner', row: 2, col: 0, max: 3, name: 'Loud Exit', icon: '💣',
-    desc: (r) => `Explosive abilities have +${8 * r}% area.`, apply: (c, r) => c.abil('#explosive', 'area', 'pct', 8 * r) },
+  { id: 'h_mines', tree: 'cleaner', row: 1, col: 2, max: 2, name: 'Steady Nerves', icon: '🧊',
+    desc: (r) => `Getting hurt knocks off ${25 * r}% less Focus.`, apply: (c, r) => c.flagAdd('steadyNerves', 0.25 * r) },
+  { id: 'h_boom', tree: 'cleaner', row: 2, col: 0, max: 3, name: 'Breathing Room', icon: '😮‍💨',
+    desc: (r) => `Each Sawed-Off blast restores ${3 * r} Focus.`, apply: (c, r) => c.flagAdd('sawFocus', 3 * r) },
   { id: 'h_regen', tree: 'cleaner', row: 2, col: 2, max: 3, name: 'Band-Aids', icon: '🩹',
     desc: (r) => `+${(0.4 * r).toFixed(1)} HP regen per second.`, apply: (c, r) => c.stat('regen', 0.4 * r) },
   { id: 'h_flash', tree: 'cleaner', row: 3, col: 1, max: 2, name: 'Extra Bright', icon: '⚪',
@@ -89,18 +96,19 @@ export const BABYFACE_TALENTS = [
   { id: 'h_last_round', tree: 'cleaner', row: 5, col: 0, max: 3, name: 'Last Round', icon: '🔚', pair: 'sawed_off',
     desc: (r) => `${Math.round(100 * r / 3)}% chance an Uzi burst ends with a free Sawed-Off blast at the nearest thug.`,
     apply: (c, r) => c.link('uzi', 'sawed_off', 'fire', r / 3, (run, p, ev) => run.later(ev.src.stat('count') * 0.04 + 0.05, () => freeCast(run, p)), { icd: 0.8 }) },
-  { id: 'h_tripwire', tree: 'cleaner', row: 5, col: 2, max: 3, name: 'Tripwire', icon: '🪤', pair: 'claymore',
-    desc: (r) => `Each thug stunned by Flashbang has a ${15 * r}% chance to get a Claymore planted at its feet (Claymore's damage, doesn't count toward Max Mines, up to ${MAX_EXTRA_MINES} at once).`,
-    apply: (c, r) => c.link('flashbang', 'claymore', 'hit', 0.15 * r, (run, p, ev) => {
-      if (ev.m.dead || extraMines(run, p) >= MAX_EXTRA_MINES) return;
-      p.def.plant(run, p, ev.m.x, ev.m.z, { extra: true });
+  { id: 'h_tripwire', tree: 'cleaner', row: 5, col: 2, max: 3, name: 'Dead to Rights', icon: '🔍', pair: 'spotter',
+    desc: (r) => `Each thug stunned by Flashbang has a ${25 * r}% chance to be Spotted (Spotter's duration), and each one spotted this way restores 2 Focus.`,
+    apply: (c, r) => c.link('flashbang', 'spotter', 'hit', 0.25 * r, (run, p, ev) => {
+      if (ev.m.dead) return;
+      p.def.spot(run, p, ev.m);
+      focus(run, 2);
     }, { icd: 0 }) },
-  { id: 'h_stand_in', tree: 'cleaner', row: 6, col: 1, max: 3, name: 'Stand-In', icon: '📞', pair: 'rain_of_lead',
-    desc: (r) => `When Body Double clocks in, the lookalike calls a Rain of Lead on the biggest crowd (${40 + 20 * r}% of its shots).`,
-    apply: (c, r) => c.link('body_double', 'rain_of_lead', 'fire', 1, (run, p) => {
-      const t = run.mobs.target(run.player.x, run.player.z, p.stat('range'), 'cluster');
-      if (t) p.def.rainAt(run, p, t.x, t.z, Math.max(1, Math.round(p.stat('count') * (0.4 + 0.2 * r))));
-    }, { icd: 1 }) },
+  { id: 'h_stand_in', tree: 'cleaner', row: 6, col: 1, max: 3, name: 'Stand-In', icon: '🕴️', pair: 'body_double',
+    desc: (r) => `Once every ${12 - 2 * r}s, getting hurt calls in a Body Double for 4s and that hit costs you no Focus.`,
+    apply: (c, r) => c.link('*', 'body_double', 'hurt', 1, (run, p) => {
+      if (run.res) run.res.guardUntil = run.time + 0.2; // BABYFACE_RESOURCE.tick skips the flinch
+      p.def.callIn(run, p, 4);
+    }, { icd: 12 - 2 * r }) },
   { id: 'h_clean_sweep', tree: 'cleaner', row: 7, col: 1, max: 1, name: 'Clean Sweep', icon: '🧹', capstone: true,
     desc: () => 'Thugs killed by the Sawed-Off or Uzi burst into a ring of 6 ball bearings (60% of the killing gun\'s damage each). Sweeps can set off more sweeps.',
     apply: (c) => {
@@ -124,23 +132,24 @@ export const BABYFACE_TALENTS = [
     desc: (r) => `Deep Breath lasts ${r}s longer.`, apply: (c, r) => c.abil('focus', 'duration', 'add', r) },
   { id: 'h_silver', tree: 'professional', row: 3, col: 1, max: 3, name: 'Melted Spoons', icon: '🥄',
     desc: (r) => `Silver Bullet +${10 * r}% Recharge Rate.`, apply: (c, r) => c.abil('silver_bullet', 'cooldown', 'pct', 10 * r) },
-  { id: 'h_rain', tree: 'professional', row: 4, col: 1, max: 1, name: 'Whole Crew', icon: '🌧️', capstone: true,
-    desc: () => 'Rain of Lead fires 8 more shots over a 25% bigger area.', apply: (c) => { c.abil('rain_of_lead', 'count', 'add', 8); c.abil('rain_of_lead', 'area', 'pct', 25); } },
+  { id: 'h_rain', tree: 'professional', row: 4, col: 1, max: 1, name: 'Composure', icon: '🧘‍♂️', capstone: true,
+    desc: () => 'Focus builds 30% faster, and every run starts with full Focus.', apply: (c) => { c.flagAdd('focusRate', 0.3); c.flag('focusStart', true); } },
   { id: 'h_spray', tree: 'professional', row: 5, col: 0, max: 3, name: 'Spray and Pray', icon: '🎱', pair: 'uzi',
     desc: (r) => `Each Trick Shot hit has a ${12 * r}% chance to spit a 4-bullet Uzi burst from that thug at the next one (Uzi's damage).`,
     apply: (c, r) => c.link('ricochet', 'uzi', 'hit', 0.12 * r, (run, p, ev) => {
       const x = ev.x, z = ev.z, skip = ev.m;
       for (let i = 0; i < 4; i++) run.later(i * 0.04, () => boltFrom(run, p, x, z, { skip, range: 10, color: '#ffe38a' }));
     }, { icd: 0.2 }) },
-  { id: 'h_scatter', tree: 'professional', row: 5, col: 2, max: 3, name: 'Party Favors', icon: '🎁', pair: 'claymore',
-    desc: (r) => `Car Bomb explosions scatter ${r + 1} Claymores around the wreck (Claymore's damage, don't count toward Max Mines).`,
-    apply: (c, r) => c.link('car_bomb', 'claymore', 'explode', 1, (run, p, ev) => {
-      const n = r + 1, a0 = rand(0, TAU);
-      for (let i = 0; i < n && extraMines(run, p) < MAX_EXTRA_MINES; i++) {
-        const ang = a0 + (i / n) * TAU, d = rand(1.5, 3.5);
-        p.def.plant(run, p, ev.x + Math.sin(ang) * d, ev.z + Math.cos(ang) * d, { extra: true, ang });
-      }
-    }, { icd: 1 }) },
+  { id: 'h_scatter', tree: 'professional', row: 5, col: 2, max: 3, name: 'Second Opinion', icon: '✌️', pair: 'double_tap',
+    desc: (r) => `Hit List and Silver Bullet hits have a ${20 * r}% chance to follow up with a free Double Tap on the same thug, restoring 5 Focus.`,
+    apply: (c, r) => {
+      const follow = (run, p, ev) => {
+        if (ev.m.dead) return;
+        if (freeCast(run, p, ev.m)) focus(run, 5);
+      };
+      c.link('hit_list', 'double_tap', 'hit', 0.2 * r, follow, { icd: 0.4 });
+      c.link('silver_bullet', 'double_tap', 'hit', 0.2 * r, follow, { icd: 0.4 });
+    } },
   { id: 'h_blinding', tree: 'professional', row: 6, col: 1, max: 3, name: 'Blinding Light', icon: '😵', pair: 'flashbang',
     desc: (r) => `Flashbang leaves thugs blinded for 2s after the stun. Sniper Rifle crits on blinded thugs deal +${20 * r}% extra damage.`,
     apply: (c, r) => {
@@ -150,11 +159,12 @@ export const BABYFACE_TALENTS = [
       }, { icd: 0 });
     } },
   { id: 'h_courtesy', tree: 'professional', row: 7, col: 1, max: 1, name: 'Professional Courtesy', icon: '🤝', capstone: true, pair: 'hit_list',
-    desc: () => 'Hit List marks +1 name. Every Hit List kill cuts the remaining cooldown of all your other abilities by 40% and drops 2 gold.',
+    desc: () => 'Hit List marks +1 name. Every Hit List kill cuts the remaining cooldown of all your other abilities by 40%, restores 10 Focus and drops 2 gold.',
     apply: (c) => {
       c.abil('hit_list', 'count', 'add', 1);
       c.link('hit_list', null, 'kill', 1, (run, p, ev) => {
         for (const a of run.abilities) if (!a.def.aura && a !== ev.src) a.cd *= 0.6;
+        focus(run, 10);
         run.pickups.coin(ev.x, ev.z, 2);
       }, { icd: 0.25 });
     } },

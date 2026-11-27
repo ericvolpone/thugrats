@@ -5,7 +5,7 @@ import { MobManager } from './mobs.js';
 import { Combat } from './combat.js';
 import { Pickups } from './pickups.js';
 import { Pet } from './pet.js';
-import { repForRun } from '../data/account.js';
+import { repForRun, heroXpBonus } from '../data/account.js';
 import { FX } from './fx.js';
 import { Telegraphs } from './telegraphs.js';
 import { buildLoadout, computeStats, AbilityInst } from './stats.js';
@@ -88,6 +88,8 @@ export class Run {
     this.log = new RunLog(this); // playtest recorder (runlog.js)
     this.gearDrops = []; // pieces dropped by Crime Titans this run
     this.counters = {}; // per-run counters for talents / set bonuses (every Nth shot...)
+    // hero resource (Rage, Focus...): hero.resource = {id, name, icon, color, max, start?, decay?, decayDelay?, tick?(run, dt)}
+    this.res = hero.resource ? { ...hero.resource, value: hero.resource.start ?? 0, idle: 0 } : null;
     this.procDepth = 0;
 
     this.loadout = buildLoadout(hero);
@@ -109,7 +111,7 @@ export class Run {
 
     // after the first ascension you pick your starting ability in the hideout
     const prof = Save.hero(hero.id);
-    this.startId = (prof.asc > 0 && hero.abilities.some((a) => a.id === prof.startAbility)) ? prof.startAbility : hero.start;
+    this.startId = (prof.asc > 0 && hero.abilities.some((a) => a.id === prof.startAbility && !a.noStart)) ? prof.startAbility : hero.start;
     this.addAbility(hero.abilities.find((a) => a.id === this.startId));
     if (this.flags.startFrenzy) this.addAbility(hero.abilities.find((a) => a.id === 'frenzy'));
     if (this.flags.godfather) this.combat.spawnGoon({ permanent: true, ability: null });
@@ -131,6 +133,20 @@ export class Run {
   findItem(id) { return this.allItems().find((i) => i.def.id === id); }
   abilityById(id) { return this.abilities.find((a) => a.def.id === id); }
   later(t, fn) { this.timers.push({ t, fn }); }
+  /** Add to the hero's resource meter (Rage, Focus...). */
+  gainRes(n) {
+    const r = this.res;
+    if (!r || n <= 0) return;
+    r.value = Math.min(r.max, r.value + n);
+    r.idle = 0;
+  }
+  /** Spend from the resource meter; false (nothing spent) if there isn't enough. */
+  spendRes(n) {
+    const r = this.res;
+    if (!r || r.value < n) return false;
+    r.value -= n;
+    return true;
+  }
   /** Count up a named counter; true every `n`th call (set bonuses like "every 10th shot"). */
   every(key, n) {
     const c = (this.counters[key] = (this.counters[key] ?? 0) + 1);
@@ -350,7 +366,7 @@ export class Run {
       if (def.final) {
         // the clear is banked now; the run goes on until you evacuate (or don't make it)
         this.clearedAt = this.time;
-        Save.recordClear(this.map.id, this.diffIndex);
+        Save.recordClear(this.hero.id, this.map.id, this.diffIndex);
         this.ui.banner(`${def.name} has fallen!`, 'Map cleared — evac chopper inbound');
         this.toast('🚁 Get to the chopper (H on the minimap) to get out with a bonus — or stay and see how long you last against the Feds.');
         sfx('victory');
@@ -745,6 +761,12 @@ export class Run {
     }
     for (const it of this.allItems()) it.def.tick?.(this, it, dt);
     this.leech = 0;
+    if (this.res) {
+      const r = this.res;
+      r.idle += dt;
+      if (r.decay && r.idle > (r.decayDelay ?? 2)) r.value = Math.max(0, r.value - r.decay * dt);
+      r.tick?.(this, dt);
+    }
 
     this.updateDirector(dt);
     this.updateTitans(dt);
@@ -789,7 +811,7 @@ export class Run {
     const bonus = evac ? EVAC_BONUS : 1;
     const d = this.diff;
     const mins = this.time / 60;
-    const heroXp = Math.round((this.kills * 0.5 + mins * 25 + this.bossKills * 60 + this.titanKills * 150 + (victory ? 300 : 0)) * d.heroXp * bonus);
+    const heroXp = Math.round((this.kills * 0.5 + mins * 25 + this.bossKills * 60 + this.titanKills * 150 + (victory ? 300 : 0)) * d.heroXp * bonus * (1 + heroXpBonus(Save.acct('hero_training'))));
     const before = Save.hero(this.hero.id).level;
     const levels = Save.addHeroXp(this.hero.id, heroXp);
     Save.recordRun(this.hero.id, this.kills);

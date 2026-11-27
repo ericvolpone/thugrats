@@ -1,9 +1,9 @@
-import { freeCast, explodeAt, fireAt, boltFrom } from '../common.js';
+import { freeCast, boltFrom, ringShot, addStatus, statusN, tint } from '../common.js';
 
 /**
  * Lenny's talent tree. 3 branches × 8 rows. Row r needs 3·r points already
  * spent in that branch. One point per hero level (49 at level 50).
- * Rows 6-8 are pairing talents: `pair` names the partner ability that must be
+ * Rows 5-7 are pairing talents: `pair` names the partner ability that must be
  * in your run for them to do anything (see ctx.link).
  *
  * apply(ctx, rank) runs at the start of every run:
@@ -16,8 +16,8 @@ import { freeCast, explodeAt, fireAt, boltFrom } from '../common.js';
  */
 export const LENNY_TREES = [
   { id: 'trigger', name: 'Trigger Man', icon: '🔫', color: '#ff6b5a', blurb: 'Guns, crits and a whole lot of lead.' },
-  { id: 'demo', name: 'Demolitions', icon: '💣', color: '#ffb02e', blurb: 'Explosives, fire, collateral damage.' },
-  { id: 'family', name: 'Family Business', icon: '🤵', color: '#6fd0ff', blurb: 'Money, luck, and friends who owe you favours.' },
+  { id: 'rackets', name: 'Racketeering', icon: '🤝', color: '#f2c037', blurb: 'Clout, shakedowns and fear. Gold is power.' },
+  { id: 'family', name: 'Family Business', icon: '🤵', color: '#6fd0ff', blurb: 'Luck, the crew, and friends who owe you favours.' },
 ];
 
 export const LENNY_TALENTS = [
@@ -58,35 +58,48 @@ export const LENNY_TALENTS = [
       }, { icd: 0.5 });
     } },
 
-  // ── Demolitions ──
-  { id: 'big_boom', tree: 'demo', row: 0, col: 0, max: 5, name: 'Big Boom', icon: '💥',
-    desc: (r) => `Explosive abilities have +${5 * r}% area.`, apply: (c, r) => c.abil('#explosive', 'area', 'pct', 5 * r) },
-  { id: 'short_fuse', tree: 'demo', row: 0, col: 2, max: 3, name: 'Short Fuse', icon: '⏱️',
-    desc: (r) => `Explosive and thrown abilities get +${5 * r}% Recharge Rate.`, apply: (c, r) => { c.abil('#explosive', 'cooldown', 'pct', 5 * r); c.abil('#thrown', 'cooldown', 'pct', 5 * r); } },
-  { id: 'shrapnel', tree: 'demo', row: 1, col: 0, max: 3, name: 'Shrapnel', icon: '🔩',
-    desc: (r) => `Explosions throw ${2 * r} pieces of shrapnel.`, apply: (c, r) => c.flag('shrapnel', 2 * r) },
-  { id: 'pyromaniac', tree: 'demo', row: 1, col: 2, max: 2, name: 'Pyromaniac', icon: '🔥',
-    desc: (r) => `Burns deal +${25 * r}% damage.`, apply: (c, r) => c.stat('burnDmg', 0.25 * r) },
-  { id: 'cluster_bomb', tree: 'demo', row: 2, col: 0, max: 1, name: 'Cluster Bomb', icon: '🍍',
-    desc: () => 'Pineapples split into 3 mini-grenades when they explode.', apply: (c) => c.flag('clusterBomb', true) },
-  { id: 'blast_proof', tree: 'demo', row: 2, col: 2, max: 3, name: 'Blast-Proof Onesie', icon: '🧷',
-    desc: (r) => `Take ${4 * r}% less damage.`, apply: (c, r) => c.stat('armor', 0.04 * r) },
-  { id: 'chain_reaction', tree: 'demo', row: 3, col: 1, max: 3, name: 'Chain Reaction', icon: '⛓️',
-    desc: (r) => `Thugs killed by explosions have a ${10 * r}% chance to explode too.`, apply: (c, r) => c.flag('chainReaction', 0.1 * r) },
-  { id: 'demolition_man', tree: 'demo', row: 4, col: 1, max: 1, name: 'Explosive Rounds', icon: '🧨', capstone: true,
-    desc: () => 'Snub-Nose bullets explode on impact for 45% damage in a small area.', apply: (c) => c.flag('explosiveRounds', true) },
-  { id: 'cocktail_hour', tree: 'demo', row: 5, col: 0, max: 3, name: 'Cocktail Hour', icon: '🍸', pair: 'molotov',
-    desc: (r) => `Pineapple explosions have a ${15 * r}% chance to leave a burning Molotov puddle.`,
-    apply: (c, r) => c.link('pineapple', 'molotov', 'explode', 0.15 * r, (run, p, ev) => fireAt(run, p, ev.x, ev.z, { r: p.stat('area') * 0.8, life: p.stat('duration') * 0.6 }), { icd: 0.3 }) },
-  { id: 'concrete_mix', tree: 'demo', row: 5, col: 2, max: 3, name: 'Concrete Mix', icon: '🧱', pair: 'cement',
-    desc: (r) => `Thugs rooted or slowed take +${12 * r}% damage from explosives (needs Cement Shoes in the run).`,
-    apply: (c, r) => c.amp((run, m, a) => ((m.rootT > 0 || m.slowT > 0) && a?.def?.tags?.includes('explosive') && run.abilityById('cement') ? 0.12 * r : 0)) },
-  { id: 'getaway_car', tree: 'demo', row: 6, col: 1, max: 3, name: 'Getaway Car', icon: '🚙', pair: 'dynamite',
-    desc: (r) => `Drive-By hits have a ${15 * r}% chance to drop a live Dynamite bundle on the thug (Dynamite's damage, doesn't count toward its trap limit).`,
-    apply: (c, r) => c.link('driveby', 'dynamite', 'hit', 0.15 * r, (run, p, ev) => run.trap({ x: ev.x, z: ev.z, ability: p, extra: true, trigger: 1.6, onTrigger: (x, z) => explodeAt(run, p, x, z) }), { icd: 0.15 }) },
-  { id: 'powder_keg', tree: 'demo', row: 7, col: 1, max: 1, name: 'Powder Keg', icon: '🛢️', capstone: true, pair: 'molotov',
-    desc: () => 'Thugs that die while burning (Molotov, fire, ignites) explode, using Molotov\'s damage ×3 in a small blast.',
-    apply: (c) => c.link('*', 'molotov', 'kill', (run, ev) => (ev.src?.def?.tags?.includes('fire') || ev.m.burnT > 0 ? 1 : 0), (run, p, ev) => explodeAt(run, p, ev.x, ev.z, { dmg: 3, area: 0.9 }), { icd: 0.08 }) },
+  // ── Racketeering (Clout = gold held, Protection Racket, Make an Example) ──
+  { id: 'deep_pockets', tree: 'rackets', row: 0, col: 0, max: 5, name: 'Deep Pockets', icon: '👛',
+    desc: (r) => `Clout counts ${40 * r} more gold (max Clout +${4 * r}%).`, apply: (c, r) => c.flagAdd('cloutCap', 40 * r) },
+  { id: 'collection_day', tree: 'rackets', row: 0, col: 2, max: 3, name: 'Collection Day', icon: '📒',
+    desc: (r) => `Protection Racket: +${20 * r}% coin chance and +${8 * r}% radius.`,
+    apply: (c, r) => { c.abil('racket', 'payout', 'pct', 20 * r); c.abil('racket', 'area', 'pct', 8 * r); } },
+  { id: 'intimidation', tree: 'rackets', row: 1, col: 0, max: 3, name: 'Intimidation', icon: '😠',
+    desc: (r) => `Make an Example +${10 * r}% area, and terror lasts ${(0.4 * r).toFixed(1)}s longer.`,
+    apply: (c, r) => { c.abil('make_example', 'area', 'pct', 10 * r); c.flagAdd('terrorDur', 0.4 * r); } },
+  { id: 'hush_money', tree: 'rackets', row: 1, col: 2, max: 2, name: 'Hush Money', icon: '🤫',
+    desc: (r) => `When you get hit holding 10+ gold, pay 1 gold and heal back ${25 * r}% of the hit (once per second).`,
+    apply: (c, r) => c.link('*', null, 'hurt', (run, ev) => (run.gold >= 10 && ev.dmg > 0 ? 1 : 0), (run, p, ev) => {
+      run.gold -= 1;
+      run.heal(ev.dmg * 0.25 * r);
+      run.fx.number(run.player.x, 2.3, run.player.z, '-1 💰', '#ffd23f');
+    }, { icd: 1 }) },
+  { id: 'public_execution', tree: 'rackets', row: 2, col: 0, max: 1, name: 'Public Execution', icon: '⚰️',
+    desc: () => 'Make an Example executes its example outright if he is under 30% HP (not bosses or titans).', apply: (c) => c.flag('publicExec', true) },
+  { id: 'muscle', tree: 'rackets', row: 2, col: 2, max: 3, name: 'Muscle', icon: '💪',
+    desc: (r) => `Thugs shaken down by Protection Racket take +${4 * r}% more damage.`, apply: (c, r) => c.abil('racket', 'vuln', 'add', 0.04 * r) },
+  { id: 'compound_interest', tree: 'rackets', row: 3, col: 1, max: 3, name: 'Compound Interest', icon: '📈',
+    desc: (r) => `Clout is ${15 * r}% stronger (every 10 gold gives +${(1 + 0.15 * r).toFixed(2)}% damage).`, apply: (c, r) => c.flagAdd('cloutMult', 0.15 * r) },
+  { id: 'untouchable_boss', tree: 'rackets', row: 4, col: 1, max: 1, name: 'Untouchable', icon: '🎩', capstone: true,
+    desc: () => 'Nobody hits the Boss: Clout also cuts the damage you take, up to 12% at full Clout.', apply: (c) => c.flag('cloutArmor', 0.12) },
+  { id: 'pay_up', tree: 'rackets', row: 5, col: 0, max: 3, name: 'Pay Up', icon: '🫴', pair: 'racket',
+    desc: (r) => `Make an Example shakes down everything it hits for ${r + 1}s (Protection Racket's extra damage), and each thug it hits has a ${5 * r}% chance to cough up a coin.`,
+    apply: (c, r) => c.link('make_example', 'racket', 'hit', 1, (run, p, ev) => {
+      if (ev.m.dead) return;
+      addStatus(run, ev.m, 'racket', 1, r + 1, 1);
+      tint(run, ev.m, '#f2c037', r + 1);
+      if (Math.random() < 0.05 * r) run.pickups.coin(ev.m.x, ev.m.z, 1);
+    }, { icd: 0 }) },
+  { id: 'concrete_persuasion', tree: 'rackets', row: 5, col: 2, max: 3, name: 'Concrete Persuasion', icon: '🧱', pair: 'cement',
+    desc: (r) => `Protection Racket pulses have a ${8 * r}% chance to throw a free Cement Shoes at the thickest crowd.`,
+    apply: (c, r) => c.link('racket', 'cement', 'fire', 0.08 * r, (run, p) => freeCast(run, p), { icd: 3 }) },
+  { id: 'collections_run', tree: 'rackets', row: 6, col: 1, max: 3, name: 'Collections Run', icon: '🚙', pair: 'driveby',
+    desc: (r) => `Protection Racket pulses have a ${5 * r}% chance to call in a free Drive-By through the crowd.`,
+    apply: (c, r) => c.link('racket', 'driveby', 'fire', 0.05 * r, (run, p) => freeCast(run, p), { icd: 2 }) },
+  { id: 'the_vig', tree: 'rackets', row: 7, col: 1, max: 1, name: 'The Vig', icon: '💵', capstone: true, pair: 'make_it_rain',
+    desc: () => 'Thugs that die while shaken down burst into 6 golden bills that fly outward (Make It Rain\'s damage ×2 each).',
+    apply: (c) => c.link('*', 'make_it_rain', 'kill', (run, ev) => (statusN(run, ev.m, 'racket') ? 1 : 0),
+      (run, p, ev) => ringShot(run, p, ev.x, ev.z, 6, p.stat('damage') * 2, '#ffd700'), { icd: 0.25 }) },
 
   // ── Family Business ──
   { id: 'thick_diaper', tree: 'family', row: 0, col: 0, max: 5, name: 'Thick Diaper', icon: '🧻',
@@ -95,23 +108,21 @@ export const LENNY_TALENTS = [
     desc: (r) => `+${10 * r}% gold, start runs with ${15 * r} gold.`, apply: (c, r) => { c.stat('goldGain', 0.1 * r); c.stat('startGold', 15 * r); } },
   { id: 'lucky_charm', tree: 'family', row: 1, col: 0, max: 3, name: 'Lucky Rabbit Foot', icon: '🐇',
     desc: (r) => `+${6 * r} luck.`, apply: (c, r) => c.stat('luck', 6 * r) },
-  { id: 'sticky_fingers', tree: 'family', row: 1, col: 2, max: 2, name: 'Sticky Fingers', icon: '🧲',
-    desc: (r) => `+${25 * r}% pickup range.`, apply: (c, r) => c.stat('pickupPct', 0.25 * r) },
+  { id: 'button_men', tree: 'family', row: 1, col: 2, max: 2, name: 'Button Men', icon: '🕴️',
+    desc: (r) => `Made Men deal +${15 * r}% damage and stay ${(1.5 * r).toFixed(1)}s longer.`,
+    apply: (c, r) => { c.abil('made_men', 'damage', 'pct', 15 * r); c.abil('made_men', 'duration', 'add', 1.5 * r); } },
   { id: 'connections', tree: 'family', row: 2, col: 0, max: 1, name: 'Connections', icon: '📞',
     desc: () => '+2 rerolls per run and chests cost 25% less.', apply: (c) => { c.stat('rerolls', 2); c.stat('chestDiscount', 0.25); } },
   { id: 'nap_time', tree: 'family', row: 2, col: 2, max: 3, name: 'Nap Time', icon: '😴',
     desc: (r) => `+${(0.4 * r).toFixed(1)} HP regen per second.`, apply: (c, r) => c.stat('regen', 0.4 * r) },
-  { id: 'street_smarts', tree: 'family', row: 3, col: 1, max: 3, name: 'Street Smarts', icon: '🧠',
-    desc: (r) => `+${6 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.06 * r) },
+  { id: 'owed_favours', tree: 'family', row: 3, col: 1, max: 3, name: 'Owed Favours', icon: '📇',
+    desc: (r) => `Favours (Hired Goon, Drive-By, Hit Contract) get +${6 * r}% Recharge Rate.`,
+    apply: (c, r) => { for (const id of ['goon', 'driveby', 'contract']) c.abil(id, 'cooldown', 'pct', 6 * r); } },
   { id: 'godfather', tree: 'family', row: 4, col: 1, max: 1, name: 'The Godfather', icon: '🤵', capstone: true,
     desc: () => 'A permanent bodyguard follows you all run. Hired Goon upgrades make him stronger.', apply: (c) => c.flag('godfather', true) },
-  { id: 'overtime', tree: 'family', row: 5, col: 0, max: 3, name: 'Overtime', icon: '⏰', pair: 'tantrum',
-    desc: (r) => `Hired Goon hits have a ${6 * r}% chance to throw a Tantrum where they land (Tantrum's damage, 70% of its size).`,
-    apply: (c, r) => c.link('goon', 'tantrum', 'hit', 0.06 * r, (run, p, ev) => {
-      const rr = p.stat('area') * 0.7;
-      for (const m of run.mobs.near(ev.x, ev.z, rr)) run.hit(m, p.stat('damage'), p, { knock: p.stat('knock'), fromX: ev.x, fromZ: ev.z });
-      run.fx.ring(ev.x, ev.z, rr, '#ffffff', 0.35);
-    }, { icd: 0.5 }) },
+  { id: 'overtime', tree: 'family', row: 5, col: 0, max: 3, name: 'Overtime', icon: '⏰', pair: 'make_example',
+    desc: (r) => `Hired Goon hits have a ${6 * r}% chance to Make an Example where they land (70% of its damage and size, terrifies).`,
+    apply: (c, r) => c.link('goon', 'make_example', 'hit', 0.06 * r, (run, p, ev) => p.def.example(run, p, ev.x, ev.z, 0.7), { icd: 0.5 }) },
   { id: 'money_talks', tree: 'family', row: 5, col: 2, max: 3, name: 'Money Talks', icon: '💰', pair: 'frenzy',
     desc: (r) => `Make It Rain kills add ${(0.2 * r).toFixed(1)}s to Frenzy, or start a 2s Frenzy if it isn't up.`,
     apply: (c, r) => c.link('make_it_rain', 'frenzy', 'kill', 1, (run, p) => {
@@ -119,11 +130,11 @@ export const LENNY_TALENTS = [
       if (b) b.t = Math.min(b.max + 3, b.t + 0.2 * r);
       else run.buffs.frenzy = { t: 2, max: 2, power: p.stat('power') };
     }, { icd: 0.1 }) },
-  { id: 'shakedown', tree: 'family', row: 6, col: 1, max: 3, name: 'Shakedown', icon: '🤑', pair: 'make_it_rain',
-    desc: (r) => `Tantrum flings ${2 * r} extra cash stacks that orbit you for 5s (Make It Rain's damage).`,
-    apply: (c, r) => c.link('tantrum', 'make_it_rain', 'fire', 1, (run, p) => run.orbit({ ...p.def.aura, ability: p, life: 5, count: 2 * r, r: p.stat('area') * 1.35, spin: -3 })) },
+  { id: 'flash_the_cash', tree: 'family', row: 6, col: 1, max: 3, name: 'Flash the Cash', icon: '🤑', pair: 'make_it_rain',
+    desc: (r) => `Make an Example flings ${2 * r} extra cash stacks that orbit you for 5s (Make It Rain's damage).`,
+    apply: (c, r) => c.link('make_example', 'make_it_rain', 'fire', 1, (run, p) => run.orbit({ ...p.def.aura, ability: p, life: 5, count: 2 * r, r: p.stat('area') * 1.35, spin: -3 })) },
   { id: 'family_reunion', tree: 'family', row: 7, col: 1, max: 1, name: 'Family Reunion', icon: '👨‍👦‍👦', capstone: true, pair: 'goon',
-    desc: () => 'Hired Goon calls one more cousin, and every time your Snub-Nose fires, each goon takes a shot too (Snub-Nose damage).',
+    desc: () => 'Hired Goon calls one more cousin, and every time your Snub-Nose fires, every goon (Hired Goons, Made Men, bodyguards) takes a shot too (Snub-Nose damage).',
     apply: (c) => {
       c.abil('goon', 'count', 'add', 1);
       c.link('pistol', 'goon', 'fire', 1, (run, p, ev) => {

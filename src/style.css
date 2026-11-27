@@ -442,3 +442,11 @@ body.hl-lift .hud-bottom { z-index: 41; }
 .gg-pc.locked { filter: grayscale(1) brightness(0.5); font-size: 14px; }
 .gg-pc.worn { box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(242,192,55,0.5); }
 .gg-pc.sel { outline: 2px solid #fff; outline-offset: 1px; }
+
+.pips-n { font-size: 11px; color: #c9a6ff; font-family: 'Lilita One'; }
+
+/* hero resource meter (Rage, Focus, Marks...) */
+#resbar { position: relative; height: 16px; margin-top: 4px; background: rgba(0,0,0,0.6); border-radius: 8px; overflow: hidden; border: 2px solid rgba(0,0,0,0.5); }
+#resbar i { position: absolute; inset: 0; width: 0; transition: width 0.1s; }
+#resbar span { position: absolute; inset: 0; text-align: center; font: 12px/13px 'Lilita One'; color: #fff; text-shadow: 0 1px 2px #000; }
+#resbar.full { box-shadow: 0 0 10px rgba(255,255,255,0.6); }

@@ -2,7 +2,8 @@
  * Boom-Boom's gear sets: one per map, dropped by that map's Crime Titans (see
  * data/gear.js). Bonuses at 2 / 3 / 5 pieces worn; k (×1 → ×2) grows with the
  * average tier of the pieces you wear from the set.
- * 5-piece behaviours live in heroes/boom/abilities.js behind run.flags.
+ * 5-piece behaviours live in heroes/boom/abilities.js behind run.flags (Fuse Box's
+ * split charges also join the chain).
  */
 const r = (v) => Math.round(v);
 
@@ -15,7 +16,7 @@ export const BOOM_GEAR = [
         apply: (c, k) => { c.abil('dynamite_stick', 'damage', 'pct', 25 * k); c.abil('pipe_bomb', 'damage', 'pct', 25 * k); } },
       3: { desc: () => 'Stick of Dynamite throws +1 stick and Pipe Bomb blasts are 25% bigger.',
         apply: (c) => { c.abil('dynamite_stick', 'count', 'add', 1); c.abil('pipe_bomb', 'area', 'pct', 25); } },
-      5: { desc: (k) => `Split Fuse: every Dynamite stick and Pipe Bomb splits in 2 when it goes off. The second charge hops a few metres away and blows for ${r(50 * k)}% damage.`,
+      5: { desc: (k) => `Split Fuse: every Dynamite stick and Pipe Bomb splits in 2 when it goes off. The second charge hops a few metres away, fizzes, and blows for ${r(50 * k)}% damage (a nearby blast sets it off early).`,
         apply: (c, k) => c.flag('fuseSplit', 0.5 * k) },
     },
   },
@@ -45,14 +46,14 @@ export const BOOM_GEAR = [
     },
   },
   {
-    id: 'paper_lantern', map: 'chinatown', name: 'Paper Lantern', icon: '🏮', focus: '#fire', focusName: 'Napalm & Gas Can',
+    id: 'paper_lantern', map: 'chinatown', name: 'Paper Lantern', icon: '🏮', focus: 'napalm', focusName: 'Napalm Jar',
     pieces: ['Lantern Hat', 'Joss-Stick Mittens', 'Red Silk Bib', 'Firecracker-Red Diaper', 'Dragon-Dance Booties'],
     bonus: {
       2: { desc: (k) => `Fire abilities +${r(30 * k)}% damage.`, apply: (c, k) => c.abil('#fire', 'damage', 'pct', 30 * k) },
-      3: { desc: () => 'Napalm and Gas Can puddles are 20% bigger and slow thugs in them by 25%.',
-        apply: (c) => { c.abil('#fire', 'area', 'pct', 20); c.flag('lanternSlow', 0.25); } },
-      5: { desc: (k) => `Wildfire: Napalm and Gas Can set thugs alight (they keep burning for 2s at ${r(60 * k)}% of the puddle's damage), and burning thugs spread the flames to a neighbour.`,
-        apply: (c, k) => c.flag('fireSpread', 0.6 * k) },
+      3: { desc: () => 'Napalm Jar rolls on for +2 trail puddles, and its puddles slow thugs in them by 25%.',
+        apply: (c) => { c.abil('napalm', 'count', 'add', 2); c.flag('lanternSlow', 0.25); } },
+      5: { desc: (k) => `Wildfire: Napalm sets thugs alight ${r(15 * k)}% hotter, and burning thugs spread the flames twice as often, to twice as many neighbours, at up to 90% strength.`,
+        apply: (c, k) => c.flag('fireSpread', 0.15 * k) },
     },
   },
   {

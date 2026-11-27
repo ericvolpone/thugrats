@@ -5,7 +5,8 @@ import { boltFrom } from '../common.js';
  * data/gear.js). Bonuses at 2 / 3 / 5 pieces worn; k (×1 → ×2) grows with the
  * average tier of the pieces you wear from the set. The 5-piece behaviours are
  * flags read in ghost/abilities.js (execChain, trapRearm, knifeReturn,
- * cloakOutCrit) or links (Fun House Mirror).
+ * cloakOutCrit, and the Mark flags cashCd / trapMarks in talents.js) or links
+ * (Fun House Mirror).
  */
 const r = (v) => Math.round(v);
 
@@ -16,9 +17,9 @@ export const GHOST_GEAR = [
     bonus: {
       2: { desc: (k) => `Garrote +${r(25 * k)}% Recharge Rate and +${r(20 * k)}% reach.`,
         apply: (c, k) => { c.abil('garrote', 'cooldown', 'pct', 25 * k); c.abil('garrote', 'range', 'pct', 20 * k); } },
-      3: { desc: () => 'Garrote executes 5% higher, and every execute heals 4 HP.',
-        apply: (c) => { c.abil('garrote', 'execute', 'add', 0.05); c.stat('execHeal', 4); } },
-      5: { desc: (k) => `Executes chain: a Garrote execute slips on to up to ${r(1 + k)} more wounded regular thugs in reach and executes them too.`,
+      3: { desc: () => 'Garrote executes 5% higher and every execute heals 4 HP. Each Mark cashed in takes 0.15s off that ability\'s cooldown.',
+        apply: (c) => { c.abil('garrote', 'execute', 'add', 0.05); c.stat('execHeal', 4); c.flagAdd('cashCd', 0.15); } },
+      5: { desc: (k) => `Executes chain: a Garrote execute slips on to up to ${r(1 + k)} more thugs in reach under the execute line (their Marks count) and executes them too.`,
         apply: (c, k) => c.flag('execChain', r(1 + k)) },
     },
   },
@@ -28,8 +29,8 @@ export const GHOST_GEAR = [
     bonus: {
       2: { desc: (k) => `Traps (Tripwire, Caltrops) +${r(25 * k)}% area and +${r(20 * k)}% duration.`,
         apply: (c, k) => { c.abil('#trap', 'area', 'pct', 25 * k); c.abil('#trap', 'duration', 'pct', 20 * k); } },
-      3: { desc: () => 'Tripwires arm instantly and spring from 50% farther away. +1 Tripwire.',
-        apply: (c) => { c.flag('quickTraps', 1.5); c.abil('tripwire', 'count', 'add', 1); } },
+      3: { desc: () => 'Tripwires arm instantly and spring from 50% farther away. +1 Tripwire. Traps leave one more Mark each time they Mark a thug.',
+        apply: (c) => { c.flag('quickTraps', 1.5); c.abil('tripwire', 'count', 'add', 1); c.flagAdd('trapMarks', 1); } },
       5: { desc: (k) => `Traps re-arm once: a sprung Tripwire strings itself again and spent Caltrops re-scatter, the second time for +${r(50 * k)}% damage.`,
         apply: (c, k) => c.flag('trapRearm', 0.5 * k) },
     },
@@ -78,7 +79,7 @@ export const GHOST_GEAR = [
           for (const d of run.combat.decoys) if ((m.x - d.x) ** 2 + (m.z - d.z) ** 2 < 16) return 0.2;
           return 0;
         }) },
-      5: { desc: (k) => `Mirror images: whenever a projectile ability fires (Pistol, Knives, Darts), every Decoy fires a copy at the nearest thug for ${r(50 * k)}% of its damage.`,
+      5: { desc: (k) => `Mirror images: whenever a projectile ability fires (Knives, Darts), every Decoy fires a copy at the nearest thug for ${r(50 * k)}% of its damage.`,
         apply: (c, k) => c.link('#projectile', null, 'fire', 1, (run, p, ev) => {
           const a = ev.src;
           for (const d of run.combat.decoys) boltFrom(run, a, d.x, d.z, { dmg: a.stat('damage') * 0.5 * k, range: 10, color: '#ffd98a' });

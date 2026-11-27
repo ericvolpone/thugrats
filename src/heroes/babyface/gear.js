@@ -14,22 +14,23 @@ export const BABYFACE_GEAR = [
     pieces: ['White Fedora', 'Kid-Leather Mittens', 'Pinstripe Bib', 'Double-Breasted Diaper', 'Two-Tone Booties'],
     bonus: {
       2: { desc: (k) => `Sniper Rifle +${r(30 * k)}% damage.`, apply: (c, k) => c.abil('rifle', 'damage', 'pct', 30 * k) },
-      3: { desc: (k) => `Sniper Rifle pierces +2, and every thug a shot hits makes the rest of that shot deal +${r(20 * k)}% damage.`,
+      3: { desc: (k) => `Sniper Rifle pierces +2, and every thug a shot hits makes the rest of that shot deal +${r(20 * k)}% damage (up to +100%).`,
         apply: (c, k) => { c.abil('rifle', 'pierce', 'add', 2); c.flag('pierceRamp', 0.2 * k); } },
       5: { desc: (k) => `Made Man: once a Sniper Rifle shot runs out of pierce it ricochets to ${r(2 * k)} more thugs.`,
         apply: (c, k) => c.flag('rifleRicochet', r(2 * k)) },
     },
   },
   {
-    id: 'cleanup_crew', map: 'the_docks', name: 'Cleanup Crew', icon: '🧹', focus: '#explosive', focusName: 'Claymore & Car Bomb',
+    // id kept so worn pieces carry over; the set moved from Claymore / Car Bomb to Double Tap
+    id: 'cleanup_crew', map: 'the_docks', name: 'Cleanup Crew', icon: '🧹', focus: 'double_tap', focusName: 'Double Tap',
     pieces: ['Knit Watch Cap', 'Rope-Burn Mittens', 'Rubber Apron Bib', 'Bilge Diaper', 'Wader Booties'],
     bonus: {
-      2: { desc: (k) => `Claymore and Car Bomb +${r(25 * k)}% damage. Claymore +1 max mine.`,
-        apply: (c, k) => { c.abil('#explosive', 'damage', 'pct', 25 * k); c.abil('claymore', 'count', 'add', 1); } },
-      3: { desc: (k) => `Tripped traps root thugs around them for ${(0.8 * k).toFixed(1)}s, and Claymore gets +${r(20 * k)}% Recharge Rate.`,
-        apply: (c, k) => { c.stat('trapRoot', 0.8 * k); c.abil('claymore', 'cooldown', 'pct', 20 * k); } },
-      5: { desc: (k) => `Daisy Chain: when a Claymore or Car Bomb goes off, every Claymore within ${r(6 * k)}m goes off too, one after another. Each link in the chain hits 15% harder.`,
-        apply: (c, k) => { c.flag('trapChain', 6 * k); c.flag('trapChainDmg', 0.15); } },
+      2: { desc: (k) => `Double Tap +${r(30 * k)}% damage and +${r(15 * k)}% Recharge Rate.`,
+        apply: (c, k) => { c.abil('double_tap', 'damage', 'pct', 30 * k); c.abil('double_tap', 'cooldown', 'pct', 15 * k); } },
+      3: { desc: (k) => `Double Tap goes for Spotted thugs when its last target is gone, and every Double Tap hit on a Spotted thug restores ${r(4 * k)} Focus. Spotter +1 target.`,
+        apply: (c, k) => { c.flag('tapSpotted', true); c.flagAdd('tapFocus', r(4 * k)); c.abil('spotter', 'count', 'add', 1); } },
+      5: { desc: (k) => `Confirm the Kill: Double Tap fires a third shot, any Double Tap kill readies the next one within 0.5s, and precision hits on Spotted thugs deal +${r(25 * k)}% more crit damage.`,
+        apply: (c, k) => { c.flag('tapThird', true); c.flag('tapReset', true); c.flagAdd('spotCrit', 0.25 * k); } },
     },
   },
   {
@@ -65,7 +66,7 @@ export const BABYFACE_GEAR = [
     pieces: ['Paper Prize Hat', 'Air-Rifle Mittens', 'Ring-Toss Bib', 'Cotton-Candy Diaper', 'Boardwalk Booties'],
     bonus: {
       2: { desc: (k) => `Trick Shot +${r(30 * k)}% damage.`, apply: (c, k) => c.abil('ricochet', 'damage', 'pct', 30 * k) },
-      3: { desc: (k) => `Every bounce adds +${r(15 * k)}% to the Trick Shot bullet's damage.`, apply: (c, k) => c.flag('trickRamp', 0.15 * k) },
+      3: { desc: (k) => `Every bounce adds +${r(15 * k)}% to the Trick Shot bullet's damage (up to +100%).`, apply: (c, k) => c.flag('trickRamp', 0.15 * k) },
       5: { desc: (k) => `Sharpshooter: Trick Shot +${Math.floor(1 + k)} bounces, and every bounce hit (each thug after the first) is a guaranteed crit.`,
         apply: (c, k) => { c.abil('ricochet', 'bounce', 'add', Math.floor(1 + k)); c.flag('trickCrit', true); } },
     },

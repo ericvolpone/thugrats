@@ -1,11 +1,20 @@
 # Thugrats
 
 A browser roguelite auto-shooter (Megabonk / Azeroth Survivors style) where every
-hero is a baby with a criminal trope. Six playable heroes: **Lenny "Nickles"** (mobster,
-guns), **Tiny Tony Two-Fists** (brute, melee/tank), **Boom-Boom Bianchi** (demolitions),
-**Lucy "The Ghost"** (spy, crits/control), **Babyface Moretti** (hitman, sniper) and
-**Professor Pudding** (mastermind, gadgets/summons). Each has 12-13 abilities, three
-8-row talent trees and five 5-piece gear sets (one per map).
+hero is a baby with a criminal trope and one signature mechanic:
+
+| Hero | Identity | Signature |
+| --- | --- | --- |
+| **Lenny "Nickles"** | The Boss: money and crew | **Clout**: gold you hold powers your abilities |
+| **Tiny Tony Two-Fists** | The Brawler: no guns, ever | **Rage** meter, wall slams, Headlock, Total Meltdown |
+| **Boom-Boom Bianchi** | The Fuse | **Chains**: every blast sets off your placed charges; Detonator |
+| **Lucy "The Ghost"** | The Assassin | **Marks** stack on thugs; Shadow Step / Garrote executes cash them in |
+| **Babyface Moretti** | The Professional | **Focus**: hold it for crits, spend it on Focused shots; Spotter weak spots |
+| **Professor Pudding** | The Mad Scientist | **Reactions**: shock / frozen / acid / pudding combine; shrunk amplifies |
+
+Each has 11–13 abilities, three 8-row talent trees and five 5-piece gear sets (one per
+map). A hero's meter (Clout, Rage, Fuse, Shadow, Focus, Eureka) shows under your HP.
+The design notes are in [docs/hero-identity.md](docs/hero-identity.md).
 
 Three.js (WebGL 2) + Vite. All art is procedural low-poly geometry, swappable for
 Blender `.glb` files at runtime (see [public/models/README.md](public/models/README.md)).
@@ -36,8 +45,11 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
 
 ## The loop
 
-- **Hideout (home screen):** your crew (Lenny + locked teasers), hero level and XP,
-  and tabs for **Play** (maps × difficulty), **Talents**, **Gear** and **Kit**.
+- **Hideout (home screen):** your crew, hero level and XP, and tabs for **Play**
+  (maps × difficulty), **Talents**, **Gear**, **Kit** and **Rep**.
+- **Progress is per hero:** every hero clears each map and difficulty on their own
+  (clearing a map unlocks its next difficulty and the next map for that hero), so each
+  hero farms their own gear sets from the start.
 - **A run:** start with one ability. Mobs pour in from every side and walk at you.
   Kills drop XP gems and gold. Each level gives +3 max HP, +1% damage, +1 luck and
   three cards, each about a **different** ability: a new one (up to 5) or an upgrade
@@ -101,7 +113,9 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
 - **Rep (account-wide):** every run earns Rep (time survived, bosses, titans, clears,
   difficulty). Spend it in the hideout's **Rep** tab: adopt **Biscuit the Bulldog**,
   who ignores walls and fetches magnets, gems and gold far outside your pickup range (upgrade his leash and
-  speed), and buy up to +50% run XP, +50% run gold and +20% move speed.
+  speed), buy up to +50% run XP, +50% run gold and +20% move speed, and rank up
+  **Family Training** without limit: +5% hero XP per rank for every hero (100 Rep,
+  each rank 10% pricier than the last).
 - **After the run:** hero XP → hero levels → talent points (one per level, 49 at
   level 50).
 - **Ascension:** heroes cap at level 50. At 50 the hideout offers **Ascend**: back to
@@ -111,7 +125,7 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
   is planned for ascension levels.
 - **Talents:** 3 trees × 8 rows, about 93 ranks per hero, so 49 points means real
   choices. Rows 6–8 are **pairing talents** (🔗): one ability sets off another (Snub-Nose
-  hits fire a free Typewriter burst, Pineapples leave Molotov puddles...), so they only
+  hits fire a free Typewriter burst, Racket pulses call a Drive-By...), so they only
   work in runs where you take both. Procs use the partner's own stats, so leveling the
   pair pays off twice, and their damage shows under the partner in the meter.
 - **Gear (per hero):** five slots (Hat, Mittens, Bib, Diaper, Booties). Every hero has
@@ -156,24 +170,24 @@ stop making progress) they follow a flow field around buildings and fences
 | 🔫 Snub-Nose .38 (start) | Shoots the toughest thug in range |
 | 😤 Frenzy | Fire-rate buff; all other cooldowns tick faster while it lasts |
 | 💥 Hollow Point | Huge piercing slug at the biggest target |
-| 🍍 Pineapple | Grenade into the densest crowd |
 | 🎻 Chicago Typewriter | Tommy-gun cone burst |
-| 🍾 Molotov | Burning puddle |
+| 🤝 Protection Racket | Aura that shakes thugs down: slowed, take more damage, pay out coins |
+| 😠 Make an Example | Wallops the toughest thug nearby; everyone around is terrified |
 | 🪣 Cement Shoes | Roots, then slows an area |
-| 🚗 Drive-By | Cousin Sal's sedan ploughs through a crowd |
-| 🧨 Dynamite Trap | Proximity mines dropped at your feet |
-| 😭 Tantrum | Point-blank shockwave + knockback |
-| 🏏 Hired Goon | A bat-wielding cousin fights for a while |
+| 🏏 Hired Goon | A bat-wielding cousin fights for a while (a favour) |
+| 🕴️ Made Men | Two suited goons with pistols hang back and shoot |
+| 🚗 Drive-By | Cousin Sal's sedan ploughs through a crowd (a favour) |
 | 💸 Make It Rain | Always-on aura of orbiting cash |
-| 📜 Hit Contract | Marks the biggest target; a sniper collects |
+| 📜 Hit Contract | Marks the biggest target; a sniper collects (a favour) |
 
-**Talents:** Trigger Man (guns → *Akimbo*, pairs into *Marked for Death*), Demolitions
-(explosives → *Explosive Rounds*, pairs into *Powder Keg*), Family Business
-(economy/survival → *The Godfather*, pairs into *Family Reunion*).
-**Gear sets:** The Don's Finest (Little Italy, Snub-Nose: golden bullets), Longshoreman
-(The Docks, explosives leave fire), High Roller (Casino Row, Make It Rain scales with
-gold), Tong Enforcer (Chinatown, Tantrum fires a ring of bullets), Carnival Crew (Coney
-Island, two permanent goons).
+**Clout:** every 10 gold held gives +1% damage (favours 1.5×), up to a cap talents raise.
+**Talents:** Trigger Man (guns → *Akimbo*, *Marked for Death*), Racketeering (Clout,
+shakedowns and fear → *Untouchable*, *The Vig*), Family Business (the crew → *The
+Godfather*, *Family Reunion*).
+**Gear sets:** The Don's Finest (Little Italy, Snub-Nose: golden bullets), Dockworkers'
+Union (The Docks, Protection Racket), High Roller (Casino Row, Make It Rain scales with
+gold), Tong Enforcer (Chinatown, Make an Example fires a ring of bullets), Carnival Crew
+(Coney Island, two permanent goons).
 
 ## Code map
 

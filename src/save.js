@@ -9,9 +9,12 @@ const KEY = 'thugrats.save.v1';
  * asc (ascension level), tokens (gear upgrade tokens), gear {pieceId: tier 0..4},
  * equip {slot: pieceId}, startAbility (chosen after the first ascension).
  */
-const blankHero = () => ({ level: 1, xp: 0, peak: 1, asc: 0, tokens: 0, talents: {}, gear: {}, equip: {}, startAbility: null, runs: 0, bestKills: 0 });
+const blankHero = () => ({ level: 1, xp: 0, peak: 1, asc: 0, tokens: 0, talents: {}, gear: {}, equip: {}, clears: {}, startAbility: null, runs: 0, bestKills: 0 });
 
-/** v1 -> v2: old gear retired (no refund); ascension fields added. */
+/** v1 -> v2: old gear retired (no refund); ascension fields added.
+ *  v2 -> v3: hero identity rework. Every hero starts over (levels, talents, gear,
+ *  clears, ascension); Rep and the Rep upgrades you bought are kept. Map clears
+ *  are per hero from now on. */
 function migrate(raw) {
   if (raw.v === 1) {
     for (const h of Object.values(raw.heroes ?? {})) {
@@ -23,15 +26,20 @@ function migrate(raw) {
     }
     raw.v = 2;
   }
+  if (raw.v === 2) {
+    raw.heroes = {};
+    raw.clears = {};
+    raw.v = 3;
+  }
   return raw;
 }
 
 function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (raw && (raw.v === 1 || raw.v === 2)) return { rep: 0, repTotal: 0, account: {}, ...migrate(raw) };
+    if (raw && raw.v >= 1 && raw.v <= 3) return { rep: 0, repTotal: 0, account: {}, ...migrate(raw) };
   } catch { /* corrupt or blocked storage */ }
-  return { v: 2, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: { sfx: 0.8, music: 0.5, shake: true } };
+  return { v: 3, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: { sfx: 0.8, music: 0.5, shake: true } };
 }
 
 let data = load();
@@ -57,7 +65,7 @@ export const Save = {
   hero(id) {
     if (!data.heroes[id]) data.heroes[id] = blankHero();
     const h = data.heroes[id];
-    h.gear ??= {}; h.equip ??= {}; h.asc ??= 0; h.tokens ??= 0; h.peak ??= h.level;
+    h.gear ??= {}; h.equip ??= {}; h.clears ??= {}; h.asc ??= 0; h.tokens ??= 0; h.peak ??= h.level;
     return h;
   },
   /** Returns the number of levels gained. */
@@ -140,13 +148,20 @@ export const Save = {
     write();
   },
   /** clears[mapId] = highest difficulty index cleared (any hero) */
-  bestClear(mapId) {
-    return data.clears[mapId] ?? -1;
+  /** Highest difficulty this hero has cleared on a map (-1 = never). Progress is per hero. */
+  bestClear(heroId, mapId) {
+    return this.hero(heroId).clears[mapId] ?? -1;
   },
-  recordClear(mapId, diff) {
-    data.clears[mapId] = Math.max(this.bestClear(mapId), diff);
+  recordClear(heroId, mapId, diff) {
+    const h = this.hero(heroId);
+    h.clears[mapId] = Math.max(this.bestClear(heroId, mapId), diff);
     write();
   },
+  /** Any hero's best clear on a map (account-wide, old behaviour). */
+  anyClear(mapId) {
+    return data.clears[mapId] ?? -1;
+  },
+
   recordRun(heroId, kills) {
     const h = this.hero(heroId);
     h.runs++;
@@ -176,7 +191,7 @@ export const Save = {
   settings() { return data.settings; },
   saveSettings() { write(); },
   wipe() {
-    data = { v: 2, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: data.settings };
+    data = { v: 3, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: data.settings };
     write();
   },
   write,

@@ -246,6 +246,16 @@ export class Hud {
     hp.querySelector('i').style.width = `${(p.hp / s.maxHp) * 100}%`;
     hp.querySelector('b').style.width = `${Math.min(100, (p.shield / s.maxHp) * 100)}%`;
     hp.querySelector('span').textContent = `${Math.ceil(p.hp)} / ${Math.round(s.maxHp)}${p.shield > 0 ? ` (+${Math.ceil(p.shield)})` : ''}`;
+    const rb = this.$('resbar');
+    rb.classList.toggle('hidden', !r.res);
+    if (r.res) {
+      const k = r.res.value / r.res.max;
+      rb.querySelector('i').style.width = `${k * 100}%`;
+      rb.querySelector('i').style.background = r.res.color;
+      rb.classList.toggle('full', k >= 0.999);
+      rb.querySelector('span').textContent = `${r.res.icon} ${r.res.name} ${Math.floor(r.res.value)} / ${r.res.max}`;
+      rb.title = r.res.desc ?? '';
+    }
     this.$('hud-gold').textContent = `💰 ${Math.floor(r.gold)}`;
     const cc = this.$('hud-chest'), cost = r.chestCost();
     cc.textContent = `📦 ${cost}`;

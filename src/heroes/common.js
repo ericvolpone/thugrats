@@ -2,6 +2,8 @@
  * Shared upgrade builders for every hero's ability kit (see heroes/lenny/abilities.js
  * for what the fields mean).
  */
+import * as THREE from 'three';
+
 export const pctUp = (stat, label, v, fmt) => ({ stat, label, kind: 'pct', v, fmt });
 export const scUp = (stat, label, v, fmt) => ({ stat, label, kind: 'add', v, fmt });
 export const addUp = (stat, label, values, fmt, max) => ({ stat, label, kind: 'add', values, fmt, max });
@@ -139,4 +141,50 @@ export function boltFrom(run, a, x, z, { dmg = a.stat('damage'), skip = null, ra
 /** n bullets in a ring around (x, z). */
 export function ringShot(run, a, x, z, n, dmg, color) {
   for (let i = 0; i < n; i++) run.shoot({ x, z, y: 0.7, angle: (i / n) * Math.PI * 2, speed: 30, dmg, range: 9, ability: a, kind: 'bullet', color });
+}
+
+// ── statuses on thugs (marks, shock, acid, chill, frozen...) ───────────────
+// m.st[key] = {n, until}: stacks that expire `dur` seconds after the last add.
+
+/** Add `n` stacks of `key` (capped at `max`) for `dur` seconds; returns the new count. */
+export function addStatus(run, m, key, n = 1, dur = 5, max = 10) {
+  if (m.dead) return 0;
+  m.st ??= {};
+  const s = m.st[key];
+  const cur = s && s.until > run.time ? s.n : 0;
+  const v = Math.min(max, cur + n);
+  m.st[key] = { n: v, until: run.time + dur };
+  return v;
+}
+
+/** Current stacks of `key` on a thug (0 if none / expired). */
+export function statusN(run, m, key) {
+  const s = m.st?.[key];
+  return s && s.until > run.time ? s.n : 0;
+}
+
+/** Remove a status; returns how many stacks it had. */
+export function clearStatus(run, m, key) {
+  const n = statusN(run, m, key);
+  if (m.st) delete m.st[key];
+  return n;
+}
+
+/** Tint a thug for `dur` seconds (shows a status). */
+const _tints = new Map();
+export function tint(run, m, color, dur = 1) {
+  let c = _tints.get(color);
+  if (!c) { c = new THREE.Color(color); _tints.set(color, c); }
+  m.tintColor = c;
+  m.tintUntil = run.time + dur;
+}
+
+/**
+ * Wall slam: if `m` hits a wall (anything it can't stand on) within `window`
+ * seconds while still flying from knockback, it takes `dmg` (credited to `a`).
+ * Call it right after a run.hit with knock. onSlam(m) runs when it connects.
+ */
+export function slamOnWall(run, m, a, dmg, window = 0.5, onSlam) {
+  if (m.dead || m.tier >= 2) return;
+  m.slam = { dmg, ability: a, until: run.time + window, onSlam };
 }

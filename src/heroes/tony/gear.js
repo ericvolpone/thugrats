@@ -1,4 +1,4 @@
-import { nova, chill } from '../common.js';
+import { nova, chill, slamOnWall } from '../common.js';
 
 /**
  * Tony's gear sets: one per map, dropped by that map's Crime Titans (see
@@ -38,19 +38,20 @@ export const TONY_GEAR = [
       2: { desc: (k) => `Haymaker swings ${r(20 * k)}% faster and has +${r(10 * k)}% area.`,
         apply: (c, k) => { c.abil('haymaker', 'cooldown', 'pct', 20 * k); c.abil('haymaker', 'area', 'pct', 10 * k); } },
       3: { desc: () => 'Haymaker swings are 50% wider (a big roundhouse).', apply: (c) => c.flag('tonyWideSwing', true) },
-      5: { desc: (k) => `Every 4th Haymaker also sends a shockwave all around Tony: 1.8× Haymaker's reach, ×${(1.5 * k).toFixed(1)} its damage, stuns 0.5s.`,
+      5: { desc: (k) => `Every 4th Haymaker also sends a shockwave all around Tony: 1.8× Haymaker's reach, ×${(1.5 * k).toFixed(1)} its damage, stuns 0.5s and knocks thugs into the walls (slams).`,
         apply: (c, k) => c.flag('tonyShockwave', 1.5 * k) },
     },
   },
   {
-    id: 'dock_worker', map: 'the_docks', name: 'Dock Worker', icon: '⚓', focus: '#thrown', focusName: 'Thrown',
+    id: 'dock_worker', map: 'the_docks', name: 'Dock Worker', icon: '⚓', focus: 'headlock', focusName: 'Headlock',
     pieces: ['Stevedore Beanie', 'Cargo Net Mittens', 'Rope-Burn Bib', 'Bilge Diaper', 'Gangplank Booties'],
     bonus: {
-      2: { desc: (k) => `Thrown abilities get +${r(20 * k)}% Recharge Rate.`, apply: (c, k) => c.abil('#thrown', 'cooldown', 'pct', 20 * k) },
-      3: { desc: () => 'Manhole Covers are 30% bigger and Bottle Smash throws +3 shards.',
-        apply: (c) => { c.abil('manhole', 'area', 'pct', 30); c.abil('bottle', 'count', 'add', 3); } },
-      5: { desc: (k) => `Everything comes back: Manhole Covers fly back to Tony through the pack, and Bottles bounce back and smash at his feet (${r(60 * k)}% damage).`,
-        apply: (c, k) => c.flag('tonyBoomerang', 0.6 * k) },
+      2: { desc: (k) => `Headlock gets +${r(20 * k)}% Recharge Rate and throws ${r(15 * k)}% farther.`,
+        apply: (c, k) => { c.abil('headlock', 'cooldown', 'pct', 20 * k); c.abil('headlock', 'range', 'pct', 15 * k); } },
+      3: { desc: () => 'Cargo Hook: Headlock grabs from 50% farther away, and a thrown thug that hits a wall slams for double.',
+        apply: (c) => { c.flag('tonyGrabReach', 1.5); c.flag('tonyThrowSlam', true); } },
+      5: { desc: (k) => `Man Overboard: every Headlock landing sends out a shockwave. Everything within twice the landing area takes ×${(0.5 * k).toFixed(1)} Headlock's damage and is blasted away into the walls (slams).`,
+        apply: (c, k) => c.flag('tonyLandWave', 0.5 * k) },
     },
   },
   {
@@ -63,7 +64,7 @@ export const TONY_GEAR = [
         apply: (c) => c.link('iron_belly', 'clap_back', 'fire', 1, (run, p) => {
           nova(run, p, { r: p.stat('area') * 0.5, dmg: p.stat('damage') * 0.5, knock: 3, root: p.stat('duration') * 0.5, color: '#fff6a0' });
         }, { icd: 0 }) },
-      5: { desc: (k) => `Running a Tab: ${r(40 * k)}% of all damage you take goes on the tab. When it reaches 10% of your max HP, Tony throws everyone out: a shockwave (radius 7) for 5× the tab, stunning 1s, and heals 25% of it.`,
+      5: { desc: (k) => `Running a Tab: ${r(40 * k)}% of all damage you take goes on the tab. When it reaches 10% of your max HP, Tony throws everyone out: a shockwave (radius 7) for 5× the tab, stunning 1s (anyone thrown into a wall takes another 2× the tab), and heals 25% of it.`,
         apply: (c, k) => c.link('*', null, 'hurt', 1, (run, p, ev) => {
           const cn = run.counters;
           cn.tonyTab = (cn.tonyTab ?? 0) + ev.dmg * 0.4 * k;
@@ -71,7 +72,8 @@ export const TONY_GEAR = [
           const tab = cn.tonyTab;
           cn.tonyTab = 0;
           const src = run.abilityById('clap_back') ?? run.abilityById('iron_belly') ?? null;
-          nova(run, src, { r: 7, dmg: tab * 5 * run.stats.dmg, knock: 9, root: 1, color: '#ffd23f' });
+          nova(run, src, { r: 7, dmg: tab * 5 * run.stats.dmg, knock: 9, root: 1, color: '#ffd23f',
+            onHit: (m) => slamOnWall(run, m, src, tab * 2 * run.stats.dmg) });
           run.heal(tab * 0.25);
           run.shake(0.25);
         }, { icd: 0 }) },
@@ -98,8 +100,8 @@ export const TONY_GEAR = [
     bonus: {
       2: { desc: (k) => `Bull Rush gets +${r(20 * k)}% Recharge Rate and charges ${r(15 * k)}% farther.`,
         apply: (c, k) => { c.abil('bull_rush', 'cooldown', 'pct', 20 * k); c.abil('bull_rush', 'range', 'pct', 15 * k); } },
-      3: { desc: () => 'Bull Rush stuns everyone it bowls over for 0.6s, and Ground Pound has +20% area.',
-        apply: (c) => { c.flag('tonyRushStun', 0.6); c.abil('ground_pound', 'area', 'pct', 20); } },
+      3: { desc: () => 'Bull Rush stuns everyone it bowls over for 0.6s. Ground Pound has +20% area and cracks the street: a slowing, damaging rubble patch for 3s.',
+        apply: (c) => { c.flag('tonyRushStun', 0.6); c.abil('ground_pound', 'area', 'pct', 20); c.flag('tonyQuake', true); } },
       5: { desc: (k) => `Bull Rush cracks the street: its path becomes a quake trail for 3s that slows by 40% and deals ${r(25 * k)}% of Bull Rush's damage per second.`,
         apply: (c, k) => c.flag('tonyQuakeTrail', 0.25 * k) },
     },

@@ -2,9 +2,9 @@ import { sfx } from '../../audio.js';
 import { TAU, rand } from '../../util.js';
 
 /**
- * Lenny "Nickles" — ability kit. Every ability fires on its own when ready()
- * returns a target (anything truthy). a.stat(key) gives the fully modified value
- * (upgrades, talents, gear, run stats).
+ * Lenny "Nickles" — the Boss: money and crew. Every ability fires on its own
+ * when ready() returns a target (anything truthy). a.stat(key) gives the fully
+ * modified value (upgrades, talents, gear, run stats).
  *
  * upgrades: stat = which stat grows · kind 'pct' adds % (cooldown = faster),
  * 'add' adds flat.
@@ -13,8 +13,77 @@ import { TAU, rand } from '../../util.js';
  *   values  flat per-tier amounts instead (0 = not offered at that tier), for
  *           whole-number upgrades like extra bullets. `max` caps the total.
  * useless(a, stat) — return true to stop offering a stat that no longer helps.
+ *
+ * Signature — CLOUT (gold is power): every 10 gold Lenny is holding gives his
+ * abilities +1% damage, up to +20% at 200 gold (talents raise the cap / rate).
+ * Favours (Hired Goon, Drive-By, Hit Contract, the Godfather's bodyguards) get
+ * 1.5× Clout. Spending gold on chests spends your Clout too.
+ *
+ * Thug statuses (common.addStatus):
+ *   racket  shaken down by Protection Racket: takes +Racket `vuln` damage.
+ *   afraid  terrified by Make an Example: slowed, takes +Example `power` damage.
+ * Both, and Clout, are one damage amp (lennyAmp) that ensureLenny() installs
+ * into the run the first time any Lenny ability polls (or the Clout meter ticks).
  */
-import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, AURA_UPS, permanentUptime } from '../common.js';
+import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, AURA_UPS, permanentUptime, chill, addStatus, statusN, tint } from '../common.js';
+
+// ── Clout ───────────────────────────────────────────────────────────────────
+export const CLOUT_GOLD = 200; // gold for full Clout (before talents)
+const FAVOURS = new Set(['goon', 'driveby', 'contract', 'godfather']);
+let OWN = null; // ability ids of this kit (filled below)
+
+/** Gold that still counts toward Clout. */
+export const cloutCap = (run) => CLOUT_GOLD + (run.flags.cloutCap ?? 0);
+/** Clout as a damage fraction (0.2 = +20%) for a normal ability. */
+export function clout(run) {
+  return (Math.min(Math.max(0, run.gold), cloutCap(run)) / 1000) * (1 + (run.flags.cloutMult ?? 0));
+}
+/** 0..1: how full the Clout meter is. */
+export const cloutFrac = (run) => Math.min(1, Math.max(0, run.gold) / cloutCap(run));
+
+/** Damage amp for every hit in a Lenny run: Clout, shakedowns and terror. */
+function lennyAmp(run, m, a) {
+  let v = 0;
+  const id = a?.def?.id;
+  if (id && OWN.has(id)) v += clout(run) * (FAVOURS.has(id) ? 1.5 : 1);
+  if (m.st) {
+    if (statusN(run, m, 'racket')) v += run.abilityById('racket')?.stat('vuln') ?? 0.15;
+    if (statusN(run, m, 'afraid')) v += run.abilityById('make_example')?.stat('power') ?? 0.15;
+  }
+  return v;
+}
+
+/** Hook Lenny's amp (and the Untouchable Boss armour) into this run, once. */
+export function ensureLenny(run) {
+  if (run.counters._lenny) return;
+  run.counters._lenny = 1;
+  run.loadout.amps.push(lennyAmp);
+  // Untouchable (Racketeering capstone): Clout also reduces damage taken
+  if (run.flags.cloutArmor) {
+    run.buffs.lenny_clout = { t: Infinity, max: Infinity, stats: (s, b, r) => { s.armor += cloutFrac(r) * r.flags.cloutArmor; } };
+  }
+}
+
+/** Clout meter: shows the current Clout bonus in %, out of the max. */
+export const LENNY_RESOURCE = {
+  id: 'clout', name: 'Clout', icon: '💰', color: '#f2c037', max: 20, start: 0,
+  desc: 'Clout = gold you are holding. Every 10 gold gives your abilities +1% damage (up to +20% at 200 gold); favours (Hired Goon, Drive-By, Hit Contract) get 1.5× that. Spend gold and you spend Clout.',
+  tick(run) {
+    ensureLenny(run);
+    const r = run.res;
+    if (!r) return;
+    r.max = Math.max(1, Math.round((cloutCap(run) / 10) * (1 + (run.flags.cloutMult ?? 0))));
+    r.value = clout(run) * 100;
+  },
+};
+
+export const LENNY_START = 'pistol';
+
+/** Clout note for descs. */
+const CLOUT = ' Scales with Clout.';
+const FAVOUR = ' Favour: Clout counts 1.5×.';
+
+// ── helpers ─────────────────────────────────────────────────────────────────
 
 /** Fire one bullet from Lenny's gun at angle `ang`. */
 function bullet(run, a, ang, extra = {}) {
@@ -23,15 +92,44 @@ function bullet(run, a, ang, extra = {}) {
     x: m.x, z: m.z, y: m.y, angle: ang,
     speed: a.stat('speed'), dmg: a.stat('damage'), range: a.stat('range') * 1.25,
     pierce: a.stat('pierce'), bounce: run.flags.ricochet && a.def.id === 'pistol' ? 1 : 0,
-    explode: run.flags.explosiveRounds && a.def.id === 'pistol' ? { r: 1.8 * (1 + run.stats.area), dmg: 0.45 } : null,
     ability: a, kind: 'bullet', ...extra,
   });
+}
+
+/** Terrify a thug (Make an Example): slowed and takes more damage for `dur`. */
+function terrify(run, a, m, dur) {
+  if (m.dead) return;
+  const d = dur ?? (a.stat('duration') + (run.flags.terrorDur ?? 0));
+  addStatus(run, m, 'afraid', 1, d, 1);
+  chill(m, 0.4, d);
+  tint(run, m, '#b48cff', d);
+}
+
+/** Make an Example's blast at (x, z): `scale` sizes radius and damage. Returns hits. */
+function example(run, a, x, z, scale = 1, dur) {
+  const r = a.stat('area') * scale;
+  let n = 0;
+  for (const m of run.mobs.near(x, z, r)) {
+    if (m.dead) continue;
+    run.hit(m, a.stat('damage') * scale, a, { knock: a.stat('knock'), fromX: x, fromZ: z });
+    terrify(run, a, m, dur);
+    n++;
+  }
+  run.fx.ring(x, z, r, '#b48cff', 0.4);
+  return n;
+}
+
+/** Shake a thug down (Protection Racket): it takes Racket's extra damage for `dur`. */
+function shake(run, a, m, dur) {
+  if (m.dead) return;
+  addStatus(run, m, 'racket', 1, dur ?? a.stat('duration'), 1);
+  tint(run, m, '#f2c037', dur ?? a.stat('duration'));
 }
 
 export const LENNY_ABILITIES = [
   {
     id: 'pistol', name: 'Snub-Nose .38', icon: '🔫', tags: ['gun', 'projectile'],
-    desc: 'Pops the toughest thug in range.',
+    desc: 'Pops the toughest thug in range.' + CLOUT,
     base: { damage: 14, cooldown: 0.5, range: 15, speed: 38, count: 1, pierce: 0 },
     upgrades: [DMG, pctUp('cooldown', 'Fire Rate', 12), addUp('pierce', 'Pierce', [0, 0, 1, 1, 2], null, 5), addUp('count', 'Extra Bullet', [0, 0, 0, 1, 1], null, 3)],
     ready: (run, a) => run.mobs.targets(run.player.x, run.player.z, a.stat('range'), a.stat('count') + (run.flags.akimbo ? 1 : 0), 'strongest'),
@@ -62,7 +160,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'frenzy', name: 'Frenzy', icon: '😤', tags: ['buff'],
-    desc: 'Goes nuts: faster fire rate and every other ability cools down faster while it lasts.',
+    desc: 'The Boss loses his temper: faster fire rate and every other ability cools down faster while it lasts.',
     base: { cooldown: 16, duration: 5, power: 0.5, range: 12 },
     upgrades: [DUR, scUp('power', 'Fury', 0.12, (v) => `+${Math.round(v * 100)}% frenzy speed`), CD],
     useless: permanentUptime,
@@ -75,7 +173,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'power_shot', name: 'Hollow Point', icon: '💥', tags: ['gun', 'projectile'],
-    desc: 'A huge slug that punches through every thug in a line. Aims for the biggest one.',
+    desc: 'A huge slug that punches through every thug in a line. Aims for the biggest one.' + CLOUT,
     base: { damage: 60, cooldown: 4.2, range: 20, speed: 55, count: 1, pierce: 99, area: 1 },
     upgrades: [pctUp('damage', 'Damage', 24), CD, pctUp('area', 'Slug Size', 18), addUp('count', 'Extra Slug', [0, 0, 0, 1, 1], null, 3)],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'strongest'),
@@ -93,31 +191,8 @@ export const LENNY_ABILITIES = [
     },
   },
   {
-    id: 'pineapple', name: 'Pineapple', icon: '🍍', tags: ['explosive', 'thrown'],
-    desc: 'Lobs a grenade into the thickest crowd.',
-    base: { damage: 30, cooldown: 3.2, range: 14, area: 3.2, count: 1 },
-    upgrades: [DMG, AREA, CD, addUp('count', 'Extra Grenade', [0, 0, 0, 1, 1], null, 3)],
-    ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
-    fire(run, a, t) {
-      const n = a.stat('count');
-      for (let i = 0; i < n; i++) {
-        const tx = t.x + (i ? rand(-3, 3) : 0), tz = t.z + (i ? rand(-3, 3) : 0);
-        run.lob({ tx, tz, dur: 0.7, kind: 'grenade', onLand: (x, z) => {
-          run.explode(x, z, a.stat('area'), a.stat('damage'), a);
-          if (run.flags.clusterBomb) {
-            for (let k = 0; k < 3; k++) {
-              const ang = (k / 3) * TAU + rand(0, 1);
-              run.lob({ x, z, tx: x + Math.sin(ang) * 3.5, tz: z + Math.cos(ang) * 3.5, dur: 0.45, kind: 'grenade', small: true,
-                onLand: (x2, z2) => run.explode(x2, z2, a.stat('area') * 0.6, a.stat('damage') * 0.4, a) });
-            }
-          }
-        } });
-      }
-    },
-  },
-  {
     id: 'tommy', name: 'Chicago Typewriter', icon: '🎻', tags: ['gun', 'projectile'],
-    desc: 'Pulls a tommy gun out of a violin case and sprays a cone of lead.',
+    desc: 'Pulls a tommy gun out of a violin case and sprays a cone of lead.' + CLOUT,
     base: { damage: 7, cooldown: 3.2, range: 13, speed: 40, count: 8, spread: 0.55, pierce: 0 },
     upgrades: [DMG, { ...scUp('count', 'Bullets', 2), int: true }, CD],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
@@ -136,21 +211,72 @@ export const LENNY_ABILITIES = [
     },
   },
   {
-    id: 'molotov', name: 'Molotov', icon: '🍾', tags: ['fire', 'thrown'],
-    desc: 'A bottle of grandpa\'s grappa. Leaves a burning puddle.',
-    base: { damage: 9, cooldown: 5, range: 13, area: 2.8, duration: 4 },
-    upgrades: [pctUp('damage', 'Burn Damage', 20), DUR, AREA, CD],
-    ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
-    fire(run, a, t) {
-      run.lob({ tx: t.x, tz: t.z, dur: 0.75, kind: 'molotov', onLand: (x, z) => {
-        run.zone({ x, z, r: a.stat('area'), life: a.stat('duration'), dps: a.stat('damage') * (1 + run.stats.burnDmg), kind: 'fire', ability: a });
-        run.fx.burst(x, 0.4, z, '#ff7a1a', 14, 5);
-      } });
+    id: 'racket', name: 'Protection Racket', icon: '🤝', tags: ['aura', 'control'],
+    desc: 'Every second, thugs near you get shaken down: a slap, a slight slow, and they take +15% damage from everything. The crowd pays: a chance per thug to cough up a gold coin.' + CLOUT,
+    base: { damage: 4, cooldown: 1, area: 4.2, vuln: 0.15, payout: 0.05, duration: 1.4 },
+    upgrades: [AREA,
+      scUp('vuln', 'Shakedown', 0.05, (v) => `+${Math.round(v * 100)}% damage taken`),
+      scUp('payout', 'Payout', 0.015, (v) => `+${(v * 100).toFixed(1)}% coin chance per thug`),
+      DMG],
+    useless: (a, stat) => (stat === 'payout' && a.stat('payout') >= 0.2) || (stat === 'vuln' && a.stat('vuln') >= 0.6),
+    ready: (run, a) => run.mobs.count(run.player.x, run.player.z, a.stat('area')) > 0,
+    fire(run, a) {
+      const p = run.player;
+      const r = a.stat('area');
+      const list = run.mobs.near(p.x, p.z, r);
+      if (!list.length) return false;
+      const slow = 0.15 + (run.flags.racketSlow ?? 0);
+      for (const m of list) {
+        if (m.dead) continue;
+        run.hit(m, a.stat('damage'), a, { knock: 0.5, fromX: p.x, fromZ: p.z, color: '#f2c037' });
+        if (m.dead) continue;
+        shake(run, a, m);
+        chill(m, slow, a.stat('duration'));
+      }
+      // payout: one coin at most per pulse (economy stays sane)
+      const ch = run.flags.unionDues && list.length >= 4 ? 1 : Math.min(0.9, a.stat('payout') * list.length);
+      if (Math.random() < ch) {
+        const m = list[Math.floor(Math.random() * list.length)]; // dead is fine: the coin drops where he stood
+        run.pickups.coin(m.x, m.z, 1);
+        run.fx.burst(m.x, 1, m.z, '#ffd23f', 6, 3, 0.4);
+        sfx('gold', 0.03);
+      }
+      run.fx.ring(p.x, p.z, r, '#f2c037', 0.5);
+    },
+  },
+  {
+    id: 'make_example', name: 'Make an Example', icon: '😠', tags: ['aoe', 'control'],
+    desc: 'Picks the toughest thug nearby and makes an example of him (×3 damage), then blasts everyone close back. Survivors are terrified for 2.5s: slowed 40% and take +20% damage. If the example dies, the terror lasts 50% longer.' + CLOUT,
+    base: { damage: 18, cooldown: 6, area: 4.8, knock: 9, duration: 2.5, power: 0.2 },
+    upgrades: [DMG, AREA, CD, scUp('power', 'Terror', 0.05, (v) => `+${Math.round(v * 100)}% damage taken while terrified`)],
+    useless: (a, stat) => stat === 'power' && a.stat('power') >= 0.6,
+    terrify, example, // pairing helpers (talents use p.def.terrify / p.def.example)
+    ready: (run, a) => run.crowd(a, a.stat('area'), 3) || run.mobs.count(run.player.x, run.player.z, 2.2) > 0,
+    fire(run, a) {
+      const p = run.player;
+      const r = a.stat('area');
+      const t = run.mobs.target(p.x, p.z, r, 'strongest');
+      if (!t) return false;
+      let dur = a.stat('duration') + (run.flags.terrorDur ?? 0);
+      // the example
+      if (run.flags.publicExec && t.tier < 2 && t.hp / t.maxHp < 0.3) run.hit(t, t.hp + 1, a, { noCrit: true, color: '#b48cff' });
+      else run.hit(t, a.stat('damage') * 3, a, { knock: a.stat('knock') * 0.5, fromX: p.x, fromZ: p.z });
+      run.fx.burst(t.x, 1, t.z, '#b48cff', 16, 5);
+      if (t.dead) dur *= 1.5;
+      for (const m of run.mobs.near(p.x, p.z, r)) {
+        if (m.dead) continue;
+        if (m !== t) run.hit(m, a.stat('damage'), a, { knock: a.stat('knock'), fromX: p.x, fromZ: p.z });
+        terrify(run, a, m, dur);
+      }
+      run.fx.ring(p.x, p.z, r, '#b48cff', 0.4);
+      run.fx.burst(p.x, 0.6, p.z, '#b48cff', 18, 7);
+      run.shake(0.2);
+      sfx('tantrum');
     },
   },
   {
     id: 'cement', name: 'Cement Shoes', icon: '🪣', tags: ['thrown', 'control'],
-    desc: 'Dumps quick-dry cement: roots everything for a moment, then slows.',
+    desc: 'Dumps quick-dry cement: roots everything for a moment, then slows.' + CLOUT,
     base: { damage: 16, cooldown: 7, range: 12, area: 3.6, duration: 3 },
     upgrades: [AREA, DUR, CD, DMG],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
@@ -158,8 +284,9 @@ export const LENNY_ABILITIES = [
       run.lob({ tx: t.x, tz: t.z, dur: 0.6, kind: 'cement', onLand: (x, z) => {
         const r = a.stat('area');
         for (const m of run.mobs.near(x, z, r)) {
+          if (m.dead) continue;
           run.hit(m, a.stat('damage'), a);
-          m.rootT = Math.max(m.rootT, m.tier >= 2 ? 0.3 : 1.2);
+          if (!m.dead) m.rootT = Math.max(m.rootT, m.tier >= 2 ? 0.3 : 1.2);
         }
         run.zone({ x, z, r, life: a.stat('duration'), slow: 0.55, kind: 'cement', ability: a });
         run.fx.burst(x, 0.3, z, '#b9b4aa', 16, 4);
@@ -167,8 +294,39 @@ export const LENNY_ABILITIES = [
     },
   },
   {
+    id: 'goon', name: 'Hired Goon', icon: '🏏', tags: ['summon'],
+    desc: 'Calls in a favour: a cousin with a baseball bat shows up for a while.' + FAVOUR,
+    base: { damage: 16, cooldown: 14, duration: 10, count: 1 },
+    upgrades: [DMG, DUR, addUp('count', 'Extra Goon', [0, 0, 1, 1, 2], null, 4), CD],
+    ready: (run, a) => run.mobs.count(run.player.x, run.player.z, 15) > 0,
+    fire(run, a) {
+      for (let i = 0; i < a.stat('count'); i++) run.spawnGoon({ ability: a, life: a.stat('duration') });
+    },
+  },
+  {
+    id: 'made_men', name: 'Made Men', icon: '🕴️', tags: ['summon', 'gun'],
+    desc: 'Two made men in sharp suits step out of the shadows and work the crowd with their pistols for 9s.' + CLOUT,
+    base: { damage: 12, cooldown: 16, duration: 9, count: 2, range: 7, pierce: 0 },
+    upgrades: [DMG, DUR, addUp('count', 'Extra Made Man', [0, 0, 0, 1, 1], null, 2), CD],
+    ready: (run, a) => run.mobs.count(run.player.x, run.player.z, 14) > 0,
+    fire(run, a) {
+      const rng = a.stat('range');
+      for (let i = 0; i < a.stat('count'); i++) {
+        run.spawnGoon({
+          ability: a, life: a.stat('duration'), model: 'babyface_double', reach: rng * 0.7, seek: rng + 4, rate: 0.6,
+          onAttack: (g, t, dmg) => {
+            if (t.dead) return;
+            run.shoot({ x: g.x, z: g.z, y: 0.8, angle: Math.atan2(t.x - g.x, t.z - g.z), speed: 36, dmg, range: rng + 3,
+              pierce: a.stat('pierce'), ability: a, kind: 'bullet', color: '#ffd36b' });
+          },
+        });
+      }
+      sfx('shot', 0.08);
+    },
+  },
+  {
     id: 'driveby', name: 'Drive-By', icon: '🚗', tags: ['vehicle'],
-    desc: 'Cousin Sal comes screaming through in the family sedan.',
+    desc: 'Calls in a favour: Cousin Sal comes screaming through in the family sedan.' + FAVOUR,
     base: { damage: 42, cooldown: 8, range: 16, count: 1, area: 1 },
     upgrades: [DMG, CD, addUp('count', 'Extra Car', [0, 0, 1, 1, 2], null, 4)],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
@@ -183,55 +341,16 @@ export const LENNY_ABILITIES = [
     },
   },
   {
-    id: 'dynamite', name: 'Dynamite Trap', icon: '🧨', tags: ['explosive', 'trap'],
-    desc: 'Drops a bundle of dynamite at your feet. Goes off when a thug walks close.',
-    base: { damage: 50, cooldown: 3.5, area: 3.6, count: 2, range: 10 },
-    upgrades: [DMG, AREA, addUp('count', 'Max Traps', [0, 1, 1, 2, 2], null, 6), CD],
-    ready: (run, a) => run.traps.filter((t) => t.ability === a && !t.extra).length < a.stat('count') && run.mobs.count(run.player.x, run.player.z, a.stat('range')) > 0,
-    fire(run, a) {
-      run.trap({ x: run.player.x, z: run.player.z, ability: a, trigger: 1.6, onTrigger: (x, z) => run.explode(x, z, a.stat('area'), a.stat('damage'), a) });
-    },
-  },
-  {
-    id: 'tantrum', name: 'Tantrum', icon: '😭', tags: ['aoe'],
-    desc: 'Screams, kicks and flails. Damages and knocks back everything close.',
-    base: { damage: 18, cooldown: 5, area: 4.5, knock: 9 },
-    upgrades: [DMG, AREA, CD],
-    ready: (run, a) => {
-      const p = run.player;
-      return run.crowd(a, a.stat("area"), 3) || run.mobs.count(p.x, p.z, 2.2) > 0;
-    },
-    fire(run, a) {
-      const p = run.player;
-      const r = a.stat('area');
-      for (const m of run.mobs.near(p.x, p.z, r)) run.hit(m, a.stat('damage'), a, { knock: a.stat('knock'), fromX: p.x, fromZ: p.z });
-      run.fx.ring(p.x, p.z, r, '#ffffff', 0.35);
-      run.fx.burst(p.x, 0.6, p.z, '#9ad8ff', 18, 7);
-      run.shake(0.2);
-      sfx('tantrum');
-    },
-  },
-  {
-    id: 'goon', name: 'Hired Goon', icon: '🏏', tags: ['summon'],
-    desc: 'Calls in a cousin with a baseball bat for a while.',
-    base: { damage: 16, cooldown: 14, duration: 10, count: 1 },
-    upgrades: [DMG, DUR, addUp('count', 'Extra Goon', [0, 0, 1, 1, 2], null, 4), CD],
-    ready: (run, a) => run.mobs.count(run.player.x, run.player.z, 15) > 0,
-    fire(run, a) {
-      for (let i = 0; i < a.stat('count'); i++) run.spawnGoon({ ability: a, life: a.stat('duration') });
-    },
-  },
-  {
     id: 'make_it_rain', name: 'Make It Rain', icon: '💸', tags: ['orbit', 'aura'],
-    desc: 'Stacks of cash whirl around you nonstop, smacking anyone who gets close.',
+    desc: 'Stacks of cash whirl around you nonstop, smacking anyone who gets close.' + CLOUT,
     base: { damage: 5, count: 2, area: 2.8 },
     upgrades: AURA_UPS('Cash Stacks'),
     aura: { model: 'cash', color: '#3da35a', spark: '#7be495', spin: 3.6, knock: 3 },
   },
   {
-    id: 'contract', name: 'Hit Contract', icon: '📜', tags: ['gun'],
-    desc: 'Puts a price on the biggest head around. A sniper collects a second later.',
-    base: { damage: 190, cooldown: 10, range: 30, execute: 0 },
+    id: 'contract', name: 'Hit Contract', icon: '📜', tags: ['gun', 'execute'],
+    desc: 'Calls in a favour: puts a price on the biggest head around and a sniper collects a second later. A contract kill pays a 3-gold bounty.' + FAVOUR,
+    base: { damage: 190, cooldown: 10, range: 30, execute: 0, bounty: 3 },
     upgrades: [DMG, CD, addUp('execute', 'Execute', [0, 0, 0.05, 0.08, 0.12], (v) => `+${Math.round(v * 100)}% execute`, 0.3)],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'strongest'),
     fire(run, a, t) {
@@ -243,6 +362,10 @@ export const LENNY_ABILITIES = [
         const dmg = exec ? t.hp + 1 : a.stat('damage');
         if (exec && run.stats.execHeal) run.heal(run.stats.execHeal);
         run.hit(t, dmg, a, { noCrit: false });
+        if (t.dead) {
+          const b = Math.round(a.stat('bounty'));
+          for (let i = 0; i < b; i++) run.pickups.coin(t.x + rand(-1, 1), t.z + rand(-1, 1), 1);
+        }
         run.fx.tracer(t.x, t.z);
         run.fx.burst(t.x, 1, t.z, '#ff3030', 16, 6);
         sfx('snipe');
@@ -250,3 +373,12 @@ export const LENNY_ABILITIES = [
     },
   },
 ];
+
+OWN = new Set([...LENNY_ABILITIES.map((d) => d.id), 'godfather']);
+
+// every ability that polls also makes sure Lenny's amp is hooked into the run
+for (const d of LENNY_ABILITIES) {
+  if (!d.ready) continue;
+  const ready = d.ready;
+  d.ready = (run, a) => { ensureLenny(run); return ready(run, a); };
+}

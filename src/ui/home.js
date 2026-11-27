@@ -189,7 +189,7 @@ export class HomeScreen {
       const cur = prof.startAbility && h.abilities.some((a) => a.id === prof.startAbility) ? prof.startAbility : h.start;
       const pick = el('div', 'start-pick', '<div class="note" style="margin:0 0 6px">✦ <b>Starting ability</b> (unlocked by ascending)</div>');
       const row = el('div', 'start-row');
-      for (const a of h.abilities) {
+      for (const a of h.abilities.filter((x) => !x.noStart)) { // meter / setup abilities can't open a run
         const b = el('button', `start-ab ${a.id === cur ? 'on' : ''}`, a.icon);
         b.title = `${a.name} — ${a.desc}`;
         b.onclick = () => { sfx('click'); Save.setStartAbility(h.id, a.id); this.render(); };
@@ -199,10 +199,11 @@ export class HomeScreen {
       pick.appendChild(el('div', 'note', `Starts with <b>${h.abilities.find((a) => a.id === cur).name}</b>.`));
       body.appendChild(pick);
     }
-    body.appendChild(el('div', 'note', 'Clear a map by killing its final Crime Titan. Each map\'s Crime Titans can drop pieces of this hero\'s gear set for that map.'));
+    body.appendChild(el('div', 'note', `Clear a map by killing its final Crime Titan. Progress is per hero: ${h.name.split(' ')[0]} unlocks the next map and harder difficulties by clearing them, and each map's Crime Titans drop pieces of ${h.name.split(' ')[0]}'s gear set for that map.`));
     for (const m of MAPS) {
-      const locked = m.requires && Save.bestClear(m.requires) < 0;
-      const best = Save.bestClear(m.id);
+      // progress is per hero: each hero clears each map and difficulty on their own
+      const locked = m.requires && Save.bestClear(h.id, m.requires) < 0;
+      const best = Save.bestClear(h.id, m.id);
       const set = h.sets.find((s) => s.map === m.id);
       const card = el('div', `map-card ${locked ? 'locked' : ''}`);
       const owned = set ? set.pieceList.filter((p) => Save.gearTier(h.id, p.id) >= 0).length : 0;
@@ -390,16 +391,17 @@ export class HomeScreen {
     for (const u of ACCOUNT_UPGRADES) {
       if (u.group !== group) {
         group = u.group;
-        body.appendChild(el('h3', 'rep-group', group === 'Pet' ? '🐾 Companion' : '📈 Run Boosts'));
+        body.appendChild(el('h3', 'rep-group', group === 'Pet' ? '🐾 Companion' : group === 'Heroes' ? '⭐ The Family' : '📈 Run Boosts'));
       }
       const lvl = Save.acct(u.id);
       const maxed = lvl >= u.max;
       const locked = u.requires && !Save.acct(u.requires);
+      const unlimited = !Number.isFinite(u.max);
       const cost = maxed ? 0 : u.cost(lvl);
       const row = el('div', `rep-row ${locked ? 'locked' : ''}`);
-      const pips = u.max > 1 ? `<div class="pips">${Array.from({ length: u.max }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>` : '';
+      const pips = unlimited ? `<div class="pips-n">Rank ${lvl}</div>` : u.max > 1 ? `<div class="pips">${Array.from({ length: u.max }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>` : '';
       row.innerHTML = `<div class="ic">${u.icon}</div><div class="tx"><b>${u.name}</b>${pips}
-        <div class="ds">${lvl > 0 ? (u.max > 1 ? `Now: ${u.desc(lvl)}` : u.desc(lvl)) : u.desc(u.max > 1 ? 1 : 0)}</div>
+        <div class="ds">${lvl > 0 ? (u.max > 1 ? `Now: ${u.desc(lvl)}` : u.desc(lvl)) : u.desc(u.max > 1 ? 1 : 0)}</div>${u.note ? `<div class="ds nx">${u.note}</div>` : ''}
         ${!maxed && lvl > 0 ? `<div class="ds nx">Next: ${u.desc(lvl + 1)}</div>` : ''}
         ${locked ? '<div class="ds nx">Adopt Biscuit first</div>' : ''}</div>`;
       const b = el('button', 'btn small', maxed ? 'MAX' : `${cost} 🤝`);
