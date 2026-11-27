@@ -1,3 +1,4 @@
+import { seeThroughMaterial } from './seeThrough.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PROPS } from '../assets/props.js';
@@ -48,8 +49,9 @@ export class World {
     (LAYOUTS[map.layout ?? map.id] ?? LAYOUTS.little_italy)(this, this.rnd);
 
     this.group.add(new THREE.Mesh(mergeGeometries(this.gparts), MATS.flat));
-    if (this.bparts.length) this.group.add(new THREE.Mesh(mergeGeometries(this.bparts), MATS.flat));
-    if (this.pparts.length) this.group.add(new THREE.Mesh(mergeGeometries(this.pparts), MATS.flat));
+    // buildings and props get the see-through cutout (seeThrough.js) so they never hide the hero
+    if (this.bparts.length) this.group.add(new THREE.Mesh(mergeGeometries(this.bparts), seeThroughMaterial()));
+    if (this.pparts.length) this.group.add(new THREE.Mesh(mergeGeometries(this.pparts), seeThroughMaterial()));
     this.gparts = this.bparts = this.pparts = null;
     this.buildAltars(map);
   }
@@ -348,6 +350,14 @@ export class World {
       if (r.h > y && x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad) return true;
     }
     return false;
+  }
+
+  /** Top of the tallest collider covering (x, z) (0 = open ground). */
+  topAt(x, z) {
+    let h = 0;
+    for (const r of this.rects) if (r.h > h && x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) h = r.h;
+    for (const c of this.circles) if (c.h > h && (x - c.x) ** 2 + (z - c.z) ** 2 <= c.r * c.r) h = c.h;
+    return h;
   }
 
   /**

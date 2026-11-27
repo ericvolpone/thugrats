@@ -394,3 +394,51 @@ body.hl-lift .hud-bottom { z-index: 41; }
 #hud-chest { border: 2px solid transparent; padding: 1px 8px; }
 #hud-chest.ok { border-color: #4fe07a; color: #b8ffc8; }
 #hud-chest.no { border-color: #ff4d4d; color: #ffb0a8; }
+
+/* ascension */
+.asc { color: #c9a6ff; font-family: 'Lilita One'; text-shadow: 0 0 8px rgba(160,110,255,0.7); }
+.hero-xp.full i { background: linear-gradient(90deg, #a06cff, #e0c8ff); }
+.hero-stage .plate .ascend-btn { pointer-events: auto; margin-top: 8px; background: linear-gradient(180deg, #a06cff, #6a3ad0); color: #fff; box-shadow: 0 0 18px rgba(160,110,255,0.6); }
+.start-pick { border: 1px solid #6a4aa0; background: rgba(110,70,180,0.12); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+.start-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.start-ab { width: 38px; height: 38px; border-radius: 9px; font-size: 20px; background: #2a2030; border: 2px solid #4a3d4e; padding: 0; }
+.start-ab.on { border-color: #c9a6ff; box-shadow: 0 0 10px rgba(160,110,255,0.7); }
+
+/* pairing talents */
+.talent .pr { position: absolute; left: -6px; top: -6px; font-size: 11px; background: #1a1220; border: 1px solid #6a5a8a; border-radius: 6px; padding: 0 2px; line-height: 1.3; }
+.pair-tag { color: #c9a6ff; font-size: 12px; margin-top: 3px; }
+
+/* gear sets on map cards */
+.set-drop { background: rgba(0,0,0,0.25); border-radius: 10px; padding: 6px 8px; margin-bottom: 8px; font-size: 12px; }
+.set-drop .muted, .gear-top .muted, .gear-info .muted { color: var(--muted); }
+.sd-row { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.sd-titan { display: flex; align-items: center; gap: 3px; }
+.sd-titan small { color: var(--muted); margin-left: 2px; }
+.sd-pc { width: 26px; height: 26px; display: grid; place-items: center; border: 2px solid #444; border-radius: 7px; background: #2a2030; font-size: 14px; }
+.sd-pc.missing { filter: grayscale(1) brightness(0.45); }
+
+/* gear tab */
+.gear-top { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.gear-worn { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.gw { width: 48px; height: 52px; border: 2px solid #444; border-radius: 10px; background: #2a2030; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 22px; line-height: 1; }
+.gw small { font-size: 9px; color: var(--muted); margin-top: 3px; }
+.gw.empty { opacity: 0.45; }
+.gear-worn .tokens { margin-left: auto; font-family: 'Lilita One'; color: #c9a6ff; font-size: 16px; }
+.gear-bonuses { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.gb { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 6px 8px; }
+.gbl { color: #6f6478; margin-top: 2px; }
+.gbl.on { color: var(--green); }
+.gear-setinfo .gbl { color: var(--text); }
+.gear-grid { display: grid; grid-template-columns: minmax(110px, 1.6fr) repeat(5, minmax(0, 1fr)); gap: 5px; align-items: center; }
+.gg-col { text-align: center; font-size: 16px; line-height: 1; }
+.gg-col small { display: block; font-size: 9px; color: var(--muted); }
+.gg-set { display: flex; gap: 6px; align-items: center; text-align: left; background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 9px; padding: 5px 6px; color: var(--text); min-width: 0; }
+.gg-set .ic { font-size: 18px; }
+.gg-set b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gg-set small { display: block; font-size: 10px; color: var(--muted); }
+.gg-set.sel { border-color: #fff; }
+.gg-pc { aspect-ratio: 1; max-width: 52px; width: 100%; justify-self: center; border-radius: 10px; background: #2a2030; border: 2px solid #4a3d4e; font-size: 20px; padding: 0; position: relative; display: grid; place-items: center; }
+.gg-pc i { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; border-radius: 2px; }
+.gg-pc.locked { filter: grayscale(1) brightness(0.5); font-size: 14px; }
+.gg-pc.worn { box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(242,192,55,0.5); }
+.gg-pc.sel { outline: 2px solid #fff; outline-offset: 1px; }

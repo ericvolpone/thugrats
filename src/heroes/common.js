@@ -96,3 +96,47 @@ export function chill(m, amount, t) {
 export function buff(run, a, extra) {
   run.buffs[a.def.id] = { t: a.stat('duration'), max: a.stat('duration'), src: a.def.id, ...extra };
 }
+
+// ── pairing procs (talent / gear links, see ctx.link in game/stats.js) ─────
+// They use the partner ability's own stats, so its upgrades scale the combo,
+// and the damage is credited to it.
+
+/**
+ * Free cast: the partner fires right now at mob/point `t` without spending its
+ * cooldown. Falls back to its own targeting when it doesn't aim at things.
+ */
+export function freeCast(run, a, t) {
+  let tgt = a.def.ready(run, a);
+  if (!tgt || (Array.isArray(tgt) && !tgt.length)) return false;
+  if (t && Array.isArray(tgt)) tgt = [t, ...tgt.filter((x) => x !== t)];
+  else if (t && typeof tgt === 'object' && 'x' in tgt) tgt = t;
+  return a.def.fire(run, a, tgt) !== false;
+}
+
+/** The partner's explosion at (x, z): `dmg` and `area` scale its damage / radius. */
+export function explodeAt(run, a, x, z, { dmg = 1, area = 1, small = false } = {}) {
+  run.explode(x, z, a.stat('area') * area, a.stat('damage') * dmg, a, { noProc: true, small });
+}
+
+/** Burning ground with the partner's damage per second. */
+export function fireAt(run, a, x, z, { r = a.stat('area'), life = 3, dps = a.stat('damage') } = {}) {
+  run.zone({ x, z, r, life, dps: dps * (1 + run.stats.burnDmg), kind: 'fire', ability: a });
+}
+
+/** A bullet from (x, z) at the nearest other thug, credited to `a`. */
+export function boltFrom(run, a, x, z, { dmg = a.stat('damage'), skip = null, range = 10, color, pierce = 0 } = {}) {
+  let best = null, bd = range * range;
+  run.mobs.each(x, z, range, (m) => {
+    if (m === skip || m.dead) return;
+    const d = (m.x - x) ** 2 + (m.z - z) ** 2;
+    if (d < bd) { bd = d; best = m; }
+  });
+  if (!best) return null;
+  run.shoot({ x, z, y: 0.8, angle: Math.atan2(best.x - x, best.z - z), speed: 36, dmg, range: range + 2, pierce, ability: a, kind: 'bullet', color });
+  return best;
+}
+
+/** n bullets in a ring around (x, z). */
+export function ringShot(run, a, x, z, n, dmg, color) {
+  for (let i = 0; i < n; i++) run.shoot({ x, z, y: 0.7, angle: (i / n) * Math.PI * 2, speed: 30, dmg, range: 9, ability: a, kind: 'bullet', color });
+}

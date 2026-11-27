@@ -3,6 +3,42 @@ import { TAU, rand } from '../../util.js';
 import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, line, nova, chain, chill, buff, AURA_UPS } from '../common.js';
 
 /**
+ * Lab Coat 5-piece (flags.teslaFork = damage fraction): every thug a Tesla arc
+ * hits forks a side arc to up to 2 more nearby thugs. `seen` keeps forks from
+ * zapping the same thug twice in one cast.
+ */
+function forkArc(run, a, from, dmg, seen) {
+  let n = 0;
+  run.mobs.each(from.x, from.z, 4.5, (m) => {
+    if (n >= 2 || m === from || m.dead || m.hp <= 0 || seen.has(m.id)) return;
+    seen.add(m.id);
+    n++;
+    run.fx.beam(from.x, from.z, m.x, m.z, '#c8ecff', 0.08, 0.14, 1);
+    run.hit(m, dmg, a, { knock: 0.3 });
+  });
+}
+
+/**
+ * A slime/acid pool. Alchemist 5-piece (flags.acidMerge = k): a new pool that
+ * lands on one of the same ability's live pools merges into it instead, growing
+ * it, refreshing its time and stacking its acid (both capped).
+ */
+function pool(run, a, o) {
+  const k = run.flags.acidMerge;
+  if (k) {
+    const zn = run.combat.zones.find((z) => z.ability === a && z.life - z.t > 0.3 && Math.hypot(z.x - o.x, z.z - o.z) < z.r + o.r * 0.5);
+    if (zn) {
+      zn.r = Math.min(o.r * (1.5 + 0.25 * k), Math.max(zn.r, Math.hypot(zn.r, o.r * 0.7)));
+      zn.life = zn.t + Math.max(zn.life - zn.t, o.life);
+      zn.dps = Math.min(o.dps * (1 + 0.5 * k), Math.max(zn.dps, o.dps) + o.dps * 0.25 * k);
+      run.fx.ring(zn.x, zn.z, zn.r, '#b8ff5a', 0.4);
+      return;
+    }
+  }
+  run.zone(o);
+}
+
+/**
  * Professor Pudding — the Mastermind. Weird science: lightning, freeze rays,
  * gravity, slime and little robots.
  */
@@ -31,7 +67,9 @@ export const PROF_ABILITIES = [
     upgrades: [DMG, addUp('count', 'Jumps', [1, 1, 2, 2, 3], null, 14), CD],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'nearest'),
     fire(run, a, t) {
-      chain(run, a, t, { jumps: a.stat('count') + (run.flags.supercharged ? 3 : 0), range: 6, dmg: a.stat('damage'), falloff: run.flags.supercharged ? 0.95 : 0.85, color: '#9ad8ff' });
+      const fork = run.flags.teslaFork, seen = fork ? new Set() : null;
+      chain(run, a, t, { jumps: a.stat('count') + (run.flags.supercharged ? 3 : 0), range: 6 * (run.flags.teslaReach ?? 1), dmg: a.stat('damage'), falloff: run.flags.supercharged ? 0.95 : 0.85, color: '#9ad8ff',
+        onHit: fork ? (m) => { seen.add(m.id); forkArc(run, a, m, a.stat('damage') * fork, seen); } : undefined });
       sfx('shot', 0.05);
     },
   },
@@ -43,7 +81,12 @@ export const PROF_ABILITIES = [
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
     fire(run, a, t) {
       line(run, a, { angle: angleTo(run, t), len: a.stat('range'), width: a.stat('area'), dmg: a.stat('damage'), knock: 0, color: '#bff0ff',
-        onHit: (m) => { chill(m, 0.55, a.stat('duration')); if (run.flags.deepFreeze && Math.random() < 0.2) m.rootT = Math.max(m.rootT, m.tier ? 0.3 : 1.2); } });
+        onHit: (m) => {
+          chill(m, 0.55, a.stat('duration'));
+          m.frozenUntil = run.time + a.stat('duration'); // marker only: read by shatter talents / Diving Bell set
+          if (run.flags.deepFreeze && Math.random() < 0.2) m.rootT = Math.max(m.rootT, m.tier ? 0.3 : 1.2);
+          if (run.flags.freezeRoot) m.rootT = Math.max(m.rootT, m.tier >= 2 ? 0.1 : m.tier ? 0.25 : run.flags.freezeRoot);
+        } });
       run.player.aim(t.x, t.z, 0.3);
     },
   },
@@ -54,8 +97,20 @@ export const PROF_ABILITIES = [
     upgrades: [AREA, DUR, CD, pctUp('damage', 'Crush', 20)],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
     fire(run, a, t) {
-      run.zone({ x: t.x, z: t.z, r: a.stat('area'), life: a.stat('duration'), dps: a.stat('damage'), pull: 6, kind: 'void', ability: a,
+      const sing = run.flags.singularity;
+      run.zone({ x: t.x, z: t.z, r: a.stat('area'), life: a.stat('duration'), dps: a.stat('damage'), pull: sing ? 10 : 6, kind: 'void', ability: a,
         onTick: (zn) => { if (Math.random() < 0.6) run.fx.burst(zn.x + rand(-zn.r, zn.r), 0.4, zn.z + rand(-zn.r, zn.r), '#b07aff', 1, 1, 0.4, 0.7, 0); } });
+      // Singularity capstone: when it collapses it implodes and shrinks whatever is left
+      if (sing) {
+        const x = t.x, z = t.z, r = a.stat('area') * 1.2;
+        run.later(a.stat('duration'), () => {
+          run.explode(x, z, r, a.stat('damage') * 8, a, { color: '#b07aff' });
+          for (const m of run.mobs.near(x, z, r)) {
+            m.shrunk = Math.max(m.shrunkUntil > run.time ? m.shrunk : 0, 0.25);
+            m.shrunkUntil = Math.max(m.shrunkUntil ?? 0, run.time + 3);
+          }
+        });
+      }
     },
   },
   {
@@ -79,9 +134,12 @@ export const PROF_ABILITIES = [
     upgrades: [DMG, DUR, addUp('count', 'Robots', [0, 0, 1, 1, 2], null, 5), CD],
     ready: (run) => run.mobs.count(run.player.x, run.player.z, 15) > 0,
     fire(run, a) {
+      const up = run.flags.robotUprising;
       for (let i = 0; i < a.stat('count'); i++) {
-        run.spawnGoon({ ability: a, life: a.stat('duration'), model: 'robot', reach: 5, seek: 12, rate: 0.55,
+        const g = run.combat.spawnGoon({ ability: a, life: a.stat('duration'), model: 'robot', reach: 5, seek: 12, rate: up ? 0.35 : 0.55,
           onAttack: (g, t, dmg) => { run.fx.beam(g.x, g.z, t.x, t.z, '#9ad8ff', 0.1, 0.12, 0.9); run.hit(t, dmg, a, { knock: 0.5 }); if (run.flags.supercharged) chain(run, a, t, { jumps: 1, range: 4, dmg: dmg * 0.6 }); } });
+        // Robot Uprising capstone: robots self-destruct when their time runs out
+        if (up) run.later(Math.max(0.1, g.life - 0.05), () => { if (run.combat.goons.includes(g)) run.explode(g.x, g.z, 3, a.stat('damage') * 5, a, { color: '#9ad8ff' }); });
       }
     },
   },
@@ -92,7 +150,7 @@ export const PROF_ABILITIES = [
     upgrades: [pctUp('damage', 'Acid', 20), AREA, DUR, CD],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
     fire(run, a, t) {
-      run.lob({ tx: t.x, tz: t.z, dur: 0.6, kind: 'slime', onLand: (x, z) => run.zone({ x, z, r: a.stat('area'), life: a.stat('duration'), dps: a.stat('damage'), slow: 0.5, kind: 'slime', ability: a }) });
+      run.lob({ tx: t.x, tz: t.z, dur: 0.6, kind: 'slime', onLand: (x, z) => pool(run, a, { x, z, r: a.stat('area'), life: a.stat('duration'), dps: a.stat('damage'), slow: 0.5, kind: 'slime', ability: a }) });
     },
   },
   {
@@ -136,7 +194,7 @@ export const PROF_ABILITIES = [
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
     fire(run, a, t) {
       const x = t.x, z = t.z;
-      run.zone({ x, z, r: a.stat('area'), life: a.stat('duration'), dps: a.stat('damage') * 1.4, kind: 'slime', color: '#b8ff5a', ability: a,
+      pool(run, a, { x, z, r: a.stat('area'), life: a.stat('duration'), dps: a.stat('damage') * 1.4, kind: 'slime', color: '#b8ff5a', ability: a,
         onTick: (zn) => { if (Math.random() < 0.8) { const g = rand(0, TAU), r = Math.sqrt(Math.random()) * zn.r; run.fx.burst(x + Math.sin(g) * r, 3, z + Math.cos(g) * r, '#c8ff6a', 1, 0.5, 0.5, 0.6, 14); } } });
     },
   },

@@ -6,7 +6,7 @@ import { MAPS, DIFFICULTIES } from '../data/maps.js';
 import { TIERS, tierColor } from '../data/tiers.js';
 import { Save, heroXpToNext, HERO_MAX_LEVEL } from '../save.js';
 import { BOSSES } from '../data/mobs.js';
-import { GEAR_SLOTS } from '../data/gear.js';
+import { GEAR_SLOTS, SLOT_ICON, TITAN_DROPS, pieceEffect, wornSets } from '../data/gear.js';
 import { ACCOUNT_UPGRADES } from '../data/account.js';
 import { paint, C, el } from '../util.js';
 import { sfx } from '../audio.js';
@@ -23,6 +23,7 @@ export class HomeScreen {
     this.heroId = Save.data.lastHero && heroById(Save.data.lastHero) ? Save.data.lastHero : 'lenny';
     this.tab = 'play';
     this.selTalent = null;
+    this.selPiece = null;
 
     // ── 3D stage ──
     this.scene = new THREE.Scene();
@@ -116,7 +117,9 @@ export class HomeScreen {
     const h = heroById(this.heroId);
     const prof = Save.hero(h.id);
     const pts = Save.talentPoints(h.id);
-    const xpNext = heroXpToNext(prof.level);
+    const xpNext = heroXpToNext(prof.level, prof.asc);
+    const maxed = prof.level >= HERO_MAX_LEVEL;
+    const asc = (n) => (n > 0 ? ` <span class="asc" title="Ascension ${n}">✦${n}</span>` : '');
     this.root.innerHTML = '';
     const title = el('div', 'home-title', `<h1>THUGRATS</h1><div class="sub">the hideout</div><div class="spacer"></div><div class="rep-chip" title="Rep — account-wide, earned by every run">🤝 ${Save.rep} Rep</div>`);
     const mini = el('div', 'roster-mini');
@@ -132,7 +135,7 @@ export class HomeScreen {
     // roster
     const roster = el('div', 'roster', '<h3>THE CREW</h3>');
     for (const hh of HEROES) {
-      const lv = hh.locked ? '' : `LV ${Save.hero(hh.id).level}`;
+      const lv = hh.locked ? '' : `LV ${Save.hero(hh.id).level}${asc(Save.hero(hh.id).asc)}`;
       const b = el('button', `hero-card ${hh.id === this.heroId ? 'sel' : ''} ${hh.locked ? 'locked' : ''}`,
         `<div class="face">${hh.locked ? '🔒' : hh.icon ?? '👶'}</div><div><div class="nm">${hh.name}</div><div class="tt">${hh.title}${hh.locked ? ' · coming soon' : ''}</div></div><div class="lv">${lv}</div>`);
       b.onclick = () => { if (!hh.locked) { sfx('click'); this.setHero(hh.id); } };
@@ -141,10 +144,22 @@ export class HomeScreen {
     this.root.appendChild(roster);
 
     // stage
-    const stage = el('div', 'hero-stage', `<div class="plate"><div class="tt">${h.title} · Level ${prof.level}</div><h2>${h.name}</h2>
-      <div class="hero-xp"><i style="width:${prof.level >= HERO_MAX_LEVEL ? 100 : (prof.xp / xpNext) * 100}%"></i></div>
-      <div class="note" style="margin:3px 0 0">${prof.level >= HERO_MAX_LEVEL ? 'MAX LEVEL' : `${prof.xp} / ${xpNext} XP`} · ${prof.runs} runs</div>
+    const stage = el('div', 'hero-stage', `<div class="plate"><div class="tt">${h.title} · Level ${prof.level}${asc(prof.asc)}</div><h2>${h.name}</h2>
+      <div class="hero-xp ${maxed ? 'full' : ''}"><i style="width:${maxed ? 100 : (prof.xp / xpNext) * 100}%"></i></div>
+      <div class="note" style="margin:3px 0 0">${maxed ? 'LEVEL 50 — ready to ascend' : `${prof.xp} / ${xpNext} XP`} · ${prof.runs} runs</div>
       <div class="blurb">${h.blurb}</div></div>`);
+    if (maxed) {
+      const b = el('button', 'btn ascend-btn', `✦ Ascend to ${prof.asc + 1}`);
+      b.title = 'Back to level 1 with your talents kept, +5 gear upgrade tokens, and pick your starting ability.';
+      b.onclick = () => {
+        sfx('click');
+        if (!confirm(`Ascend ${h.name}?\n\nBack to level 1 (talents and gear are kept), Ascension ${prof.asc + 1}, +5 gear upgrade tokens, and you can choose your starting ability.`)) return;
+        Save.ascend(h.id);
+        sfx('levelup');
+        this.render();
+      };
+      stage.querySelector('.plate').appendChild(b);
+    }
     this.root.appendChild(stage);
 
     // side tabs
@@ -169,16 +184,35 @@ export class HomeScreen {
   }
 
   renderPlay(body, h) {
-    body.appendChild(el('div', 'note', 'Clear a map by killing its final Crime Titan. Each clear upgrades that map\'s gear for this hero; harder difficulties raise the cap.'));
+    const prof = Save.hero(h.id);
+    if (prof.asc > 0) {
+      const cur = prof.startAbility && h.abilities.some((a) => a.id === prof.startAbility) ? prof.startAbility : h.start;
+      const pick = el('div', 'start-pick', '<div class="note" style="margin:0 0 6px">✦ <b>Starting ability</b> (unlocked by ascending)</div>');
+      const row = el('div', 'start-row');
+      for (const a of h.abilities) {
+        const b = el('button', `start-ab ${a.id === cur ? 'on' : ''}`, a.icon);
+        b.title = `${a.name} — ${a.desc}`;
+        b.onclick = () => { sfx('click'); Save.setStartAbility(h.id, a.id); this.render(); };
+        row.appendChild(b);
+      }
+      pick.appendChild(row);
+      pick.appendChild(el('div', 'note', `Starts with <b>${h.abilities.find((a) => a.id === cur).name}</b>.`));
+      body.appendChild(pick);
+    }
+    body.appendChild(el('div', 'note', 'Clear a map by killing its final Crime Titan. Each map\'s Crime Titans can drop pieces of this hero\'s gear set for that map.'));
     for (const m of MAPS) {
       const locked = m.requires && Save.bestClear(m.requires) < 0;
       const best = Save.bestClear(m.id);
-      const gear = h.gear.find((g) => g.map === m.id);
-      const gt = gear ? Save.gearTier(h.id, gear.id) : -1;
+      const set = h.sets.find((s) => s.map === m.id);
       const card = el('div', `map-card ${locked ? 'locked' : ''}`);
+      const owned = set ? set.pieceList.filter((p) => Save.gearTier(h.id, p.id) >= 0).length : 0;
+      const setHtml = set ? `<div class="set-drop"><div class="sd-head">${set.icon} <b>${set.name}</b> set <span class="muted">${owned}/5 · ${set.focusName}</span></div><div class="sd-row">${
+        TITAN_DROPS.map((rule, ti) => `<div class="sd-titan" title="${BOSSES[m.titans[ti]?.boss]?.name ?? 'Titan'}: ${Math.round(rule.chance * 100)}% to drop a missing piece">${rule.slots.map((si) => {
+          const p = set.pieceList[si], t = Save.gearTier(h.id, p.id);
+          return `<span class="sd-pc ${t < 0 ? 'missing' : ''}" style="border-color:${t >= 0 ? tierColor(t) : '#444'}" title="${p.name}${t < 0 ? ' (missing)' : ''}">${p.icon}</span>`;
+        }).join('')}<small>🗿${ti + 1} · ${Math.round(rule.chance * 100)}%</small></div>`).join('')}</div></div>` : '';
       card.innerHTML = `<h3>${m.name}</h3><div class="blurb">${locked ? `🔒 Clear ${MAPS.find((x) => x.id === m.requires).name} to unlock` : m.blurb}</div>
-        <div class="meta"><span>🗿 ${m.titans.map((t) => BOSSES[t.boss].name).join(' · ')}</span></div>
-        ${gear ? `<div class="meta"><span>Reward: ${gear.icon} ${gear.name} ${gt >= 0 ? `<b style="color:${tierColor(gt)}">(${TIERS[gt].name})</b>` : '(not owned)'}</span></div>` : ''}`;
+        <div class="meta"><span>🗿 ${m.titans.map((t) => BOSSES[t.boss].name).join(' · ')}</span></div>${setHtml}`;
       const diffs = el('div', 'diffs');
       DIFFICULTIES.forEach((d, i) => {
         const ok = !locked && (i === 0 || best >= i - 1);
@@ -230,7 +264,7 @@ export class HomeScreen {
         const r = prof.talents[t.id] ?? 0;
         const unlocked = this.spentIn(h, t.tree) >= t.row * 3;
         const cls = ['talent', t.capstone ? 'cap' : '', r >= t.max ? 'max' : r > 0 ? 'some' : unlocked ? 'avail' : 'locked'].join(' ');
-        const b = el('button', cls, `${t.icon}<span class="rk">${r}/${t.max}</span>`);
+        const b = el('button', cls, `${t.icon}<span class="rk">${r}/${t.max}</span>${t.pair ? `<span class="pr">${h.abilities.find((a) => a.id === t.pair)?.icon ?? '🔗'}</span>` : ''}`);
         b.style.gridRow = t.row + 1;
         b.style.gridColumn = t.col + 1;
         if (this.selTalent === t.id) b.style.outline = '2px solid #fff';
@@ -257,7 +291,9 @@ export class HomeScreen {
     if (t) {
       const r = prof.talents[t.id] ?? 0;
       const tr = h.trees.find((x) => x.id === t.tree);
+      const pair = t.pair && h.abilities.find((a) => a.id === t.pair);
       info.innerHTML = `<b>${t.icon} ${t.name}</b> <span class="muted">${tr.name} · row ${t.row + 1}${t.row ? ` (needs ${t.row * 3} pts in branch)` : ''} · rank ${r}/${t.max}</span>
+        ${pair ? `<div class="pair-tag">🔗 Pairs with ${pair.icon} ${pair.name} — only works in runs where you have it</div>` : ''}
         <div style="margin:4px 0">${t.desc(Math.max(1, r))}</div>${r < t.max && r > 0 ? `<div class="muted">Next rank: ${t.desc(r + 1)}</div>` : ''}`;
       const row = el('div', 'row');
       row.style.justifyContent = 'flex-start';
@@ -271,34 +307,81 @@ export class HomeScreen {
       row.append(add, sub);
       info.appendChild(row);
     } else {
-      info.innerHTML = `<span class="muted">Tap a talent to read it, tap again to learn a rank (right-click to unlearn). You earn a point every hero level. Deeper rows need 3 points per row in that branch; the bottom row holds a capstone that changes how ${h.name.split(' ')[0]} plays.</span>`;
+      info.innerHTML = `<span class="muted">Tap a talent to read it, tap again to learn a rank (right-click to unlearn). You earn a point every hero level. Deeper rows need 3 points per row in that branch. Rows 6–8 are <b>pairing</b> talents (🔗): they make one ability set off another, so they only work when you take both in a run.</span>`;
     }
     body.appendChild(info);
   }
 
   renderGear(body, h) {
-    body.appendChild(el('div', 'note', 'Gear is permanent and belongs to this hero. Wear one piece per slot. Each map\'s signature piece comes from clearing it; the others drop at random from long runs and clears. Repeat drops upgrade a piece, up to the difficulty\'s cap (Normal: Uncommon, Hard: Epic, Nightmare: Legendary).'));
-    for (const slot of GEAR_SLOTS) {
-      body.appendChild(el('h3', 'rep-group', slot));
-      const worn = Save.equipped(h.id, slot, h.gear);
-      for (const g of h.gear.filter((x) => x.slot === slot)) {
-        const t = Save.gearTier(h.id, g.id);
-        const map = MAPS.find((m) => m.id === g.map);
-        const on = worn === g.id;
-        const row = el('div', `gear-slot ${t < 0 ? 'empty' : ''} ${on ? 'worn' : ''}`);
-        row.innerHTML = `<div class="ic" style="border-color:${t >= 0 ? tierColor(t) : '#444'}">${g.icon}</div>
-          <div class="gtxt"><div class="nm" style="color:${t >= 0 ? tierColor(t) : 'inherit'}">${g.name} ${t >= 0 ? `(${TIERS[t].name})` : ''}${g.map ? ' <span class="sig">signature</span>' : ''}</div>
-          <div class="ds">${t >= 0 ? g.desc(t) : g.map ? `Clear ${map.name} to earn it.` : 'Random drop from runs.'}</div>
-          ${t >= 0 && t < 4 ? `<div class="ds" style="opacity:0.7">Next: ${g.desc(t + 1)}</div>` : ''}</div>`;
-        if (t >= 0) {
-          const b = el('button', `btn small ${on ? '' : 'ghost'}`, on ? 'Worn' : 'Wear');
-          b.disabled = on;
-          b.onclick = () => { sfx('select'); Save.equip(h.id, slot, g.id); this.render(); };
-          row.appendChild(b);
-        }
-        body.appendChild(row);
+    const prof = Save.hero(h.id);
+    const tierOf = (id) => Save.gearTier(h.id, id);
+    const worn = GEAR_SLOTS.map((slot) => Save.equipped(h.id, slot));
+    const sets = wornSets(h.sets, worn.filter(Boolean), tierOf);
+    body.appendChild(el('div', 'note', `Each map drops <b>${h.name.split(' ')[0]}'s</b> set for that map: its Crime Titans can drop the pieces (see the Play tab). Wear one piece per slot; 2, 3 and 5 pieces of a set turn on its bonuses, and you can mix 2 + 3 from two sets. Ascending gives <b>upgrade tokens</b>: each raises a piece one rarity.`));
+    // worn row + active bonuses
+    const top = el('div', 'gear-top');
+    top.innerHTML = `<div class="gear-worn">${GEAR_SLOTS.map((slot, i) => {
+      const p = worn[i] && h.pieces.find((x) => x.id === worn[i]);
+      return `<div class="gw ${p ? '' : 'empty'}" title="${slot}${p ? `: ${p.name}` : ' (empty)'}" style="border-color:${p ? tierColor(tierOf(p.id)) : '#444'}">${p ? p.icon : SLOT_ICON[slot]}<small>${slot}</small></div>`;
+    }).join('')}<div class="tokens" title="Gear upgrade tokens (from ascending)">✦ ${prof.tokens} token${prof.tokens === 1 ? '' : 's'}</div></div>
+      <div class="gear-bonuses">${sets.length ? sets.map((w) => `<div class="gb"><b>${w.set.icon} ${w.set.name}</b> <span class="muted">${w.count}/5 worn · bonuses ×${w.k.toFixed(2)}</span>${[2, 3, 5].map((n) => `<div class="gbl ${w.active.includes(n) ? 'on' : ''}">(${n}) ${w.set.bonus[n].desc(w.k)}</div>`).join('')}</div>`).join('') : '<div class="muted">No set pieces worn.</div>'}</div>`;
+    body.appendChild(top);
+    // grid: sets × slots
+    const grid = el('div', 'gear-grid');
+    grid.appendChild(el('div', 'gg-corner', ''));
+    for (const slot of GEAR_SLOTS) grid.appendChild(el('div', 'gg-col', `${SLOT_ICON[slot]}<small>${slot}</small>`));
+    for (const set of h.sets) {
+      const map = MAPS.find((m) => m.id === set.map);
+      const n = set.pieceList.filter((p) => tierOf(p.id) >= 0).length;
+      const lab = el('button', `gg-set ${this.selPiece === set.id ? 'sel' : ''}`, `<span class="ic">${set.icon}</span><span><b>${set.name}</b><small>${map?.name ?? ''} · ${n}/5</small></span>`);
+      lab.onclick = () => { sfx('click'); this.selPiece = set.id; this.render(); };
+      grid.appendChild(lab);
+      for (const p of set.pieceList) {
+        const t = tierOf(p.id);
+        const on = worn.includes(p.id);
+        const b = el('button', `gg-pc ${t < 0 ? 'locked' : ''} ${on ? 'worn' : ''} ${this.selPiece === p.id ? 'sel' : ''}`, `${t < 0 ? '🔒' : p.icon}${t >= 0 ? `<i style="background:${tierColor(t)}"></i>` : ''}`);
+        b.style.borderColor = t >= 0 ? tierColor(t) : '';
+        b.title = `${p.name}${t >= 0 ? ` (${TIERS[t].name})` : ' — not found yet'}`;
+        b.onclick = () => { sfx('click'); this.selPiece = p.id; this.render(); };
+        grid.appendChild(b);
       }
     }
+    body.appendChild(grid);
+    // details for the selected piece or set
+    const info = el('div', 'talent-info gear-info');
+    const piece = h.pieces.find((p) => p.id === this.selPiece);
+    const setSel = piece?.set ?? h.sets.find((s) => s.id === this.selPiece);
+    if (setSel) {
+      const map = MAPS.find((m) => m.id === setSel.map);
+      let html = '';
+      if (piece) {
+        const t = tierOf(piece.id);
+        const drop = TITAN_DROPS.findIndex((d) => d.slots.includes(piece.slotIndex));
+        html += `<b style="color:${t >= 0 ? tierColor(t) : 'inherit'}">${piece.icon} ${piece.name}</b> <span class="muted">${piece.slot}${t >= 0 ? ` · ${TIERS[t].name}` : ''}</span>
+          <div style="margin:4px 0">${t >= 0 ? pieceEffect(piece, t).desc : `<span class="muted">Not found yet. Drops from ${map?.name ?? 'its map'}'s Crime Titan #${drop + 1} (${Math.round(TITAN_DROPS[drop].chance * 100)}% per kill while missing).</span>`}</div>
+          ${t >= 0 && t < 4 ? `<div class="muted">Next (${TIERS[t + 1].name}): ${pieceEffect(piece, t + 1).desc}</div>` : ''}`;
+      }
+      html += `<div class="gear-setinfo"><b>${setSel.icon} ${setSel.name}</b> <span class="muted">· ${map?.name ?? ''} · built around ${setSel.focusName}</span>${[2, 3, 5].map((n) => `<div class="gbl">(${n}) ${setSel.bonus?.[n]?.desc(1) ?? ''}</div>`).join('')}<div class="muted" style="font-size:11px">Bonus numbers grow up to ×2 with the rarity of the pieces you wear.</div></div>`;
+      info.innerHTML = html;
+      if (piece && tierOf(piece.id) >= 0) {
+        const t = tierOf(piece.id);
+        const on = worn.includes(piece.id);
+        const row = el('div', 'row');
+        row.style.justifyContent = 'flex-start';
+        row.style.marginTop = '6px';
+        const wear = el('button', `btn small ${on ? 'ghost' : ''}`, on ? 'Take off' : 'Wear');
+        wear.onclick = () => { sfx('select'); Save.equip(h.id, piece.slot, on ? null : piece.id); this.render(); };
+        const up = el('button', 'btn small', t >= 4 ? 'Legendary' : `Upgrade → ${TIERS[t + 1].name} (✦1)`);
+        up.disabled = t >= 4 || prof.tokens <= 0;
+        up.title = prof.tokens <= 0 ? 'Ascend to earn upgrade tokens' : '';
+        up.onclick = () => { if (Save.upgradeGear(h.id, piece.id)) { sfx('levelup'); this.render(); } };
+        row.append(wear, up);
+        info.appendChild(row);
+      }
+    } else {
+      info.innerHTML = '<span class="muted">Tap a piece (or a set name) to read it, wear it or upgrade it.</span>';
+    }
+    body.appendChild(info);
   }
 
   renderRep(body) {
@@ -330,7 +413,9 @@ export class HomeScreen {
   }
 
   renderKit(body, h) {
-    body.appendChild(el('div', 'note', `Every run starts with <b>${h.abilities.find((a) => a.id === h.start).name}</b>. Level-ups offer new abilities (up to 5 per run) or rarity-rolled upgrades to ones you have. Everything fires on its own — you just move.`));
+    const prof = Save.hero(h.id);
+    const sid = prof.asc > 0 && prof.startAbility ? prof.startAbility : h.start;
+    body.appendChild(el('div', 'note', `Every run starts with <b>${h.abilities.find((a) => a.id === sid).name}</b>${prof.asc > 0 ? ' (change it in the Play tab)' : ' (ascend to choose)'}. Level-ups offer new abilities (up to 5 per run) or rarity-rolled upgrades to ones you have. Everything fires on its own — you just move.`));
     const list = el('div', 'ab-list');
     for (const a of h.abilities) {
       list.appendChild(el('div', 'ab-item', `<span class="ic">${a.icon}</span><div><b>${a.name}</b><span>${a.desc}</span></div>`));

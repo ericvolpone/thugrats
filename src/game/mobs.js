@@ -3,6 +3,7 @@ import { mobGeometry, MATS } from '../assets/models.js';
 import { MOBS, BOSSES } from '../data/mobs.js';
 import { BossBrain } from './bossBrain.js';
 import { TAU, rand } from '../util.js';
+import { FlowField, HOP_MAX } from './flow.js';
 
 /**
  * All enemies. Regular + elite mobs of a type share one InstancedMesh (one draw
@@ -22,6 +23,7 @@ const ELITE_TINT = new THREE.Color(1.3, 0.75, 0.85);
 const RING_ELITE = new THREE.Color('#ff3b6b');
 const RING_BOSS = new THREE.Color('#ff9a1f');
 const WHITE = new THREE.Color(1, 1, 1);
+const GRAVITY = 26;
 
 export const TIER_NAMES = ['Thug', 'Elite', 'Boss', 'Crime Titan'];
 
@@ -35,6 +37,7 @@ export class MobManager {
     this.batches = new Map(); // model -> {mesh, n}
     this.grid = new Map();
     this.cap = 340;
+    this.flow = new FlowField(run.world); // path around buildings (flow.js)
 
     const blobGeo = new THREE.CircleGeometry(1, 10).rotateX(-Math.PI / 2);
     this.blobs = new THREE.InstancedMesh(blobGeo, new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }), CAP + 40);
@@ -115,6 +118,7 @@ export class MobManager {
       facing: rand(0, TAU), atkT: rand(0.3, 1), wind: 0, windKind: null, rangedT: rand(0.5, 2),
       slowT: 0, slow: 0, rootT: 0, burnT: 0, burnDps: 0, burnTick: 0, flash: 0, spawnT: 0,
       dead: false, deathT: 0, phase: rand(0, TAU), zoneSlow: 0, fear: false, armor: o.def.armor ?? 0,
+      y: 0, vy: 0, grounded: true, hopCd: 0, flowT: 0, losT: rand(0, 0.3), progT: rand(0, 0.6), lastD: Infinity,
       height: (o.def.h ?? 1.8) * (o.scale ?? 1),
     };
     this.list.push(m);
@@ -215,6 +219,8 @@ export class MobManager {
     const fearR = run.stats.fearRadius;
     const decoys = run.combat.decoys;
     this.rebuildGrid();
+    const world = run.world;
+    this.flow.update(dt, p.x, p.z);
 
     for (const m of this.list) {
       if (m.dead) { m.deathT += dt; continue; }
@@ -262,28 +268,38 @@ export class MobManager {
       if (r && dist < r.keep) want = dist < r.keep * 0.7 ? -0.6 : 0;
       if (dist < touch + 0.05) want = 0;
       let nx = dx / dist, nz = dz / dist;
-      // wall steering: if something solid is straight ahead, slide around it
-      // (keep the chosen side for a while so they don't jitter at corners)
-      if (!m.def.fly && want > 0 && dist > 3) {
-        m.steerCheck = (m.steerCheck ?? Math.random() * 0.2) - dt;
-        if (m.steerCheck <= 0) {
-          m.steerCheck = 0.18;
-          const look = m.radius + 1.4;
-          if (run.world.blockedAt(m.x + nx * look, m.z + nz * look)) {
-            if (!(m.steerT > 0)) {
-              const lf = !run.world.blockedAt(m.x - nz * look, m.z + nx * look);
-              const rf = !run.world.blockedAt(m.x + nz * look, m.z - nx * look);
-              m.steer = lf && !rf ? 1 : rf && !lf ? -1 : (m.id % 2 ? 1 : -1);
-            }
-            m.steerT = 0.9;
-          }
+      if (!m.def.fly && want > 0 && dist > 2.5) {
+        // walls in the way (buildings, containers, anything too tall to hop) or no
+        // progress for a while: follow the flow field around them (flow.js)
+        m.losT -= dt;
+        if (m.losT <= 0) {
+          m.losT = 0.3;
+          if (tgt === p && this.flow.blockedLine(m.x, m.z, p.x, p.z)) m.flowT = Math.max(m.flowT, 0.6);
         }
-        if (m.steerT > 0) {
-          m.steerT -= dt;
-          const sx = nx * 0.3 - nz * m.steer, sz = nz * 0.3 + nx * m.steer;
-          const l = Math.hypot(sx, sz);
-          nx = sx / l;
-          nz = sz / l;
+        m.progT -= dt;
+        if (m.progT <= 0) {
+          m.progT = 1;
+          if (tgt === p && m.rootT <= 0 && sp > 0.5 && dist > m.lastD - 0.4) m.flowT = Math.max(m.flowT, 3);
+          m.lastD = dist;
+        }
+        if (m.flowT > 0 && tgt === p) {
+          m.flowT -= dt;
+          const f = this.flow.dir(m.x, m.z);
+          if (f) { nx = f[0]; nz = f[1]; }
+        }
+      }
+      // hop onto / over low props (cars, crates, fences) in the way, or up to the player
+      if (!m.def.fly && m.tier < 2) {
+        m.hopCd -= dt;
+        if (m.grounded && m.hopCd <= 0 && sp > 0 && (want > 0 || (tgt === p && p.y > m.y + 0.4 && dist < touch + 1.6))) {
+          const look = m.radius + 0.7;
+          const top = world.topAt(m.x + nx * look, m.z + nz * look);
+          const cap = m.height < 1 ? HOP_MAX * 0.75 : HOP_MAX; // rats and dogs hop lower
+          if (top > m.y + 0.3 && top <= m.y + cap) {
+            m.vy = Math.sqrt(2 * GRAVITY * (top - m.y + 0.45));
+            m.grounded = false;
+            m.hopCd = 0.6;
+          }
         }
       }
       m.vx = nx * sp * want;
@@ -291,6 +307,15 @@ export class MobManager {
       if (m.brain?.dash) { m.vx = m.brain.dash.vx; m.vz = m.brain.dash.vz; }
       m.x += (m.vx + m.kx) * dt;
       m.z += (m.vz + m.kz) * dt;
+      if (!m.def.fly) {
+        // fall / land on whatever is under us
+        const g = world.groundAt(m.x, m.z, m.y);
+        if (!m.grounded || m.y > g + 0.02) {
+          m.vy -= GRAVITY * dt;
+          m.y += m.vy * dt;
+          if (m.y <= g) { m.y = g; m.vy = 0; m.grounded = true; } else m.grounded = false;
+        }
+      }
       const kd = Math.exp(-8 * dt);
       m.kx *= kd;
       m.kz *= kd;
@@ -308,9 +333,9 @@ export class MobManager {
         m.wind -= dt;
         if (m.wind <= 0) {
           if (m.windKind === 'melee') {
-            // short mobs can't reach you on top of a car; fliers and grown-ups can reach a bit up
+            // reach is measured from where the mob stands (it may have hopped up onto a car too)
             if (tgt !== p) { if (dist <= touch + (m.def.reach ?? 0.5) + 0.4) run.combat.hitDecoy(tgt); }
-            else if (Math.hypot(p.x - m.x, p.z - m.z) <= touch + (m.def.reach ?? 0.5) + 0.4 && p.y <= m.height * 0.85 + (m.def.fly ?? 0)) run.hurtPlayer(m.dmg, m);
+            else if (Math.hypot(p.x - m.x, p.z - m.z) <= touch + (m.def.reach ?? 0.5) + 0.4 && p.y - m.y <= m.height * 0.85 + (m.def.fly ?? 0)) run.hurtPlayer(m.dmg, m);
           } else if (m.windKind === 'ranged') {
             this.fireRanged(m);
           }
@@ -335,6 +360,7 @@ export class MobManager {
         m.x = sx;
         m.z = sz;
         m.spawnT = 0;
+        m.y = 0; m.vy = 0; m.grounded = true; m.flowT = 0;
       }
     }
 
@@ -352,12 +378,12 @@ export class MobManager {
           m.x += (dx / d) * overlap * wm;
           m.z += (dz / d) * overlap * wm;
         });
-        run.world.collide(m);
+        world.collide(m, m.radius, m.y);
       }
       const dx = m.x - p.x, dz = m.z - p.z;
       const d = Math.hypot(dx, dz) || 0.01;
       const min = m.radius + p.radius;
-      if (d < min && p.y < m.height * 0.7) {
+      if (d < min && Math.abs(p.y - m.y) < m.height * 0.7) {
         m.x = p.x + (dx / d) * min;
         m.z = p.z + (dz / d) * min;
       }
@@ -406,7 +432,7 @@ export class MobManager {
       const bob = Math.abs(Math.sin(m.phase)) * 0.06 * walk * m.scale;
       _e.set(pitch, m.facing, sway);
       _q.setFromEuler(_e);
-      _p.set(m.x, fly + bob - deathK * 0.3, m.z);
+      _p.set(m.x, (m.y ?? 0) + fly + bob - deathK * 0.3, m.z);
       _s.set(sc / squash ** 0.5, sc * squash ** -0.5 * (m.flash > 0 ? 0.9 : 1), sc / squash ** 0.5);
       _m.compose(_p, _q, _s);
 
@@ -426,12 +452,12 @@ export class MobManager {
       }
       if (!m.dead && blobs < CAP + 40) {
         const r = m.radius * 1.15 * grow;
-        _m.makeScale(r, 1, r).setPosition(m.x, 0.03, m.z);
+        _m.makeScale(r, 1, r).setPosition(m.x, (m.def.fly ? 0 : m.y) + 0.03, m.z);
         this.blobs.setMatrixAt(blobs++, _m);
       }
       if (!m.dead && m.tier >= 1 && rings < 80) {
         const r = m.radius * 1.25 + Math.sin(t * 4) * 0.05;
-        _m.makeScale(r, 1, r).setPosition(m.x, 0.08, m.z);
+        _m.makeScale(r, 1, r).setPosition(m.x, (m.def.fly ? 0 : m.y) + 0.08, m.z);
         this.rings.setColorAt(rings, m.tier === 1 ? RING_ELITE : RING_BOSS);
         this.rings.setMatrixAt(rings++, _m);
       }

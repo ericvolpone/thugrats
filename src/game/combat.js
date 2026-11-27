@@ -436,6 +436,7 @@ export class Combat {
     // traps
     for (let i = this.traps.length - 1; i >= 0; i--) {
       const t = this.traps[i];
+      if (!t) continue; // a trigger (chain reactions) can remove other traps mid-loop
       t.t += dt;
       t.arm -= dt;
       t.mesh.position.y = Math.abs(Math.sin(t.t * 6)) * 0.05;

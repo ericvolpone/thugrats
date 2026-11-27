@@ -16,14 +16,14 @@ import { BABYFACE_GEAR } from './babyface/gear.js';
 import { PROF_ABILITIES } from './prof/abilities.js';
 import { PROF_TALENTS, PROF_TREES } from './prof/talents.js';
 import { PROF_GEAR } from './prof/gear.js';
-import { SHARED_GEAR } from '../data/gear.js';
+import { expandSets } from '../data/gear.js';
 import { registerHero } from '../assets/models.js';
 import { buildBaby } from '../assets/baby.js';
 
 /**
  * Hero roster. Each hero: model look, base stats, the starting ability, the
- * full ability pool (a run can hold 5), three talent trees and gear (three
- * signature pieces, one per map, plus the shared pieces in data/gear.js).
+ * full ability pool (a run can hold 5), three talent trees and five gear sets
+ * (one per map, see data/gear.js).
  */
 export const BASE_STATS = {
   maxHp: 100, regen: 0.4, armor: 0, speed: 6.4, pickup: 4, crit: 0.05, critDmg: 0.5,
@@ -83,7 +83,8 @@ export const HEROES = [
 
 for (const h of HEROES) {
   h.model = h.id;
-  h.gear = [...h.gear, ...SHARED_GEAR];
+  h.sets = expandSets(h.gear); // one 5-piece set per map (heroes/<id>/gear.js)
+  h.pieces = h.sets.flatMap((s) => s.pieceList);
   registerHero(h.id, (o) => buildBaby({ ...h.look, ...o }));
 }
 

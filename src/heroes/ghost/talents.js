@@ -1,4 +1,14 @@
-/** Lucy's talent trees (format: heroes/lenny/talents.js). */
+import { chill } from '../common.js';
+
+/**
+ * Lucy's talent trees (format: heroes/lenny/talents.js). Rows 0–4 are the
+ * classic stat / tweak talents with a capstone at row 4; rows 5–6 are
+ * pairings (`pair` = the partner ability that must be owned this run, wired
+ * with ctx.link / ctx.amp, see game/stats.js) and row 7 is a second capstone:
+ *   Assassin — Shuriken → Knives, Caltrops → Knives, Garrote → Cloak; Death by a Thousand Cuts
+ *   Shadow   — Tripwire → Smoke, Decoy → Caltrops, Cloak → Garrote; Vanish
+ *   Gadgets  — Poison Dart → Sleeping Gas, Pistol → Poison Dart, Laser Watch → Tripwire; Puppet Master
+ */
 export const GHOST_TREES = [
   { id: 'assassin', name: 'Assassin', icon: '🗡️', color: '#ff5a7a', blurb: 'Crits, executes and quiet kills.' },
   { id: 'shadow', name: 'Shadow', icon: '🌫️', color: '#a0a8ff', blurb: 'Smoke, dodges and slipping away.' },
@@ -23,6 +33,39 @@ export const GHOST_TALENTS = [
     desc: (r) => `Throwing Knives throw +${2 * r} knives.`, apply: (c, r) => c.abil('knives', 'count', 'add', 2 * r) },
   { id: 'g_ambush', tree: 'assassin', row: 4, col: 1, max: 1, name: 'Ambush', icon: '🌑', capstone: true,
     desc: () => 'Smoke Bomb also gives +25% crit chance while it lasts.', apply: (c) => c.flag('ambush', true) },
+  { id: 'g_juggler', tree: 'assassin', row: 5, col: 0, max: 3, name: 'Star Juggler', icon: '🤹', pair: 'knives',
+    desc: (r) => `Shuriken Ring hits have a ${5 * r}% chance to throw a Throwing Knife at the thug (Knives' damage and pierce).`,
+    apply: (c, r) => c.link('shuriken', 'knives', 'hit', 0.05 * r, (run, p, ev) => {
+      const pl = run.player;
+      run.shoot({ x: pl.x, z: pl.z, y: 0.8, angle: Math.atan2(ev.x - pl.x, ev.z - pl.z), speed: p.stat('speed'), dmg: p.stat('damage'), range: p.stat('range'), pierce: p.stat('pierce'), size: 0.9, color: '#dfe6ee', ability: p });
+    }, { icd: 0.25 }) },
+  { id: 'g_hobble', tree: 'assassin', row: 5, col: 2, max: 3, name: 'Hamstring', icon: '🦵', pair: 'caltrops',
+    desc: (r) => `Thugs that step on Caltrops stay slowed 30% for 1.5s after, and Throwing Knives deal +${15 * r}% damage to slowed or rooted thugs (needs Caltrops in the run).`,
+    apply: (c, r) => {
+      c.link('caltrops', 'knives', 'hit', 1, (run, p, ev) => chill(ev.m, 0.3, 1.5), { icd: 0 });
+      c.amp((run, m, a) => (a?.def?.id === 'knives' && (m.slowT > 0 || m.rootT > 0) && run.abilityById('caltrops') ? 0.15 * r : 0));
+    } },
+  { id: 'g_clean_getaway', tree: 'assassin', row: 6, col: 1, max: 3, name: 'Clean Getaway', icon: '🫥', pair: 'cloak',
+    desc: (r) => `Garrote kills add ${(0.4 * r).toFixed(1)}s to Cloak, or put up a ${(0.5 * r).toFixed(1)}s Cloak if it isn't on.`,
+    apply: (c, r) => c.link('garrote', 'cloak', 'kill', 1, (run, p) => {
+      const b = run.buffs.cloak;
+      if (b) { b.t = Math.min(b.max + 3, b.t + 0.4 * r); }
+      else p.def.wrap(run, p, 0.5 * r);
+    }, { icd: 0.1 }) },
+  { id: 'g_cuts', tree: 'assassin', row: 7, col: 1, max: 1, name: 'Death by a Thousand Cuts', icon: '🩸', capstone: true,
+    desc: () => 'Every crit leaves a cut: each cut makes that thug take +4% damage (up to 10). A regular or elite thug with 10 cuts under 30% HP bleeds out on the spot.',
+    apply: (c) => {
+      c.link('*', null, 'crit', 1, (run, p, ev) => {
+        const m = ev.m;
+        if (m.dead || m.hp <= 0) return;
+        m.cuts = Math.min(10, (m.cuts ?? 0) + 1);
+        if (m.cuts >= 10 && m.tier < 2 && m.hp / m.maxHp < 0.3) {
+          run.fx.burst(m.x, 1, m.z, '#c32020', 14, 4);
+          run.hit(m, m.hp + 1, ev.src, { noCrit: true, knock: 0 });
+        }
+      }, { icd: 0 });
+      c.amp((run, m) => (m.cuts ? 0.04 * m.cuts : 0));
+    } },
 
   // ── Shadow ──
   { id: 'g_dodge', tree: 'shadow', row: 0, col: 0, max: 5, name: 'Light Feet', icon: '🩰',
@@ -41,6 +84,38 @@ export const GHOST_TALENTS = [
     desc: (r) => `+${25 * r}% pickup range, +${10 * r}% gold.`, apply: (c, r) => { c.stat('pickupPct', 0.25 * r); c.stat('goldGain', 0.1 * r); } },
   { id: 'g_ghost', tree: 'shadow', row: 4, col: 1, max: 1, name: 'Ghost Protocol', icon: '👻', capstone: true,
     desc: () => '+12% dodge and +1 reroll every run.', apply: (c) => { c.stat('dodge', 0.12); c.stat('rerolls', 1); } },
+  { id: 'g_smoke_signal', tree: 'shadow', row: 5, col: 0, max: 3, name: 'Smoke Signal', icon: '🪢', pair: 'smoke',
+    desc: (r) => `Tripwires that spring have a ${25 * r}% chance to puff a Smoke Bomb cloud there (Smoke's size ×0.7, half its duration; slows thugs).`,
+    apply: (c, r) => c.link('tripwire', 'smoke', 'hit', (run) => {
+      // one roll per wire, not one per thug it trips
+      if (run.counters.g_smoke_signal === run.time) return 0;
+      run.counters.g_smoke_signal = run.time;
+      return 0.25 * r;
+    }, (run, p, ev) => {
+      run.zone({ x: ev.x, z: ev.z, r: p.stat('area') * 0.7, life: p.stat('duration') * 0.5, slow: 0.5, kind: 'smoke', ability: p });
+      run.fx.burst(ev.x, 0.6, ev.z, '#8a8f99', 14, 4, 0.9, 2, -1);
+    }, { icd: 0.6 }) },
+  { id: 'g_cardboard_jacks', tree: 'shadow', row: 5, col: 2, max: 3, name: 'Jack-in-the-Box', icon: '📦', pair: 'caltrops',
+    desc: (r) => `When Cardboard Decoy pops it scatters ${r} Caltrops patch${r > 1 ? 'es' : ''} around it (Caltrops' damage, 70% of its size).`,
+    apply: (c, r) => c.link('decoy', 'caltrops', 'explode', 1, (run, p, ev) => {
+      for (let i = 0; i < r; i++) {
+        const ang = (i / r) * Math.PI * 2 + Math.random(), d = r > 1 ? 1.6 : 0;
+        p.def.place(run, p, ev.x + Math.sin(ang) * d, ev.z + Math.cos(ang) * d, { r: p.stat('area') * 0.7 });
+      }
+    }, { icd: 0.3 }) },
+  { id: 'g_from_shadows', tree: 'shadow', row: 6, col: 1, max: 3, name: 'From the Shadows', icon: '🥷', pair: 'garrote',
+    desc: (r) => `When Cloak runs out, Lucy Garrotes the nearest thug for free (executes as usual, otherwise ×${(1 + 0.5 * r).toFixed(1)} damage).`,
+    apply: (c, r) => c.flag('cloakBreak', 1 + 0.5 * r) },
+  { id: 'g_vanish', tree: 'shadow', row: 7, col: 1, max: 1, name: 'Vanish', icon: '🎩', capstone: true, pair: 'cloak',
+    desc: () => 'When a hit drops you under 35% HP, you vanish: Cloak goes up for free, thugs within 6 lose you (frozen 1.5s) and Smoke Bomb pops if you have it. Once every 30s.',
+    apply: (c) => c.link('*', 'cloak', 'hurt', (run, ev) => { const h = run.player.hp - ev.dmg; return h > 0 && h < run.stats.maxHp * 0.35 ? 1 : 0; }, (run, p) => {
+      const pl = run.player;
+      p.def.wrap(run, p);
+      for (const m of run.mobs.near(pl.x, pl.z, 6)) if (m.tier < 2) m.rootT = Math.max(m.rootT, 1.5);
+      const sm = run.abilityById('smoke');
+      if (sm) { sm.def.fire(run, sm); sm.cd = sm.cdMax = sm.stat('cooldown'); }
+      run.fx.burst(pl.x, 0.8, pl.z, '#bfc8ff', 24, 5, 0.9, 2, -1);
+    }, { icd: 30 }) },
 
   // ── Gadgets ──
   { id: 'g_poison', tree: 'gadgets', row: 0, col: 0, max: 5, name: 'Nightshade', icon: '☠️',
@@ -59,4 +134,32 @@ export const GHOST_TALENTS = [
     desc: (r) => `+${6 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.06 * r) },
   { id: 'g_tips', tree: 'gadgets', row: 4, col: 1, max: 1, name: 'Poison Tips', icon: '🧪', capstone: true,
     desc: () => 'Silenced Pistol bullets poison for 60% of their damage over 3s.', apply: (c) => c.flag('poisonTips', true) },
+  { id: 'g_knockout_dart', tree: 'gadgets', row: 5, col: 0, max: 3, name: 'Knockout Dart', icon: '😪', pair: 'sleep_gas',
+    desc: (r) => `Poison Dart hits have a ${12 * r}% chance to burst into a small Sleeping Gas cloud (Gas's damage, 60% of its size and duration).`,
+    apply: (c, r) => c.link('poison_dart', 'sleep_gas', 'hit', 0.12 * r, (run, p, ev) => {
+      run.zone({ x: ev.x, z: ev.z, r: p.stat('area') * 0.6, life: p.stat('duration') * 0.6, dps: p.stat('damage'), slow: 0.8, kind: 'gas', color: '#b28cff', ability: p });
+    }, { icd: 0.8 }) },
+  { id: 'g_laced', tree: 'gadgets', row: 5, col: 2, max: 3, name: 'Laced Rounds', icon: '💉', pair: 'poison_dart',
+    desc: (r) => `Silenced Pistol hits have a ${10 * r}% chance to poison the thug with 40% of Poison Dart's poison.`,
+    apply: (c, r) => c.link('silenced', 'poison_dart', 'hit', 0.1 * r, (run, p, ev) => {
+      if (!ev.m.dead && ev.m.hp > 0) run.ignite(ev.m, p.stat('power') * run.stats.dmg * 0.4, 4);
+    }, { icd: 0.05 }) },
+  { id: 'g_laser_wire', tree: 'gadgets', row: 6, col: 1, max: 3, name: 'Laser Grid', icon: '🔦', pair: 'tripwire',
+    desc: (r) => `Laser Watch has a ${20 * r}% chance to string a Tripwire where it aims (doesn't count toward the wire limit).`,
+    apply: (c, r) => c.link('laser_watch', 'tripwire', 'fire', 0.2 * r, (run, p, ev) => {
+      if (ev.x != null) p.def.place(run, p, ev.x, ev.z, { extra: true });
+    }, { icd: 1 }) },
+  { id: 'g_puppet', tree: 'gadgets', row: 7, col: 1, max: 1, name: 'Puppet Master', icon: '🎎', capstone: true,
+    desc: () => 'Slowed, rooted or sleeping thugs take +20% damage. When one dies, every thug within 5 is yanked to the spot and tied up for 1s (bosses just stumble). Every 1.5s at most.',
+    apply: (c) => {
+      c.stat('ctrlDmg', 0.2);
+      c.link('*', null, 'kill', (run, ev) => (ev.m.rootT > 0 || ev.m.slowT > 0 || ev.m.zoneSlow > 0 ? 1 : 0), (run, p, ev) => {
+        for (const m of run.mobs.near(ev.x, ev.z, 5)) {
+          const dx = ev.x - m.x, dz = ev.z - m.z, d = Math.hypot(dx, dz) || 1;
+          if (m.tier < 2) { m.kx += (dx / d) * 6; m.kz += (dz / d) * 6; m.rootT = Math.max(m.rootT, 1); }
+          else chill(m, 0.5, 1);
+        }
+        run.fx.ring(ev.x, ev.z, 5, '#7ae0c8', 0.35);
+      }, { icd: 1.5 });
+    } },
 ];

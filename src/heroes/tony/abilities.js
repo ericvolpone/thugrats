@@ -3,6 +3,17 @@ import { TAU, rand } from '../../util.js';
 import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, cone, line, nova, chill, buff, AURA_UPS } from '../common.js';
 
 /**
+ * Belly Bounce bookkeeping: how much of Tony's shield got soaked since the last
+ * sample (the shield only goes down by taking hits).
+ */
+function soaked(run) {
+  const c = run.counters, sh = run.player.shield;
+  const d = Math.max(0, (c.tonyShieldMark ?? sh) - sh);
+  c.tonyShieldMark = sh;
+  return d;
+}
+
+/**
  * Tiny Tony Two-Fists — the Brute. Up close and personal: big cones, knockback,
  * stuns and a body that doesn't quit. See heroes/lenny/abilities.js for the format.
  */
@@ -15,12 +26,24 @@ export const TONY_ABILITIES = [
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range') + a.stat('area') * 0.3, 'nearest'),
     fire(run, a, t) {
       const n = a.stat('count') + (run.flags.tonyCombo ? 1 : 0);
+      // Corner Bar (5): every 4th Haymaker also throws a shockwave all around
+      const wave = run.flags.tonyShockwave && run.every('tonyShockwave', 4) ? run.flags.tonyShockwave : 0;
       for (let i = 0; i < n; i++) {
         run.later(i * 0.16, () => {
           const ang = angleTo(run, t) + (i % 2 ? 0.3 : -0.3) * Math.min(1, i);
-          cone(run, a, { angle: ang, r: a.stat('area'), half: 0.8, dmg: a.stat('damage'), knock: 4, color: '#ffe0c0' });
+          // Juiced Swing: 360° while raging · Corner Bar (3): wider roundhouse
+          const half = run.flags.tonyRageSpin && run.buffs.roid_rage ? Math.PI : run.flags.tonyWideSwing ? 1.2 : 0.8;
+          cone(run, a, { angle: ang, r: a.stat('area'), half, dmg: a.stat('damage'), knock: 4, color: '#ffe0c0' });
           run.player.aim(t.x, t.z, 0.2);
           sfx('hit', 0.05);
+        });
+      }
+      if (wave) {
+        run.later(n * 0.16, () => {
+          nova(run, a, { r: a.stat('area') * 1.8, dmg: a.stat('damage') * wave, knock: 10, root: 0.5, color: '#ffd27a' });
+          run.fx.burst(run.player.x, 0.3, run.player.z, '#ffd27a', 18, 7);
+          run.shake(0.2);
+          sfx('tantrum', 0.1);
         });
       }
     },
@@ -51,6 +74,12 @@ export const TONY_ABILITIES = [
         run.explode(x, z, a.stat('area'), a.stat('damage'), a, { small: true, color: '#e6fff0' });
         const n = a.stat('count');
         for (let i = 0; i < n; i++) run.shoot({ x, z, y: 0.5, angle: (i / n) * TAU + rand(0, 0.4), speed: 24, dmg: a.stat('damage') * 0.45, range: 6, size: 0.7, color: '#c8ffe0', ability: a });
+        // Dock Worker (5): the bottle bounces back and smashes at Tony's feet
+        const back = run.flags.tonyBoomerang;
+        if (back) {
+          run.lob({ x, z, tx: run.player.x, tz: run.player.z, dur: 0.5, kind: 'bottle', small: true,
+            onLand: (x2, z2) => run.explode(x2, z2, a.stat('area') * 0.8, a.stat('damage') * back, a, { small: true, color: '#e6fff0' }) });
+        }
         sfx('hit');
       } });
     },
@@ -66,16 +95,37 @@ export const TONY_ABILITIES = [
       const ang = angleTo(run, t);
       const len = a.stat('range');
       const w = a.stat('area'), dmg = a.stat('damage');
+      const sx = p.x, sz = p.z, end = { x: p.x + Math.sin(ang) * len, z: p.z + Math.cos(ang) * len };
+      a.rushEnd = end; // for pairings (Trample)
+      const stun = run.flags.tonyRushStun ?? 0; // Strongman (3)
       // a shadow copy does the charge; everything it runs into gets bowled over once
-      const hit = new Set();
-      run.combat.shadow({ x: p.x, z: p.z, angle: ang, len, dur: 0.3, color: '#ffcf9a', onStep: (x, z) => {
-        for (const m of run.mobs.near(x, z, w + 0.8)) {
-          if (hit.has(m.id)) continue;
-          hit.add(m.id);
-          run.hit(m, dmg, a, { knock: 9, fromX: x - Math.sin(ang), fromZ: z - Math.cos(ang) });
+      const charge = (x0, z0, dir, color) => {
+        const hit = new Set();
+        run.combat.shadow({ x: x0, z: z0, angle: dir, len, dur: 0.3, color, onStep: (x, z) => {
+          for (const m of run.mobs.near(x, z, w + 0.8)) {
+            if (hit.has(m.id)) continue;
+            hit.add(m.id);
+            run.hit(m, dmg, a, { knock: 9, fromX: x - Math.sin(dir), fromZ: z - Math.cos(dir) });
+            if (stun && !m.dead) m.rootT = Math.max(m.rootT, m.tier >= 2 ? stun * 0.25 : stun);
+          }
+        } });
+      };
+      charge(sx, sz, ang, '#ffcf9a');
+      // Wrecking Ball: the shadow charges back the way it came
+      if (run.flags.tonyWreckingBall) {
+        run.later(0.3, () => {
+          charge(end.x, end.z, ang + Math.PI, '#ff9a5a');
+          run.fx.beam(end.x, end.z, sx, sz, '#ff9a5a', w * 1.2, 0.3, 0.4);
+        });
+      }
+      // Strongman (5): the path becomes a quake trail
+      const trail = run.flags.tonyQuakeTrail ?? 0;
+      if (trail) {
+        for (let d = 1.2; d <= len; d += 2.4) {
+          run.zone({ x: sx + Math.sin(ang) * d, z: sz + Math.cos(ang) * d, r: Math.max(1.4, w * 1.3), life: 3, dps: dmg * trail, slow: 0.4, kind: 'cement', color: '#7a6a55', ability: a });
         }
-      } });
-      run.fx.beam(p.x, p.z, p.x + Math.sin(ang) * len, p.z + Math.cos(ang) * len, '#ffcf9a', w * 1.2, 0.3, 0.4);
+      }
+      run.fx.beam(p.x, p.z, end.x, end.z, '#ffcf9a', w * 1.2, 0.3, 0.4);
       run.fx.burst(p.x, 0.3, p.z, '#b49a78', 14, 5);
       sfx('tantrum', 0.1);
     },
@@ -138,8 +188,19 @@ export const TONY_ABILITIES = [
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
     fire(run, a, t) {
       const base = angleTo(run, t), n = a.stat('count');
+      const back = run.flags.tonyBoomerang; // Dock Worker (5)
       for (let i = 0; i < n; i++) {
-        run.shoot({ x: run.player.x, z: run.player.z, y: 0.7, angle: base + (i - (n - 1) / 2) * 0.35, speed: a.stat('speed'), dmg: a.stat('damage'), range: a.stat('range') * 1.3, pierce: 99, size: 2.6 * a.stat('area'), color: '#5a5e66', ability: a, knock: 5 });
+        const ang = base + (i - (n - 1) / 2) * 0.35;
+        run.shoot({ x: run.player.x, z: run.player.z, y: 0.7, angle: ang, speed: a.stat('speed'), dmg: a.stat('damage'), range: a.stat('range') * 1.3, pierce: 99, size: 2.6 * a.stat('area'), color: '#5a5e66', ability: a, knock: 5 });
+        if (back) {
+          // the cover flies back to Tony from the end of its flight
+          const reach = a.stat('range') * 1.3;
+          const ex = run.player.x + Math.sin(ang) * reach, ez = run.player.z + Math.cos(ang) * reach;
+          run.later(reach / a.stat('speed'), () => {
+            const p = run.player;
+            run.shoot({ x: ex, z: ez, y: 0.7, angle: Math.atan2(p.x - ex, p.z - ez), speed: a.stat('speed'), dmg: a.stat('damage') * back, range: Math.hypot(p.x - ex, p.z - ez) + 1, pierce: 99, size: 2.6 * a.stat('area'), color: '#7a7e86', ability: a, knock: 5 });
+          });
+        }
       }
       sfx('tantrum', 0.05);
     },
@@ -152,7 +213,9 @@ export const TONY_ABILITIES = [
     ready: (run, a) => run.player.shield < a.stat('power') * 0.5 && run.mobs.count(run.player.x, run.player.z, 10) > 0,
     fire(run, a) {
       const p = run.player;
+      if (run.flags.tonyBellyBank) run.counters.tonyBank = (run.counters.tonyBank ?? 0) + soaked(run);
       p.shield = Math.max(p.shield, a.stat('power') * (1 + (run.flags.tonyThorns ? 0.3 : 0)));
+      if (run.flags.tonyBellyBank) run.counters.tonyShieldMark = p.shield;
       run.fx.ring(p.x, p.z, 1.6, '#9ad8ff', 0.4);
       sfx('select');
     },
@@ -164,7 +227,19 @@ export const TONY_ABILITIES = [
     upgrades: [AREA, CD, pctUp('duration', 'Stun', 20), DMG],
     ready: (run, a) => run.crowd(a, a.stat('area'), 6),
     fire(run, a) {
-      nova(run, a, { r: a.stat('area'), dmg: a.stat('damage'), knock: 2, root: a.stat('duration'), color: '#fff6a0' });
+      let dmg = a.stat('damage');
+      // Belly Bounce: release the damage stored since the last clap
+      const bank = run.flags.tonyBellyBank;
+      if (bank) {
+        const c = run.counters;
+        const stored = (c.tonyBank ?? 0) + soaked(run);
+        c.tonyBank = 0;
+        if (stored > 0) {
+          dmg += Math.min(stored * bank, dmg * 1.5);
+          run.fx.ring(run.player.x, run.player.z, a.stat('area') * 0.6, '#ffb03a', 0.4);
+        }
+      }
+      nova(run, a, { r: a.stat('area'), dmg, knock: 2, root: a.stat('duration'), color: '#fff6a0' });
       sfx('tantrum');
     },
   },
@@ -175,7 +250,7 @@ export const TONY_ABILITIES = [
     upgrades: [DMG, DUR, addUp('count', 'Extra Bro', [0, 0, 1, 1, 2], null, 4), CD],
     ready: (run) => run.mobs.count(run.player.x, run.player.z, 15) > 0,
     fire(run, a) {
-      for (let i = 0; i < a.stat('count'); i++) run.spawnGoon({ ability: a, life: a.stat('duration'), model: 'tony_bro', rate: 0.5 });
+      for (let i = 0; i < a.stat('count'); i++) run.spawnGoon({ ability: a, life: a.stat('duration'), model: 'tony_bro', rate: run.flags.tonyTagTeam ? 0.3 : 0.5 });
     },
   },
 ];

@@ -4,14 +4,34 @@
  */
 const KEY = 'thugrats.save.v1';
 
-const blankHero = () => ({ level: 1, xp: 0, talents: {}, gear: {}, runs: 0, bestKills: 0 });
+/**
+ * hero: level/xp (resets on ascension), peak (highest level ever, sets talent points),
+ * asc (ascension level), tokens (gear upgrade tokens), gear {pieceId: tier 0..4},
+ * equip {slot: pieceId}, startAbility (chosen after the first ascension).
+ */
+const blankHero = () => ({ level: 1, xp: 0, peak: 1, asc: 0, tokens: 0, talents: {}, gear: {}, equip: {}, startAbility: null, runs: 0, bestKills: 0 });
+
+/** v1 -> v2: old gear retired (no refund); ascension fields added. */
+function migrate(raw) {
+  if (raw.v === 1) {
+    for (const h of Object.values(raw.heroes ?? {})) {
+      h.gear = {};
+      h.equip = {};
+      h.peak = Math.max(h.peak ?? 1, h.level ?? 1);
+      h.asc ??= 0;
+      h.tokens ??= 0;
+    }
+    raw.v = 2;
+  }
+  return raw;
+}
 
 function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (raw && raw.v === 1) return { rep: 0, repTotal: 0, account: {}, ...raw };
+    if (raw && (raw.v === 1 || raw.v === 2)) return { rep: 0, repTotal: 0, account: {}, ...migrate(raw) };
   } catch { /* corrupt or blocked storage */ }
-  return { v: 1, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: { sfx: 0.8, music: 0.5, shake: true } };
+  return { v: 2, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: { sfx: 0.8, music: 0.5, shake: true } };
 }
 
 let data = load();
@@ -22,26 +42,35 @@ function write() {
   } catch { /* private mode etc. */ }
 }
 
-/** XP needed to go from hero level L to L+1. */
-export const heroXpToNext = (L) => 120 + 80 * (L - 1);
-export const HERO_MAX_LEVEL = 30;
+export const HERO_MAX_LEVEL = 50;
+/** Talent points cap out at level 50 (one per level after the first). */
+export const MAX_TALENT_POINTS = HERO_MAX_LEVEL - 1;
+/** After an ascension, levels cost this share of the first climb (~40k XP per ascension). */
+export const ASC_XP_MULT = 0.4;
+/** Gear upgrade tokens granted by each ascension. */
+export const ASC_TOKENS = 5;
+/** XP needed to go from hero level L to L+1 (cheaper once you've ascended). */
+export const heroXpToNext = (L, asc = 0) => Math.round((120 + 80 * (L - 1)) * (asc > 0 ? ASC_XP_MULT : 1));
 
 export const Save = {
   get data() { return data; },
   hero(id) {
     if (!data.heroes[id]) data.heroes[id] = blankHero();
-    return data.heroes[id];
+    const h = data.heroes[id];
+    h.gear ??= {}; h.equip ??= {}; h.asc ??= 0; h.tokens ??= 0; h.peak ??= h.level;
+    return h;
   },
   /** Returns the number of levels gained. */
   addHeroXp(id, xp) {
     const h = this.hero(id);
     let gained = 0;
     h.xp += Math.round(xp);
-    while (h.level < HERO_MAX_LEVEL && h.xp >= heroXpToNext(h.level)) {
-      h.xp -= heroXpToNext(h.level);
+    while (h.level < HERO_MAX_LEVEL && h.xp >= heroXpToNext(h.level, h.asc)) {
+      h.xp -= heroXpToNext(h.level, h.asc);
       h.level++;
       gained++;
     }
+    h.peak = Math.max(h.peak, h.level);
     if (h.level >= HERO_MAX_LEVEL) h.xp = 0;
     write();
     return gained;
@@ -49,7 +78,23 @@ export const Save = {
   talentPoints(id) {
     const h = this.hero(id);
     const spent = Object.values(h.talents).reduce((a, b) => a + b, 0);
-    return { total: h.level - 1, spent, free: h.level - 1 - spent };
+    const total = Math.min(MAX_TALENT_POINTS, h.peak - 1);
+    return { total, spent, free: total - spent };
+  },
+  /** Level 50 -> level 1, one ascension higher, +5 gear tokens. Talents are kept. */
+  ascend(id) {
+    const h = this.hero(id);
+    if (h.level < HERO_MAX_LEVEL) return false;
+    h.level = 1;
+    h.xp = 0;
+    h.asc++;
+    h.tokens += ASC_TOKENS;
+    write();
+    return true;
+  },
+  setStartAbility(id, abilityId) {
+    this.hero(id).startAbility = abilityId;
+    write();
   },
   setTalent(id, talentId, rank) {
     const h = this.hero(id);
@@ -61,28 +106,37 @@ export const Save = {
     this.hero(id).talents = {};
     write();
   },
-  /** gear[gearId] = tier index (0..4) */
-  gearTier(heroId, gearId) {
-    const g = this.hero(heroId).gear[gearId];
-    return g == null ? -1 : g;
+  // ── gear (per hero): gear[pieceId] = tier 0..4, equip[slot] = pieceId ──
+  gearTier(heroId, pieceId) {
+    return this.hero(heroId).gear[pieceId] ?? -1;
   },
-  setGear(heroId, gearId, tier) {
-    this.hero(heroId).gear[gearId] = tier;
+  /** Unlock a piece (Common) if it isn't owned yet. */
+  unlockGear(heroId, pieceId) {
+    const h = this.hero(heroId);
+    if (h.gear[pieceId] != null) return false;
+    h.gear[pieceId] = 0;
     write();
+    return true;
   },
-  /**
-   * The gear id worn in a slot. Falls back to the first owned piece in that slot
-   * (so a slot never sits empty while you own something for it).
-   */
-  equipped(heroId, slot, gearList) {
+  /** Spend a token to raise a piece one tier. */
+  upgradeGear(heroId, pieceId) {
     const h = this.hero(heroId);
-    const id = h.equip?.[slot];
-    if (id && this.gearTier(heroId, id) >= 0) return id;
-    return gearList.find((g) => g.slot === slot && this.gearTier(heroId, g.id) >= 0)?.id ?? null;
+    const t = h.gear[pieceId];
+    if (t == null || t >= 4 || h.tokens <= 0) return false;
+    h.gear[pieceId] = t + 1;
+    h.tokens--;
+    write();
+    return true;
   },
-  equip(heroId, slot, gearId) {
+  /** The piece worn in a slot (only if owned). */
+  equipped(heroId, slot) {
+    const id = this.hero(heroId).equip[slot];
+    return id && this.gearTier(heroId, id) >= 0 ? id : null;
+  },
+  equip(heroId, slot, pieceId) {
     const h = this.hero(heroId);
-    h.equip = { ...(h.equip ?? {}), [slot]: gearId };
+    h.equip = { ...h.equip, [slot]: pieceId };
+    if (!pieceId) delete h.equip[slot];
     write();
   },
   /** clears[mapId] = highest difficulty index cleared (any hero) */
@@ -122,7 +176,7 @@ export const Save = {
   settings() { return data.settings; },
   saveSettings() { write(); },
   wipe() {
-    data = { v: 1, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: data.settings };
+    data = { v: 2, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: data.settings };
     write();
   },
   write,

@@ -5,7 +5,7 @@ hero is a baby with a criminal trope. Six playable heroes: **Lenny "Nickles"** (
 guns), **Tiny Tony Two-Fists** (brute, melee/tank), **Boom-Boom Bianchi** (demolitions),
 **Lucy "The Ghost"** (spy, crits/control), **Babyface Moretti** (hitman, sniper) and
 **Professor Pudding** (mastermind, gadgets/summons). Each has 12-13 abilities, three
-talent trees and three signature gear pieces.
+8-row talent trees and five 5-piece gear sets (one per map).
 
 Three.js (WebGL 2) + Vite. All art is procedural low-poly geometry, swappable for
 Blender `.glb` files at runtime (see [public/models/README.md](public/models/README.md)).
@@ -29,8 +29,10 @@ Abilities fire on their own; you move, turn the camera and jump.
 | Pause | Esc / P | Start | ❚❚ |
 
 Jumping clears ground telegraphs and enemy shots if timed right, and lands you on
-cars, dumpsters, crates, benches and slot machines. Rats and dogs can't reach you up
-there; grown-ups and birds still can. Buildings and shipping containers are too tall.
+cars, dumpsters, crates, benches and slot machines, but it's not a safe spot: thugs hop
+up after you (anything up to 1.8 m; small critters a bit less). Buildings and shipping
+containers are too tall for anyone. Buildings and walls between the camera and your
+hero are cut away with a dithered see-through hole, so they never hide the fight.
 
 ## The loop
 
@@ -100,12 +102,29 @@ there; grown-ups and birds still can. Buildings and shipping containers are too 
   difficulty). Spend it in the hideout's **Rep** tab: adopt **Biscuit the Bulldog**,
   who ignores walls and fetches magnets, gems and gold far outside your pickup range (upgrade his leash and
   speed), and buy up to +50% run XP, +50% run gold and +20% move speed.
-- **After the run:** hero XP → hero levels → talent points.
-- **Gear (per hero):** three slots (Head, Chest, Feet), one piece worn in each, three
-  options per slot: the hero's signature piece for that slot (clearing a map gives
-  it, one tier up per clear) and two shared pieces that drop at random from runs of
-  3+ minutes and clears (new, or one tier up). Tiers are capped by difficulty
-  (Normal: green, Hard: purple, Nightmare: orange).
+- **After the run:** hero XP → hero levels → talent points (one per level, 49 at
+  level 50).
+- **Ascension:** heroes cap at level 50. At 50 the hideout offers **Ascend**: back to
+  level 1 with every talent kept, ✦ ascension level +1 and **+5 gear upgrade tokens**,
+  and from then on you pick your **starting ability** in the Play tab. Levels after an
+  ascension cost 40% of the first climb (`ASC_XP_MULT` in `src/save.js`). Overclocking
+  is planned for ascension levels.
+- **Talents:** 3 trees × 8 rows, about 93 ranks per hero, so 49 points means real
+  choices. Rows 6–8 are **pairing talents** (🔗): one ability sets off another (Snub-Nose
+  hits fire a free Typewriter burst, Pineapples leave Molotov puddles...), so they only
+  work in runs where you take both. Procs use the partner's own stats, so leveling the
+  pair pays off twice, and their damage shows under the partner in the meter.
+- **Gear (per hero):** five slots (Hat, Mittens, Bib, Diaper, Booties). Every hero has
+  one 5-piece **set per map**, built around one of their playstyles. A map's Crime
+  Titans drop that map's pieces for the hero you're playing: titan 1 has a 25% chance
+  at pieces 1–2, titan 2 25% at pieces 3–4, the final titan 35% at piece 5 (always a
+  piece you're missing). Each piece gives its slot's stat plus damage to the set's
+  focus. Wearing **2, 3 or 5** pieces of a set turns on its bonuses (mix 2 + 3 from two
+  sets for both partial bonuses); the 5-piece bonus is a unique mechanic (golden
+  bullets, permanent goons...). Upgrade tokens raise a piece Common → Legendary, which
+  scales its stats and, through the average rarity of the set, its set bonuses (up to ×2).
+  The Gear tab is a grid of sets × slots; the Play tab shows which pieces each map's
+  titans still owe you.
 
 ## Maps
 
@@ -125,9 +144,10 @@ Elites have a crimson ring (crimson diamonds on the minimap); chests are gold bo
   night market, a temple garden with a pagoda and koi pond, tight shophouse alleys.
 - **Coney Island** (after The Docks): roller coaster, Ferris wheel, carousel, bumper
   cars, the boardwalk with game booths, the beach and a pier.
-  New maps have no signature gear yet, so a clear always drops a random piece.
 
-Mobs steer around walls instead of piling up behind them.
+Mobs walk straight at you, hop low obstacles, and when a wall is in the way (or they
+stop making progress) they follow a flow field around buildings and fences
+(`src/game/flow.js`: a BFS over 2 m cells from your position).
 
 ## Lenny's kit (other heroes: `src/heroes/<id>/`)
 
@@ -147,10 +167,13 @@ Mobs steer around walls instead of piling up behind them.
 | 💸 Make It Rain | Always-on aura of orbiting cash |
 | 📜 Hit Contract | Marks the biggest target; a sniper collects |
 
-**Talents:** Trigger Man (guns → *Akimbo*), Demolitions (explosives → *Explosive
-Rounds*), Family Business (economy/survival → *The Godfather* bodyguard).
-**Gear:** The Don's Fedora (Little Italy), Lead-Lined Bib (The Docks), Loaded
-Booties (Casino Row).
+**Talents:** Trigger Man (guns → *Akimbo*, pairs into *Marked for Death*), Demolitions
+(explosives → *Explosive Rounds*, pairs into *Powder Keg*), Family Business
+(economy/survival → *The Godfather*, pairs into *Family Reunion*).
+**Gear sets:** The Don's Finest (Little Italy, Snub-Nose: golden bullets), Longshoreman
+(The Docks, explosives leave fire), High Roller (Casino Row, Make It Rain scales with
+gold), Tong Enforcer (Chinatown, Tantrum fires a ring of bullets), Carnival Crew (Coney
+Island, two permanent goons).
 
 ## Code map
 
@@ -159,13 +182,17 @@ src/
   main.js              renderer, screen switching, main loop, debug helpers
   assets/              model library (procedural + glTF override), baby rig, mobs, props
   data/                tiers (rarity + diminishing returns), mobs/bosses/titans, maps &
-                       difficulties, run items, shared gear, account (Rep) upgrades
+                       difficulties, run items, gear framework (slots, sets, titan drops),
+                       account (Rep) upgrades
   heroes/              hero registry, common.js (upgrade builders + cone/line/chain/nova helpers),
                        <hero>/{abilities,talents,gear}.js for lenny, tony, boom, ghost, babyface, prof
+                       (gear.js = the hero's 5 map sets)
   game/
     run.js             one run: director, titans, XP/gold, damage pipeline, rewards
-    stats.js           loadout (talents + gear), per-frame stats, AbilityInst
-    mobs.js            instanced mobs, spatial grid, AI, targeting priorities
+    stats.js           loadout (talents + gear, pairing links/amps), per-frame stats, AbilityInst
+    mobs.js            instanced mobs, spatial grid, AI (hopping), targeting priorities
+    flow.js            flow-field pathing around tall obstacles
+    seeThrough.js      dithered cutout for buildings between the camera and the hero
     bossBrain.js       boss/titan mechanics → telegraphs.js (ground warnings)
     combat.js          bullets, lobs, zones, traps, cars, orbits, marks, goons
     world.js           arena drawing + collision helpers; layouts.js = one layout per map
@@ -202,7 +229,7 @@ run ended (`evac`, `died`, `quit`) plus the build (git hash).
 thugrats.play('the_docks', 1, 'ghost')   // start a run (map id, difficulty 0-2, hero id)
 thugrats.god()                  // no damage this run
 thugrats.xp(200)  thugrats.gold(500)  thugrats.time(120)  thugrats.ability('driveby')
-thugrats.heroXp(1000)           // hero levels for talent testing
+thugrats.heroXp(1000)           // hero levels for talent testing (level 50 → Ascend)
 thugrats.clear()                // count the map as cleared and call the evac chopper
 thugrats.runs()  thugrats.exportRuns()   // playtest logs kept in this browser
 thugrats.exportGLB('lenny')     // download a model for Blender

@@ -9,12 +9,13 @@ import { repForRun } from '../data/account.js';
 import { FX } from './fx.js';
 import { Telegraphs } from './telegraphs.js';
 import { buildLoadout, computeStats, AbilityInst } from './stats.js';
-import { gearDropChance } from '../data/gear.js';
+import { TITAN_DROPS, GEAR_SLOTS } from '../data/gear.js';
 import { levelOffers, itemOffers, itemGain, itemMaxed, banishKind, banishId } from './upgrades.js';
 import { MOBS, BOSSES } from '../data/mobs.js';
 import { DIFFICULTIES, MAP_DEFAULTS } from '../data/maps.js';
 import { Save } from '../save.js';
 import { RunLog } from './runlog.js';
+import { setSeeThrough } from './seeThrough.js';
 import { Evac, EVAC_BONUS } from './evac.js';
 import { sfx } from '../audio.js';
 import { rand, TAU, pick, weighted, clamp } from '../util.js';
@@ -85,6 +86,9 @@ export class Run {
     this.evac = null; // the chopper, once the map is cleared
     this.evacuating = false;
     this.log = new RunLog(this); // playtest recorder (runlog.js)
+    this.gearDrops = []; // pieces dropped by Crime Titans this run
+    this.counters = {}; // per-run counters for talents / set bonuses (every Nth shot...)
+    this.procDepth = 0;
 
     this.loadout = buildLoadout(hero);
     this.flags = { ...this.loadout.flags };
@@ -103,9 +107,13 @@ export class Run {
     this.gold = this.stats.startGold;
     this.rerolls = this.stats.rerolls;
 
-    this.addAbility(hero.abilities.find((a) => a.id === hero.start));
+    // after the first ascension you pick your starting ability in the hideout
+    const prof = Save.hero(hero.id);
+    this.startId = (prof.asc > 0 && hero.abilities.some((a) => a.id === prof.startAbility)) ? prof.startAbility : hero.start;
+    this.addAbility(hero.abilities.find((a) => a.id === this.startId));
     if (this.flags.startFrenzy) this.addAbility(hero.abilities.find((a) => a.id === 'frenzy'));
     if (this.flags.godfather) this.combat.spawnGoon({ permanent: true, ability: null });
+    for (let i = 0; i < (this.flags.permGoons ?? 0); i++) this.combat.spawnGoon({ permanent: true, ability: null });
 
     // director
     this.spawnAcc = 0;
@@ -123,6 +131,33 @@ export class Run {
   findItem(id) { return this.allItems().find((i) => i.def.id === id); }
   abilityById(id) { return this.abilities.find((a) => a.def.id === id); }
   later(t, fn) { this.timers.push({ t, fn }); }
+  /** Count up a named counter; true every `n`th call (set bonuses like "every 10th shot"). */
+  every(key, n) {
+    const c = (this.counters[key] = (this.counters[key] ?? 0) + 1);
+    return c % n === 0;
+  }
+  /**
+   * Run the talent/gear pairings (loadout.links) for event `on` from ability `src`.
+   * ev = {m, x, z, dmg, crit, r, tgt}. Procs can trigger other procs, two deep at most.
+   */
+  emit(on, src, ev) {
+    const list = this.loadout.links[on];
+    if (!list.length || this.procDepth > 1) return;
+    const id = src?.def?.id, tags = src?.def?.tags;
+    for (const L of list) {
+      if (L.from !== '*' && (L.from[0] === '#' ? !tags?.includes(L.from.slice(1)) : L.from !== id)) continue;
+      if (L.next > this.time) continue;
+      const partner = L.to ? this.abilityById(L.to) : null;
+      if (L.to && !partner) continue;
+      const ch = typeof L.chance === 'function' ? L.chance(this, ev) : L.chance;
+      if (ch < 1 && Math.random() >= ch) continue;
+      L.next = this.time + L.icd;
+      ev.src = src;
+      if (ev.m && ev.x == null) { ev.x = ev.m.x; ev.z = ev.m.z; }
+      this.procDepth++;
+      try { L.proc(this, partner, ev); } finally { this.procDepth--; }
+    }
+  }
   /**
    * Crowd check for abilities that want a pack (`need` mobs within `r`). The
    * longer an ability has been off cooldown without firing, the fewer it wants
@@ -143,7 +178,7 @@ export class Run {
   car(o) { this.combat.car(o); }
   orbit(o) { this.combat.orbit(o); }
   mark(m, d, cb) { this.combat.mark(m, d, cb); }
-  spawnGoon(o) { this.combat.spawnGoon(o); }
+  spawnGoon(o) { return this.combat.spawnGoon(o); }
 
   mobScale(boss = false) {
     const tm = this.time / 60;
@@ -213,6 +248,7 @@ export class Run {
       crit = true;
       dmg *= 1 + s.critDmg;
     }
+    for (const f of this.loadout.amps) dmg *= 1 + f(this, m, ability);
     dmg *= 1 - (m.armor ?? 0);
     m.hp -= dmg;
     m.flash = 1;
@@ -241,6 +277,10 @@ export class Run {
       for (const n of this.mobs.near(m.x, m.z, 1.8)) if (n !== m) this.hit(n, dmg * 0.6, ability, { burst: true, noCrit: true, knock: 1, fromX: m.x, fromZ: m.z });
       this.fx.explosion(m.x, m.z, 1.4, '#cfcfcf');
     }
+    if (ability && !o.isBurn) {
+      this.emit('hit', ability, { m, dmg, crit });
+      if (crit) this.emit('crit', ability, { m, dmg, crit });
+    }
     if (m.hp <= 0) this.kill(m, ability);
   }
 
@@ -255,6 +295,7 @@ export class Run {
     if (this.stats.blastBurn && !o.small) this.zone({ x, z, r: r * 0.8, life: 2, dps: dmg * this.stats.blastBurn, kind: 'fire', ability });
     for (const m of this.mobs.near(x, z, r)) this.hit(m, dmg, ability, { knock: o.small ? 1 : 5, fromX: x, fromZ: z });
     this.fx.explosion(x, z, r, o.color);
+    if (ability && !o.noProc) this.emit('explode', ability, { x, z, r, dmg, small: !!o.small });
     if (!o.small) {
       this.shake(0.18);
       sfx('boom', 0.06);
@@ -304,6 +345,7 @@ export class Run {
         this.world.altars[t.i].beam.material.opacity = 0;
       }
       for (let i = 0; i < 25; i++) this.pickups.coin(m.x + rand(-3, 3), m.z + rand(-3, 3), 4);
+      if (t) this.rollGearDrop(t.i);
       this.addXp(this.xpNext - this.xp + 0.01, true);
       if (def.final) {
         // the clear is banked now; the run goes on until you evacuate (or don't make it)
@@ -323,10 +365,25 @@ export class Run {
       }
     }
     for (const it of this.allItems()) it.def.onKill?.(this, it, m);
+    if (ability) this.emit('kill', ability, { m });
     const chain = this.flags.chainReaction ?? 0;
     if (chain && ability?.def?.tags?.includes('explosive') && m.tier < 2 && Math.random() < chain) {
       this.later(0.08, () => this.explode(m.x, m.z, 2.6, ability.stat('damage') * 0.5, ability, { noShrapnel: true }));
     }
+  }
+
+  /** A Crime Titan died: maybe drop a missing piece of this hero's set for this map (TITAN_DROPS). */
+  rollGearDrop(titanIndex) {
+    const rule = TITAN_DROPS[titanIndex];
+    const set = this.hero.sets?.find((s) => s.map === this.map.id);
+    if (!rule || !set) return;
+    const missing = rule.slots.map((i) => set.pieceList[i]).filter((p) => Save.gearTier(this.hero.id, p.id) < 0);
+    if (!missing.length || Math.random() >= rule.chance) return;
+    const piece = pick(missing);
+    Save.unlockGear(this.hero.id, piece.id);
+    this.gearDrops.push(piece);
+    this.ui.banner(`🎁 GEAR DROP: ${piece.name}`, `${set.name} · ${piece.slot}`, true);
+    sfx('levelup');
   }
 
   hurtPlayer(amount, src) {
@@ -347,6 +404,7 @@ export class Run {
     if (thorns && src && src.hp != null && !src.dead && amount > 0) this.hit(src, amount * thorns * this.stats.dmg, null, { noCrit: true, color: '#ffb0a0' });
     if (dmg <= 0) return;
     this.log.hurt(Math.min(dmg, p.hp), src);
+    this.emit('hurt', null, { dmg, m: src?.hp != null ? src : null });
     p.hp -= dmg;
     p.hurtT = 1;
     this.fx.number(p.x, 1.9, p.z, dmg, '#ff5a5a');
@@ -679,6 +737,7 @@ export class Run {
         if (!tgt || (Array.isArray(tgt) && !tgt.length)) continue;
         const r = a.def.fire(this, a, tgt);
         if (r === false) continue;
+        this.emit('fire', a, { tgt, x: tgt?.x ?? tgt?.[0]?.x, z: tgt?.z ?? tgt?.[0]?.z });
         a.cdMax = a.stat('cooldown');
         a.cd = a.cdMax;
         a.wait = 0;
@@ -710,6 +769,7 @@ export class Run {
     const D = 12.5 * k;
     this.camera.position.set(p.x + sy * D + rand(-s, s), 14 * k + this.camY, p.z + cy * D + rand(-s, s));
     this.camera.lookAt(p.x - sy * 1.5, 0.8 + this.camY, p.z - cy * 1.5);
+    setSeeThrough(this.camera, p.x, p.y + 1, p.z, k);
   }
 
   resize(aspect) {
@@ -733,26 +793,7 @@ export class Run {
     const before = Save.hero(this.hero.id).level;
     const levels = Save.addHeroXp(this.hero.id, heroXp);
     Save.recordRun(this.hero.id, this.kills);
-    // gear: a clear always gives/upgrades the map's signature piece; any decent
-    // run may also drop a random piece (new, or one tier up toward this difficulty's cap)
-    const grant = (gdef) => {
-      const cur = Save.gearTier(this.hero.id, gdef.id);
-      const next = Math.max(d.gearMin, cur < 0 ? d.gearMin : Math.min(d.gearCap, cur + 1));
-      if (next > cur) Save.setGear(this.hero.id, gdef.id, next);
-      return { def: gdef, from: cur, to: Math.max(cur, next), capped: next <= cur };
-    };
-    const gear = [];
-    const heroGear = this.hero.gear ?? [];
-    let sig = null;
-    if (victory) {
-      sig = heroGear.find((g) => g.map === this.map.id);
-      if (sig) gear.push(grant(sig));
-    }
-    // maps without a signature piece always drop a random one on a clear
-    if ((victory && !sig) || Math.random() < gearDropChance({ minutes: mins, bossKills: this.bossKills, victory })) {
-      const pool = heroGear.filter((g) => !g.map && !gear.some((x) => x.def === g) && Save.gearTier(this.hero.id, g.id) < d.gearCap);
-      if (pool.length) gear.push({ ...grant(pick(pool)), drop: true });
-    }
+    const gear = this.gearDrops.map((piece) => ({ piece, set: piece.set }));
     const rep = Math.round(repForRun({ minutes: mins, bossKills: this.bossKills, titanKills: this.titanKills, victory, diffIndex: this.diffIndex }) * bonus);
     Save.addRep(rep);
     this.log.save(outcome);

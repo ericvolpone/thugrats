@@ -1,7 +1,7 @@
 import { BASE_STATS } from '../heroes/index.js';
 import { Save } from '../save.js';
 import { scaledGain } from '../data/tiers.js';
-import { GEAR_SLOTS } from '../data/gear.js';
+import { GEAR_SLOTS, pieceEffect, wornSets } from '../data/gear.js';
 import { MAX_LUCK } from '../data/items.js';
 
 /**
@@ -14,11 +14,24 @@ export function buildLoadout(hero) {
   const stats = { ...BASE_STATS, ...hero.stats };
   const mods = [];
   const flags = {};
+  const links = { hit: [], crit: [], kill: [], fire: [], explode: [], hurt: [] };
+  const amps = [];
   const ctx = {
     stat: (k, v) => { stats[k] = (stats[k] ?? 0) + v; },
     abil: (match, stat, kind, v) => mods.push({ match, stat, kind, v }),
     flag: (k, v) => { flags[k] = v; },
     flagAdd: (k, v) => { flags[k] = (flags[k] ?? 0) + v; },
+    /**
+     * Pairing: when ability `from` (id, '#tag' or '*') does `on` ('hit' | 'crit' |
+     * 'kill' | 'fire' | 'explode' | 'hurt'), roll `chance` and run
+     * proc(run, partner, ev). `to` = the partner ability id that must be owned
+     * this run (null = no partner needed); procs use the partner's stats so its
+     * upgrades scale the combo. ev = {m, src, x, z, dmg, crit, r, tgt}.
+     * opts.icd = internal cooldown in seconds (default 0.25).
+     */
+    link: (from, to, on, chance, proc, opts = {}) => links[on].push({ from, to, chance, proc, icd: opts.icd ?? 0.25, next: 0 }),
+    /** Conditional damage: fn(run, mob, ability) returns extra damage as a fraction (0.2 = +20%). */
+    amp: (fn) => amps.push(fn),
   };
   // account-wide Rep upgrades
   stats.xpGain += Save.acct('run_xp') * 0.05;
@@ -29,12 +42,16 @@ export function buildLoadout(hero) {
     const r = prof.talents[t.id] ?? 0;
     if (r > 0) t.apply(ctx, r);
   }
-  for (const slot of GEAR_SLOTS) {
-    const id = Save.equipped(hero.id, slot, hero.gear ?? []);
-    const g = id && hero.gear.find((x) => x.id === id);
-    if (g) g.apply(ctx, Save.gearTier(hero.id, g.id));
+  // gear: each worn piece, then the 2/3/5-piece bonuses of every set you wear
+  const sets = hero.sets ?? [];
+  const worn = GEAR_SLOTS.map((slot) => Save.equipped(hero.id, slot)).filter(Boolean);
+  for (const id of worn) {
+    const piece = hero.pieces.find((p) => p.id === id);
+    if (piece) pieceEffect(piece, Save.gearTier(hero.id, id)).apply(ctx);
   }
-  return { stats, mods, flags };
+  const setsOn = wornSets(sets, worn, (id) => Save.gearTier(hero.id, id));
+  for (const w of setsOn) for (const n of w.active) w.set.bonus[n].apply(ctx, w.k);
+  return { stats, mods, flags, links, amps, worn, setsOn };
 }
 
 /** Recomputed every frame: loadout + level-ups + items (some items are dynamic). */

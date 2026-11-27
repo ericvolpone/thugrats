@@ -1,12 +1,18 @@
+import { freeCast, explodeAt, fireAt, boltFrom } from '../common.js';
+
 /**
- * Lenny's talent tree. 3 branches × 5 rows. Row r needs 3·r points already
- * spent in that branch. One point per hero level.
+ * Lenny's talent tree. 3 branches × 8 rows. Row r needs 3·r points already
+ * spent in that branch. One point per hero level (49 at level 50).
+ * Rows 6-8 are pairing talents: `pair` names the partner ability that must be
+ * in your run for them to do anything (see ctx.link).
  *
  * apply(ctx, rank) runs at the start of every run:
  *   ctx.stat(key, v)               add to a run stat (see game/stats.js)
  *   ctx.abil(match, stat, kind, v) modify abilities; match = ability id or '#tag'
  *                                  kind 'pct' (+v%) or 'add' (+v flat)
  *   ctx.flag(name, v)              set a behaviour flag read by abilities
+ *   ctx.link(from, to, on, chance, proc, {icd})  pairing proc (see game/stats.js)
+ *   ctx.amp(fn)                    conditional damage multiplier
  */
 export const LENNY_TREES = [
   { id: 'trigger', name: 'Trigger Man', icon: '🔫', color: '#ff6b5a', blurb: 'Guns, crits and a whole lot of lead.' },
@@ -32,6 +38,25 @@ export const LENNY_TALENTS = [
     desc: (r) => `${8 * r}% chance the Snub-Nose fires twice.`, apply: (c, r) => c.flag('doubleTap', 0.08 * r) },
   { id: 'akimbo', tree: 'trigger', row: 4, col: 1, max: 1, name: 'Akimbo', icon: '🔫', capstone: true,
     desc: () => 'A second Snub-Nose: always fires one extra bullet at a different target.', apply: (c) => c.flag('akimbo', true) },
+  { id: 'covering_fire', tree: 'trigger', row: 5, col: 0, max: 3, name: 'Covering Fire', icon: '🎻', pair: 'tommy',
+    desc: (r) => `Snub-Nose hits have a ${4 * r}% chance to fire a free Chicago Typewriter burst at the target.`,
+    apply: (c, r) => c.link('pistol', 'tommy', 'hit', 0.04 * r, (run, p, ev) => freeCast(run, p, ev.m), { icd: 0.6 }) },
+  { id: 'called_shot', tree: 'trigger', row: 5, col: 2, max: 3, name: 'Called Shot', icon: '📞', pair: 'contract',
+    desc: (r) => `Hollow Point kills have a ${12 * r}% chance to reset Hit Contract's cooldown.`,
+    apply: (c, r) => c.link('power_shot', 'contract', 'kill', 0.12 * r, (run, p) => { p.cd = 0; }, { icd: 1 }) },
+  { id: 'frenzied_fire', tree: 'trigger', row: 6, col: 1, max: 3, name: 'Frenzied Fire', icon: '😡', pair: 'frenzy',
+    desc: (r) => `While Frenzy is up, Snub-Nose hits have a ${12 * r}% chance to split off a bullet at another thug.`,
+    apply: (c, r) => c.link('pistol', 'frenzy', 'hit', (run) => (run.buffs.frenzy ? 0.12 * r : 0), (run, p, ev) => boltFrom(run, ev.src, ev.x, ev.z, { skip: ev.m, dmg: ev.src.stat('damage') * 0.8 }), { icd: 0.05 }) },
+  { id: 'marked_for_death', tree: 'trigger', row: 7, col: 1, max: 1, name: 'Marked for Death', icon: '🎯', capstone: true, pair: 'contract',
+    desc: () => 'Hit Contract targets are marked for 6s: every gun ability deals +40% damage to them, and when one dies the Contract marks the next big thug right away.',
+    apply: (c) => {
+      c.flag('markForDeath', true);
+      c.amp((run, m, a) => (m.markedUntil > run.time && a?.def?.tags?.includes('gun') ? 0.4 : 0));
+      c.link('*', 'contract', 'kill', (run, ev) => (ev.m.markedUntil > run.time ? 1 : 0), (run, p, ev) => {
+        const t = run.mobs.target(ev.x, ev.z, p.stat('range'), 'strongest');
+        if (t) p.def.fire(run, p, t);
+      }, { icd: 0.5 });
+    } },
 
   // ── Demolitions ──
   { id: 'big_boom', tree: 'demo', row: 0, col: 0, max: 5, name: 'Big Boom', icon: '💥',
@@ -50,6 +75,18 @@ export const LENNY_TALENTS = [
     desc: (r) => `Thugs killed by explosions have a ${10 * r}% chance to explode too.`, apply: (c, r) => c.flag('chainReaction', 0.1 * r) },
   { id: 'demolition_man', tree: 'demo', row: 4, col: 1, max: 1, name: 'Explosive Rounds', icon: '🧨', capstone: true,
     desc: () => 'Snub-Nose bullets explode on impact for 45% damage in a small area.', apply: (c) => c.flag('explosiveRounds', true) },
+  { id: 'cocktail_hour', tree: 'demo', row: 5, col: 0, max: 3, name: 'Cocktail Hour', icon: '🍸', pair: 'molotov',
+    desc: (r) => `Pineapple explosions have a ${15 * r}% chance to leave a burning Molotov puddle.`,
+    apply: (c, r) => c.link('pineapple', 'molotov', 'explode', 0.15 * r, (run, p, ev) => fireAt(run, p, ev.x, ev.z, { r: p.stat('area') * 0.8, life: p.stat('duration') * 0.6 }), { icd: 0.3 }) },
+  { id: 'concrete_mix', tree: 'demo', row: 5, col: 2, max: 3, name: 'Concrete Mix', icon: '🧱', pair: 'cement',
+    desc: (r) => `Thugs rooted or slowed take +${12 * r}% damage from explosives (needs Cement Shoes in the run).`,
+    apply: (c, r) => c.amp((run, m, a) => ((m.rootT > 0 || m.slowT > 0) && a?.def?.tags?.includes('explosive') && run.abilityById('cement') ? 0.12 * r : 0)) },
+  { id: 'getaway_car', tree: 'demo', row: 6, col: 1, max: 3, name: 'Getaway Car', icon: '🚙', pair: 'dynamite',
+    desc: (r) => `Drive-By hits have a ${15 * r}% chance to drop a live Dynamite bundle on the thug (Dynamite's damage, doesn't count toward its trap limit).`,
+    apply: (c, r) => c.link('driveby', 'dynamite', 'hit', 0.15 * r, (run, p, ev) => run.trap({ x: ev.x, z: ev.z, ability: p, extra: true, trigger: 1.6, onTrigger: (x, z) => explodeAt(run, p, x, z) }), { icd: 0.15 }) },
+  { id: 'powder_keg', tree: 'demo', row: 7, col: 1, max: 1, name: 'Powder Keg', icon: '🛢️', capstone: true, pair: 'molotov',
+    desc: () => 'Thugs that die while burning (Molotov, fire, ignites) explode, using Molotov\'s damage ×3 in a small blast.',
+    apply: (c) => c.link('*', 'molotov', 'kill', (run, ev) => (ev.src?.def?.tags?.includes('fire') || ev.m.burnT > 0 ? 1 : 0), (run, p, ev) => explodeAt(run, p, ev.x, ev.z, { dmg: 3, area: 0.9 }), { icd: 0.08 }) },
 
   // ── Family Business ──
   { id: 'thick_diaper', tree: 'family', row: 0, col: 0, max: 5, name: 'Thick Diaper', icon: '🧻',
@@ -68,4 +105,29 @@ export const LENNY_TALENTS = [
     desc: (r) => `+${6 * r}% XP.`, apply: (c, r) => c.stat('xpGain', 0.06 * r) },
   { id: 'godfather', tree: 'family', row: 4, col: 1, max: 1, name: 'The Godfather', icon: '🤵', capstone: true,
     desc: () => 'A permanent bodyguard follows you all run. Hired Goon upgrades make him stronger.', apply: (c) => c.flag('godfather', true) },
+  { id: 'overtime', tree: 'family', row: 5, col: 0, max: 3, name: 'Overtime', icon: '⏰', pair: 'tantrum',
+    desc: (r) => `Hired Goon hits have a ${6 * r}% chance to throw a Tantrum where they land (Tantrum's damage, 70% of its size).`,
+    apply: (c, r) => c.link('goon', 'tantrum', 'hit', 0.06 * r, (run, p, ev) => {
+      const rr = p.stat('area') * 0.7;
+      for (const m of run.mobs.near(ev.x, ev.z, rr)) run.hit(m, p.stat('damage'), p, { knock: p.stat('knock'), fromX: ev.x, fromZ: ev.z });
+      run.fx.ring(ev.x, ev.z, rr, '#ffffff', 0.35);
+    }, { icd: 0.5 }) },
+  { id: 'money_talks', tree: 'family', row: 5, col: 2, max: 3, name: 'Money Talks', icon: '💰', pair: 'frenzy',
+    desc: (r) => `Make It Rain kills add ${(0.2 * r).toFixed(1)}s to Frenzy, or start a 2s Frenzy if it isn't up.`,
+    apply: (c, r) => c.link('make_it_rain', 'frenzy', 'kill', 1, (run, p) => {
+      const b = run.buffs.frenzy;
+      if (b) b.t = Math.min(b.max + 3, b.t + 0.2 * r);
+      else run.buffs.frenzy = { t: 2, max: 2, power: p.stat('power') };
+    }, { icd: 0.1 }) },
+  { id: 'shakedown', tree: 'family', row: 6, col: 1, max: 3, name: 'Shakedown', icon: '🤑', pair: 'make_it_rain',
+    desc: (r) => `Tantrum flings ${2 * r} extra cash stacks that orbit you for 5s (Make It Rain's damage).`,
+    apply: (c, r) => c.link('tantrum', 'make_it_rain', 'fire', 1, (run, p) => run.orbit({ ...p.def.aura, ability: p, life: 5, count: 2 * r, r: p.stat('area') * 1.35, spin: -3 })) },
+  { id: 'family_reunion', tree: 'family', row: 7, col: 1, max: 1, name: 'Family Reunion', icon: '👨‍👦‍👦', capstone: true, pair: 'goon',
+    desc: () => 'Hired Goon calls one more cousin, and every time your Snub-Nose fires, each goon takes a shot too (Snub-Nose damage).',
+    apply: (c) => {
+      c.abil('goon', 'count', 'add', 1);
+      c.link('pistol', 'goon', 'fire', 1, (run, p, ev) => {
+        for (const g of run.combat.goons) boltFrom(run, ev.src, g.x, g.z, { range: 12 });
+      }, { icd: 0.2 });
+    } },
 ];

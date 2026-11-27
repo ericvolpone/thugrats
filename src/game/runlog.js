@@ -1,4 +1,5 @@
 import { TIERS } from '../data/tiers.js';
+import { Save } from '../save.js';
 
 /**
  * Playtest recorder. Every run writes one JSON log for balancing:
@@ -108,6 +109,11 @@ export class RunLog {
       time: r1(r.time), fedsAt: r.cfg.duration, level: r.level, kills: r.kills,
       gold: Math.round(r.goldTotal), bosses: r.bossKills, titans: r.titanKills, chests: r.chestsOpened,
       totalDamage: Math.round(total),
+      asc: Save.hero(r.hero.id).asc ?? 0, heroLevel: Save.hero(r.hero.id).level, startAbility: r.startId,
+      talents: { ...Save.hero(r.hero.id).talents },
+      gear: (r.loadout.worn ?? []).map((id) => ({ id, tier: tierName(Save.gearTier(r.hero.id, id)) })),
+      sets: (r.loadout.setsOn ?? []).map((w) => ({ set: w.set.id, worn: w.count, k: r1(w.k), active: w.active })),
+      gearDrops: r.gearDrops.map((p) => p.id),
       loadout: { stats: r.loadout.stats, flags: r.loadout.flags, mods: r.loadout.mods },
       finalStats: { maxHp: Math.round(s.maxHp), dmg: r1(s.dmg), haste: r1(s.haste), area: r1(s.area), luck: r1(s.luck), crit: r1(s.crit ?? 0), armor: r1(s.armor), dodge: r1(s.dodge) },
       abilities, otherDamage: other, items,

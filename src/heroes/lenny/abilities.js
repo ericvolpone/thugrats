@@ -39,14 +39,20 @@ export const LENNY_ABILITIES = [
       if (!targets.length) return false;
       const n = a.stat('count') + (run.flags.akimbo ? 1 : 0);
       const shots = Math.random() < (run.flags.doubleTap ?? 0) ? 2 : 1;
+      // Don's Finest (5): every 10th shot is a golden bullet
+      const gold = run.flags.goldenBullet && run.every('goldenBullet', 10) ? run.flags.goldenBullet : 0;
       for (let s = 0; s < shots; s++) {
         for (let i = 0; i < n; i++) {
           const t = targets[i % targets.length];
           const lead = 0.06 * s;
           const spread = targets.length < n ? (i - (n - 1) / 2) * 0.12 : 0;
+          const golden = gold && s === 0 && i === 0;
           run.later(lead, () => {
             const m = run.player.muzzlePos();
-            bullet(run, a, Math.atan2(t.x - m.x, t.z - m.z) + spread);
+            bullet(run, a, Math.atan2(t.x - m.x, t.z - m.z) + spread, golden ? {
+              dmg: a.stat('damage') * gold, color: '#ffd700', size: 1.6,
+              onHit: (mob) => { if (!mob.dead && mob.tier < 3 && mob.hp / mob.maxHp < 0.25) run.hit(mob, mob.hp + 1, a, { noCrit: true, color: '#ffd700' }); },
+            } : {});
           });
         }
       }
@@ -181,7 +187,7 @@ export const LENNY_ABILITIES = [
     desc: 'Drops a bundle of dynamite at your feet. Goes off when a thug walks close.',
     base: { damage: 50, cooldown: 3.5, area: 3.6, count: 2, range: 10 },
     upgrades: [DMG, AREA, addUp('count', 'Max Traps', [0, 1, 1, 2, 2], null, 6), CD],
-    ready: (run, a) => run.traps.filter((t) => t.ability === a).length < a.stat('count') && run.mobs.count(run.player.x, run.player.z, a.stat('range')) > 0,
+    ready: (run, a) => run.traps.filter((t) => t.ability === a && !t.extra).length < a.stat('count') && run.mobs.count(run.player.x, run.player.z, a.stat('range')) > 0,
     fire(run, a) {
       run.trap({ x: run.player.x, z: run.player.z, ability: a, trigger: 1.6, onTrigger: (x, z) => run.explode(x, z, a.stat('area'), a.stat('damage'), a) });
     },
@@ -229,6 +235,7 @@ export const LENNY_ABILITIES = [
     upgrades: [DMG, CD, addUp('execute', 'Execute', [0, 0, 0.05, 0.08, 0.12], (v) => `+${Math.round(v * 100)}% execute`, 0.3)],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'strongest'),
     fire(run, a, t) {
+      if (run.flags.markForDeath) t.markedUntil = run.time + 6;
       run.mark(t, 1.0, () => {
         if (t.dead) return;
         const ex = a.stat('execute');

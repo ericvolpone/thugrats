@@ -581,9 +581,7 @@ export class Hud {
       const d = name(id);
       return `<div class="dmg-row"><span>${d.icon}</span><span>${d.name}</span><div class="bar"><i style="width:${(v / total) * 100}%"></i></div><span>${fmtNum(v)}</span></div>`;
     }).join('');
-    const gear = (res.gear ?? []).map((g) => (g.capped
-      ? `<div class="reward">${g.def.icon} <b>${g.def.name}</b> is already <b style="color:${tierColor(g.to)}">${TIERS[g.to].name}</b> — clear a harder difficulty to upgrade it further.</div>`
-      : `<div class="reward">${g.def.icon} ${g.drop ? 'Gear drop! ' : ''}${g.from < 0 ? 'New gear' : 'Gear upgraded'}: <b style="color:${tierColor(g.to)}">${g.def.name} (${TIERS[g.to].name})</b> <span style="color:var(--muted);font-size:13px">${g.def.slot}</span><br><span style="color:var(--muted);font-size:13px">${g.def.desc(g.to)}${g.from < 0 ? ' · equip it in the Gear tab' : ''}</span></div>`)).join('');
+    const gear = (res.gear ?? []).map((g) => `<div class="reward">🎁 Gear drop! <b>${g.piece.icon} ${g.piece.name}</b> <span style="color:var(--muted);font-size:13px">${g.piece.slot} · ${g.set.icon} ${g.set.name} set</span><br><span style="color:var(--muted);font-size:13px">Wear it in the hideout's Gear tab.</span></div>`).join('');
     const lvl = res.levels > 0 ? ` — <b style="color:var(--gold)">LEVEL UP! ${res.before} → ${res.after}</b> (+${res.levels} talent point${res.levels > 1 ? 's' : ''})` : '';
     panel.innerHTML = `
       <div class="end-head ${res.victory ? '' : 'lose'}"><h2>${res.evac ? 'Got Out Clean!' : res.victory ? 'Map Cleared!' : 'Busted!'}</h2>
