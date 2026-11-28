@@ -7,10 +7,24 @@
  *   { level: n }   reach level n        { gold: n }   pay n gold (bribe, consumed)
  *   { bosses: n }  kill n bosses        { titans: n } kill the other n titans
  */
+/**
+ * Difficulties. hp / dmg scale the thugs, spawn their numbers, heroXp the hero XP
+ * you bank, gear the Crime Titans' set-piece drop chance (TITAN_DROPS × gear).
+ * The top tiers add rules (all optional, default 1 / off):
+ *   speed   thug move speed ×        heal   all your healing × (regen, lifesteal, pickups)
+ *   elite   elite chance ×           boss   boss timer × (lower = sooner)
+ *   feds    minutes before the Feds  blast  elites (and some thugs) drop a live grenade when they die
+ * `rules` is the list shown on the difficulty button.
+ */
 export const DIFFICULTIES = [
-  { id: 'normal', name: 'Normal', hp: 1, dmg: 1, spawn: 1, heroXp: 1, gearMin: 0, gearCap: 1, color: '#7fd67f' },
-  { id: 'hard', name: 'Hard', hp: 1.9, dmg: 1.5, spawn: 1.15, heroXp: 1.6, gearMin: 1, gearCap: 3, color: '#ffb347' },
-  { id: 'nightmare', name: 'Nightmare', hp: 3.4, dmg: 2.2, spawn: 1.3, heroXp: 2.4, gearMin: 2, gearCap: 4, color: '#ff5c5c' },
+  { id: 'normal', name: 'Normal', hp: 1, dmg: 1, spawn: 1, heroXp: 1, gear: 1, color: '#7fd67f', rules: [] },
+  { id: 'hard', name: 'Hard', hp: 1.9, dmg: 1.5, spawn: 1.15, heroXp: 1.6, gear: 1.5, color: '#ffb347', rules: [] },
+  { id: 'nightmare', name: 'Nightmare', hp: 3.4, dmg: 2.2, spawn: 1.3, heroXp: 2.4, gear: 2, speed: 1.05, elite: 1.5, color: '#ff5c5c',
+    rules: ['Thugs 5% faster', '50% more elites'] },
+  { id: 'vendetta', name: 'Vendetta', hp: 6, dmg: 3.2, spawn: 1.5, heroXp: 3.6, gear: 2.5, speed: 1.12, heal: 0.6, elite: 2.2, boss: 0.8, blast: 1, color: '#c06cff',
+    rules: ['Thugs 12% faster', 'Healing −40%', '2.2× elites', 'Bosses 20% sooner', 'Elites drop a live grenade when they die'] },
+  { id: 'inferno', name: 'Inferno', hp: 10, dmg: 4.5, spawn: 1.75, heroXp: 5, gear: 3, speed: 1.2, heal: 0.4, elite: 3, boss: 0.65, feds: 10, blast: 2, color: '#ff3b8a',
+    rules: ['Thugs 20% faster', 'Healing −60%', '3× elites', 'Bosses 35% sooner', 'Feds at 10:00', 'Elites and 1 in 12 thugs drop live grenades'] },
 ];
 
 export const MAPS = [

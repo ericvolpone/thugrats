@@ -84,7 +84,7 @@ export class MobManager {
     const m = this.make({
       def, typeId, tier: elite ? 1 : 0, x, z, hp,
       dmg: def.dmg * sc.dmg * (elite ? 1.6 : 1),
-      speed: def.speed * (elite ? 0.92 : 1) * rand(0.92, 1.08),
+      speed: def.speed * (elite ? 0.92 : 1) * rand(0.92, 1.08) * (this.run.diff.speed ?? 1),
       radius: def.radius * (elite ? 1.45 : 1),
       scale: elite ? 1.45 : 1,
       xp: def.xp * (elite ? 6 : 1) * sc.xp,
@@ -260,7 +260,7 @@ export class MobManager {
       let sp = m.speed;
       if (m.slowT > 0) sp *= 1 - m.slow;
       if (m.zoneSlow) sp *= 1 - m.zoneSlow;
-      if (m.fear) sp *= 0.7;
+      if (m.fear) sp *= 1 - (run.stats.fearSlow || 0.3);
       if (m.rootT > 0 || m.wind > 0 || m.brain?.busy) sp = 0;
       const touch = m.radius + tgt.radius;
       let want = 1;

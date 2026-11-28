@@ -54,6 +54,14 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
 - **Progress is per hero:** every hero clears each map and difficulty on their own
   (clearing a map unlocks its next difficulty and the next map for that hero), so each
   hero farms their own gear sets from the start.
+- **Five difficulties:** Normal, Hard, Nightmare, **Vendetta** and **Inferno**. Each one
+  multiplies thug HP and damage, numbers, hero XP and the gear drop chance (×1, ×1.5,
+  ×2, ×2.5, ×3). The top three add rules (hover a difficulty button to see them):
+  - Nightmare: thugs 5% faster, 50% more elites.
+  - Vendetta: thugs 12% faster, healing −40%, 2.2× elites, bosses 20% sooner, and elites
+    drop a live grenade when they die (a telegraphed blast you have to walk out of).
+  - Inferno: thugs 20% faster, healing −60%, 3× elites, bosses 35% sooner, the Feds at
+    10:00, and elites plus 1 in 12 thugs drop grenades.
 - **A run:** start with one ability. Mobs pour in from every side and walk at you.
   Kills drop XP gems and gold. Each level gives +3 max HP, +1% damage, +1 luck and
   three cards, each about a **different** ability: a new one (up to 5) or an upgrade
@@ -81,13 +89,38 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
   each source's total (since the last reset) and its DPS over the last 30 seconds.
 - **Banish:** 3 per run, shared between abilities and items. Banishing rerolls the
   cards for free.
-- **Caps:** chance-based items stop at 100% (dodge at 60%) and luck at 150. A maxed
+- **Caps:** chance-based items stop at 100% (dodge at 60%, crit at 400%) and luck at 150. A maxed
   item is retired from offers for free, without using a banish.
 - **Lifesteal** comes from some talents (Frenzy, melee, crits, drones) and the Blood
   Money reputation; it heals at most 6% of max HP per second.
 - **Items (7 slots):** 2 Rings, 1 Crime Title, 2 Reputations from loot, plus 2
   Contraband. On desktop they're listed down the left side with a short readout
   (`+72 LCK`, `+25% GUN RECHARGE / +1 GUN PIERCE`).
+  - **Only useful items are offered:** an item that boosts a kind of ability (an
+    ability-kind Title, the Mood Ring's area, the Ice Ring's recharge) only shows up if
+    you hold a matching ability, or still have a free ability slot and a matching
+    ability you could get.
+  - **Overcrit:** crit chance can go past 100% (up to 400%). Every 100% over the first is
+    another crit tier: 150% = always crit, plus 50% for a **double crit** (×1.5 more);
+    a triple adds ×1.25, a quadruple ×1.125. Damage numbers go yellow → orange → red →
+    purple as the tier climbs. Forced crits (Babyface's Focused shots, Ghost's Shadow
+    Strike) stack with it.
+  - **Every item grows with its level** so it has a place in some build:
+    - Teething Ring: +damage per 100 max HP (health builds).
+    - Omertà: +damage while any shield holds.
+    - Untouchable: every dodge hits back and gives crit chance for 2s.
+    - Blood Money: healing you can't use becomes a shield (up to 25% of max HP).
+    - Feared: its damage bonus and slow grow, not just the radius.
+    - Kingpin: elites, bosses and titans pay gold tribute when they die.
+    - Arsonist: past 100% ignite chance, the extra goes into the burn.
+    - Pinky Ring: keeps going to 400% crit for overcrit.
+    - Loan Shark pays gold on 60% of its procs (it was the default pick in every run).
+  - **Crime Titles** (one slot, so it's the build-defining pick): Kingpin, Hitman,
+    Bagman (its damage cap grows with the item), Getaway Driver, Arsonist, plus one for
+    each kind of ability: Drum Magazine (guns), Det Cord (explosives), Lead Pipe (melee),
+    Spinning Top (auras), Bear Trap Spool, Rolodex, Sugar Cube, Chalk Outline, Nitro
+    Can, Car Battery, Toe Tag, Hollow Tips, Grandpa's Grappa, Rat Poison (poison),
+    Little League Arm (thrown) and Kevlar Onesie (defense).
   - **Chests** show up every ~45s and from elites (25%). They all cost gold: the price
     floats over them, rises gently each time, and the 📦 chip next to your gold shows
     it (green border: you can afford one, red: you can't). Unopened chests vanish after
@@ -95,12 +128,20 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
   - Boss kills give a guaranteed loot pick. Picking an item you own levels it up.
     Reputations are always in the pool.
 - **Contraband & the Black Market:** each map has a shady stall near the start ($ on
-  the minimap). Killing a Crime Titan completes a contract (📜); bring it to the stall
-  and pick one of two random Contraband. Contraband has its own red rarity and stacks
-  linearly: getting one you already own doubles its effect (×3 triples it...). Contraband changes how one kind of ability plays (Drum
-  Magazine for guns, Det Cord for explosives, Lead Pipe for melee, Spinning Top for
-  auras, Bear Trap Spool, Rolodex, Sugar Cube, Chalk Outline, Nitro Can, Car Battery,
-  Toe Tag, Hollow Tips, Grandpa's Grappa) and only shows up for kinds you own.
+  the minimap). Killing a Crime Titan completes a contract (📜); the final titan gives
+  **two**, to gear up for the Feds. Bring them to the stall and pick one of two
+  Contraband per contract.
+  - **Contraband supercharges one ability**, and you're only offered it for abilities
+    you hold. Abilities you've levelled more (compared with your run level) come up
+    more often.
+  - Each Contraband is a big bundle of every upgrade that ability can roll (damage ×3 a
+    common roll, other percentages ×2, extra bullets / pierce / bounces at their
+    Legendary value, ignoring upgrade caps) plus a **twist**. Examples: Haymaker crits
+    explode, every Ground Pound gets a free second one, Hit Contract kills recharge it,
+    Bazooka rockets blow twice, Sniper crits blow a hole. Every ability of every hero
+    has one (data/contraband.js).
+  - Contraband has its own red rarity and stacks linearly: one you already hold doubles
+    up (×3 triples it...). Once both slots are full, only more copies are offered.
 - **Magnets** pull every gem and coin on the map to you. Every boss drops one, elites
   drop one 5% of the time and any thug about 1 in 800. Biscuit fetches magnets first.
 - **Bosses** spawn every 2:30 at a pad shown on the minimap (30 s warning) and
@@ -115,7 +156,7 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
   minimap). Stand on its pad for 2 s to get out with **+25% hero XP and Rep**, or stay
   and see how far into the Feds you can last: overtime still earns XP and Rep, but
   dying (or quitting) forfeits the evac bonus. The clear and its gear are kept either way.
-- At **12:00 the Feds arrive**: everything gets nastier every second.
+- At **12:00 the Feds arrive** (10:00 on Inferno): everything gets nastier every second.
 - **Rep (account-wide):** every run earns Rep (time survived, bosses, titans, clears,
   difficulty). Spend it in the hideout's **Rep** tab: adopt **Biscuit the Bulldog**,
   who ignores walls and fetches magnets, gems and gold far outside your pickup range (upgrade his leash and
@@ -136,9 +177,11 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
   pair pays off twice, and their damage shows under the partner in the meter.
 - **Gear (per hero):** five slots (Hat, Mittens, Bib, Diaper, Booties). Every hero has
   one 5-piece **set per map**, built around one of their playstyles. A map's Crime
-  Titans drop that map's pieces for the hero you're playing: titan 1 has a 25% chance
-  at pieces 1–2, titan 2 25% at pieces 3–4, the final titan 35% at piece 5 (always a
-  piece you're missing). Each piece gives its slot's stat plus damage to the set's
+  Titans drop that map's pieces for the hero you're playing: on Normal titan 1 has a 25%
+  chance at pieces 1–2, titan 2 25% at pieces 3–4, the final titan 35% at piece 5
+  (always a piece you're missing). Harder difficulties multiply the chance: ×1.5 Hard,
+  ×2 Nightmare, ×2.5 Vendetta, ×3 Inferno (25 / 37.5 / 50 / 62.5 / 75%, and the final
+  titan's capped at 100%). Each piece gives its slot's stat plus damage to the set's
   focus. Wearing **2, 3 or 5** pieces of a set turns on its bonuses (mix 2 + 3 from two
   sets for both partial bonuses); the 5-piece bonus is a unique mechanic (golden
   bullets, permanent goons...). Upgrade tokens raise a piece Common → Legendary, which
@@ -203,7 +246,8 @@ src/
   main.js              renderer, screen switching, main loop, debug helpers
   assets/              model library (procedural + glTF override), baby rig, mobs, props
   data/                tiers (rarity + diminishing returns), mobs/bosses/titans, maps &
-                       difficulties, run items, gear framework (slots, sets, titan drops),
+                       difficulties, run items, Contraband (per-ability supercharges),
+                       gear framework (slots, sets, titan drops),
                        account (Rep) upgrades
   heroes/              hero registry, common.js (upgrade builders + cone/line/chain/nova helpers),
                        <hero>/{abilities,talents,gear}.js for lenny, tony, boom, ghost, babyface, prof
@@ -247,7 +291,7 @@ run ended (`evac`, `died`, `quit`) plus the build (git hash).
 ## Debug (browser console)
 
 ```js
-thugrats.play('the_docks', 1, 'ghost')   // start a run (map id, difficulty 0-2, hero id)
+thugrats.play('the_docks', 1, 'ghost')   // start a run (map id, difficulty 0-4, hero id)
 thugrats.god()                  // no damage this run
 thugrats.xp(200)  thugrats.gold(500)  thugrats.time(120)  thugrats.ability('driveby')
 thugrats.heroXp(1000)           // hero levels for talent testing (level 50 → Ascend)

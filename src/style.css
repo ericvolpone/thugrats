@@ -212,7 +212,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card .tag { position: absolute; top: 8px; right: 8px; font-size: 10px; background: var(--tc); color: #111; padding: 2px 6px; border-radius: 6px; font-weight: 700; }
 .card .lvl { font-size: 12px; color: var(--muted); }
 .card .kb { position: absolute; top: 8px; left: 10px; font: 13px 'Lilita One'; color: var(--muted); }
-@media (max-width: 640px) { #choice-cards { grid-template-columns: 1fr; } .card { min-height: 0; flex-direction: row; text-align: left; padding: 10px; } .card .ic { font-size: 32px; } .card .kb { display: none; } }
+@media (max-width: 640px) {
+  #choice-cards { grid-template-columns: minmax(0, 1fr); }
+  /* phone: tier · icon · name on one line, the effect text wraps underneath at full width */
+  .card { min-height: 0; min-width: 0; flex-direction: row; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; text-align: left; padding: 10px; }
+  .card .ic { font-size: 32px; } .card .kb { display: none; }
+  .card .eff, .card .what, .card .lvl, .card .aff { flex-basis: 100%; margin-top: 0; }
+  .card .eff { font-size: 14px; }
+}
 @media (max-height: 520px) { .card { min-height: 0; padding: 8px; } .card .ic { font-size: 28px; } .panel h2 { font-size: 22px; } }
 
 /* pause / end */

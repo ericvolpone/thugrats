@@ -147,13 +147,13 @@ export class Hud {
         ${r.banished.has(d.id) ? '<div class="tn">Banished: no more upgrades will be offered.</div>' : ''}`;
     }
     const it = kind === 'it' ? r.findItem(a1) : kind === 'is' ? r.items[a1]?.[+a2] : null;
-    if (!it) return kind === 'is' ? `<div class="th">Empty ${SLOT_NAMES[a1]} slot</div><div class="td">${a1 === 'stash' ? 'Contraband is sold at the Black Market ($ on the minimap). Kill a Crime Titan to complete a contract, then trade it there.' : 'Open chests and kill elites and bosses for items.'}</div>` : '';
+    if (!it) return kind === 'is' ? `<div class="th">Empty ${SLOT_NAMES[a1]} slot</div><div class="td">${a1 === 'stash' ? 'Contraband supercharges one of your abilities. It\'s sold at the Black Market ($ on the minimap): kill a Crime Titan to complete a contract (the final one gives two), then trade it there.' : 'Open chests and kill elites and bosses for items.'}</div>` : '';
     const d = it.def;
     const maxed = r.maxed.has(d.id);
     return `<div class="th">${d.icon} ${d.name} <small>${d.slot === 'stash' ? `×${it.level}` : `Lv ${it.level}`}</small></div><div class="tk" style="color:${tierColor(it.tier)}">${d.slot === 'stash' ? 'Contraband' : `${TIERS[it.tier].name} ${SLOT_NAMES[d.slot]}`}${d.needsLabel ? ` · FOR ${String(d.needsLabel).toUpperCase()}` : ''}</div>
       <div class="td">${d.desc(it.power)}</div>${d.slot === 'stash' ? `<div class="tn">Stacks linearly: another copy from the Black Market adds the same again (×${it.level + 1}).</div>` : ''}<div class="ts"><span>Now <b>${d.short(it.power, r, it)}</b></span></div>
       ${d.cap ? `<div class="tn">${maxed ? '<em>MAXED</em> ' : ''}Caps at ${d.cap}. Once it does, it stops being offered (no banish used).</div>` : ''}
-      ${d.needsLabel ? `<div class="tn">Only affects abilities tagged ${String(d.needsLabel).toUpperCase()}.</div>` : ''}
+      ${d.needsLabel && !d.contra ? `<div class="tn">Only affects abilities tagged ${String(d.needsLabel).toUpperCase()}.</div>` : ''}
       <div class="tn"><b style="color:#fff3b0">Affects:</b> ${this.affectsText(d)}</div>`;
   }
 

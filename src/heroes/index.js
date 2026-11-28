@@ -17,6 +17,7 @@ import { PROF_ABILITIES, PROF_START, PROF_RESOURCE, PROF_SIGNATURE, PROF_OVERVIE
 import { PROF_TALENTS, PROF_TREES } from './prof/talents.js';
 import { PROF_GEAR } from './prof/gear.js';
 import { expandSets } from '../data/gear.js';
+import { buildContraband } from '../data/contraband.js';
 import { registerHero } from '../assets/models.js';
 import { buildBaby } from '../assets/baby.js';
 
@@ -32,7 +33,9 @@ export const BASE_STATS = {
   chestDiscount: 0, startGold: 0, pickupPct: 0, speedPct: 0, frenzyArmor: 0,
   // lifesteal: fraction of damage dealt that heals you (all hits / melee / crits / auras; capped at 6% max HP per second)
   lifesteal: 0, meleeLeech: 0, critLeech: 0, auraLeech: 0, frenzyLeech: 0,
-  // contraband item effects
+  // ability-kind Crime Title effects
+  // item quirks: fear damage / slow, damage per 100 max HP, overflow healing → shield
+  fearDmg: 0, fearSlow: 0, hpDmg: 0, overshield: 0,
   projBurst: 0, blastArea: 0, blastBurn: 0, burnVuln: 0, ctrlDmg: 0, nitro: 0, trapRoot: 0, extraJumps: 0, execHeal: 0,
 };
 
@@ -84,6 +87,7 @@ export const HEROES = [
 for (const h of HEROES) {
   h.model = h.id;
   h.sets = expandSets(h.gear); // one 5-piece set per map (heroes/<id>/gear.js)
+  h.contraband = buildContraband(h); // one supercharge per ability (data/contraband.js)
   h.pieces = h.sets.flatMap((s) => s.pieceList);
   registerHero(h.id, (o) => buildBaby({ ...h.look, ...o }));
 }

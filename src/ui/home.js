@@ -199,7 +199,7 @@ export class HomeScreen {
       pick.appendChild(el('div', 'note', `Starts with <b>${h.abilities.find((a) => a.id === cur).name}</b>.`));
       body.appendChild(pick);
     }
-    body.appendChild(el('div', 'note', `Kill a map's final Crime Titan to clear it. Progress is per hero; each map's titans drop pieces of ${h.name.split(' ')[0]}'s set for that map (🗿1: 25% for pieces 1–2 · 🗿2: 25% for 3–4 · 🗿3: 35% for 5).`));
+    body.appendChild(el('div', 'note', `Kill a map's final Crime Titan to clear it. Progress is per hero; each map's titans drop pieces of ${h.name.split(' ')[0]}'s set for that map (🗿1: pieces 1–2 · 🗿2: 3–4 · 🗿3: 5). Harder difficulties drop more often: Normal 25% / 35% for piece 5, up to ×3 on Inferno.`));
     for (const m of MAPS) {
       // progress is per hero: each hero clears each map and difficulty on their own
       const locked = m.requires && Save.bestClear(h.id, m.requires) < 0;
@@ -221,7 +221,8 @@ export class HomeScreen {
         const b = el('button', 'diff-btn', `${d.name}${best >= i ? ' <span class="chk">✓</span>' : ''}`);
         b.style.background = d.color;
         b.disabled = !ok;
-        b.title = ok ? `Monsters ×${d.hp} HP, ×${d.dmg} damage · hero XP ×${d.heroXp}` : 'Clear the previous difficulty first';
+        const drop = TITAN_DROPS.map((t) => `${Math.round(Math.min(1, t.chance * (d.gear ?? 1)) * 100)}%`).join(' / ');
+        b.title = ok ? [`Thugs ×${d.hp} HP, ×${d.dmg} damage · hero XP ×${d.heroXp}`, `Gear drop chance (🗿1 / 🗿2 / 🗿3): ${drop}`, ...(d.rules ?? [])].join('\n') : 'Clear the previous difficulty first';
         b.onclick = () => { sfx('select'); this.onPlay(h.id, m.id, i); };
         diffs.appendChild(b);
       });

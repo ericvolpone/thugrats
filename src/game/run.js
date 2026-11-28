@@ -10,7 +10,7 @@ import { FX } from './fx.js';
 import { Telegraphs } from './telegraphs.js';
 import { buildLoadout, computeStats, AbilityInst } from './stats.js';
 import { TITAN_DROPS, GEAR_SLOTS } from '../data/gear.js';
-import { levelOffers, itemOffers, itemGain, itemMaxed, banishKind, banishId } from './upgrades.js';
+import { levelOffers, itemOffers, contraOffers, itemGain, itemMaxed, banishKind, banishId } from './upgrades.js';
 import { MOBS, BOSSES } from '../data/mobs.js';
 import { DIFFICULTIES, MAP_DEFAULTS } from '../data/maps.js';
 import { Save } from '../save.js';
@@ -27,6 +27,9 @@ export const xpFor = (L) => Math.round(6 + 6 * (L - 1) + 0.8 * (L - 1) ** 2);
  * One run on one map. Owns the scene and every system; abilities and items talk
  * to the world through the methods on this class (hit, explode, shoot, lob...).
  */
+/** Damage number colours by crit tier: crit, double, triple, quadruple+. */
+const CRIT_COLORS = ['#ffd23f', '#ff9a1f', '#ff3b3b', '#c45cff'];
+
 /** How long level-up / loot cards ignore input after they appear. */
 const PICK_LOCK_MS = 1000;
 
@@ -38,7 +41,8 @@ export class Run {
     this.diff = DIFFICULTIES[diff];
     this.input = input;
     this.ui = ui;
-    this.cfg = MAP_DEFAULTS;
+    // the top difficulties bring the Feds in sooner
+    this.cfg = { ...MAP_DEFAULTS, duration: (this.diff.feds ?? MAP_DEFAULTS.duration / 60) * 60 };
 
     const th = map.theme;
     this.scene = new THREE.Scene();
@@ -72,6 +76,8 @@ export class Run {
     this.maxed = new Set(); // items retired for free once more of them would do nothing
     this.buffs = {};
     this.items = { ring: [], title: [], rep: [], stash: [] };
+    this.abilItems = []; // held items that change ability stats (some Titles, Contraband)
+    this.runLinks = { hit: [], crit: [], kill: [], fire: [], explode: [], hurt: [] }; // Contraband twists
     this.abilities = [];
     this.timers = [];
     this.queue = [];
@@ -120,7 +126,7 @@ export class Run {
     // director
     this.spawnAcc = 0;
     this.nextWave = 60;
-    this.nextBoss = this.cfg.firstBoss;
+    this.nextBoss = this.cfg.firstBoss * (this.diff.boss ?? 1);
     this.bossWarn = null; // {x, z, t}
     this.nextChest = rand(...this.cfg.chestEvery) * 0.6;
     this.titans = map.titans.map((t, i) => ({ ...t, i, def: BOSSES[t.boss], state: 'locked', stand: 0, mob: null }));
@@ -178,8 +184,13 @@ export class Run {
    * ev = {m, x, z, dmg, crit, r, tgt}. Procs can trigger other procs, two deep at most.
    */
   emit(on, src, ev) {
-    const list = this.loadout.links[on];
-    if (!list.length || this.procDepth > 1) return;
+    if (this.procDepth > 1) return;
+    this.emitList(this.loadout.links[on], src, ev);
+    this.emitList(this.runLinks[on], src, ev);
+  }
+
+  emitList(list, src, ev) {
+    if (!list.length) return;
     const id = src?.def?.id, tags = src?.def?.tags;
     for (const L of list) {
       if (L.from !== '*' && (L.from[0] === '#' ? !tags?.includes(L.from.slice(1)) : L.from !== id)) continue;
@@ -260,8 +271,13 @@ export class Run {
       own.level++;
       own.tier = Math.max(own.tier, tier);
     } else {
-      this.items[def.slot].push({ def, power: g, level: 1, tier });
+      const it = { def, power: g, level: 1, tier };
+      this.items[def.slot].push(it);
+      // Contraband twist: a proc on its own ability, scaled by how many copies you hold
+      const tw = def.twist;
+      if (tw) this.runLinks[tw.on].push({ from: def.ability, to: def.ability, chance: tw.chance, icd: tw.icd, next: 0, proc: (run, a, ev) => tw.fn(run, a, ev, it.power) });
     }
+    this.abilItems = this.allItems().filter((i) => i.def.abil);
     this.stats = computeStats(this);
     if (itemMaxed(this, def, this.findItem(def.id))) {
       this.maxed.add(def.id);
@@ -275,16 +291,23 @@ export class Run {
     const s = this.stats;
     let dmg = base;
     if (m.tier >= 1) dmg *= 1 + s.bigDmg;
-    if (m.fear) dmg *= 1.12;
+    if (m.fear) dmg *= 1 + (s.fearDmg || 0.12);
     if (m.shrunkUntil > this.time) dmg *= 1 + m.shrunk;
     if (s.ctrlDmg && (m.rootT > 0 || m.slowT > 0)) dmg *= 1 + s.ctrlDmg;
     if (s.burnVuln && m.burnT > 0) dmg *= 1 + s.burnVuln;
-    let crit = false;
-    const critC = s.crit + (ability?.def?.base?.crit ? ability.stat('crit') : 0);
-    if (!o.noCrit && Math.random() < critC) {
-      crit = true;
-      dmg *= 1 + s.critDmg;
+    // Crit, then overcrit: every 100% of crit chance past the first is another
+    // crit tier. 150% = always crit + 50% for a double crit (×1.5 more); a triple
+    // adds ×1.25, a quadruple ×1.125...
+    let critN = 0;
+    if (!o.noCrit) {
+      let c = s.crit + (ability?.def?.base?.crit ? ability.stat('crit') : 0);
+      if (Math.random() < c) {
+        critN = 1;
+        dmg *= 1 + s.critDmg;
+        for (let extra = 0.5; (c -= 1) > 0 && critN < 6 && Math.random() < c; extra /= 2) { critN++; dmg *= 1 + extra; }
+      }
     }
+    const crit = critN > 0;
     for (const f of this.loadout.amps) dmg *= 1 + f(this, m, ability);
     dmg *= 1 - (m.armor ?? 0);
     m.hp -= dmg;
@@ -304,7 +327,7 @@ export class Run {
       m.kx += (dx / d) * k;
       m.kz += (dz / d) * k;
     }
-    this.fx.number(m.x, m.height * 0.9 + 0.3, m.z, dmg, crit ? '#ffd23f' : o.color ?? '#ffffff', crit);
+    this.fx.number(m.x, m.height * 0.9 + 0.3, m.z, dmg, crit ? CRIT_COLORS[Math.min(critN, CRIT_COLORS.length) - 1] : o.color ?? '#ffffff', critN);
     if (!o.isBurn) {
       for (const it of this.allItems()) it.def.onHit?.(this, it, m, { amount: dmg, crit, ability, isBurn: false });
       sfx('hit', 0.05);
@@ -316,7 +339,7 @@ export class Run {
     }
     if (ability && !o.isBurn) {
       this.emit('hit', ability, { m, dmg, crit });
-      if (crit) this.emit('crit', ability, { m, dmg, crit });
+      if (crit) this.emit('crit', ability, { m, dmg, crit, critN });
     }
     if (m.hp <= 0) this.kill(m, ability);
   }
@@ -353,6 +376,7 @@ export class Run {
     sfx('kill', 0.04);
     this.fx.burst(m.x, 0.8, m.z, m.tier >= 2 ? '#ffd23f' : '#d8d2c8', m.tier >= 2 ? 40 : 6, m.tier >= 2 ? 8 : 4, 0.5);
     const def = m.def;
+    if (this.diff.blast && m.tier <= 1 && (m.tier === 1 || (this.diff.blast > 1 && Math.random() < 1 / 12))) this.deathGrenade(m);
     if (m.tier <= 1) {
       this.pickups.gem(m.x, m.z, Math.max(1, Math.round(m.xp)));
       const gc = def.gold * (m.tier === 1 ? 1 : 1);
@@ -391,7 +415,9 @@ export class Run {
         // the clear is banked now; the run goes on until you evacuate (or don't make it)
         this.clearedAt = this.time;
         Save.recordClear(this.hero.id, this.map.id, this.diffIndex);
-        this.toast('🚁 Get to the chopper (H on the minimap) to get out with a bonus — or stay and see how long you last against the Feds.');
+        this.contracts += 2; // two Contraband picks to gear up for the Feds
+        this.pickups.market.open = true;
+        this.toast('🚁 Get to the chopper (H on the minimap) to get out with a bonus. Or cash your 2 contracts at the Black Market ($) and see how long you last against the Feds.');
         sfx('victory');
         this.later(2.5, () => { if (!this.ended) this.evac = new Evac(this); });
       } else {
@@ -419,8 +445,10 @@ export class Run {
     const set = this.hero.sets?.find((s) => s.map === this.map.id);
     if (!rule || !set) return null;
     const missing = rule.slots.map((i) => set.pieceList[i]).filter((p) => Save.gearTier(this.hero.id, p.id) < 0);
-    const res = { set, chance: rule.chance, missing, piece: null };
-    if (!missing.length || Math.random() >= rule.chance) return res;
+    // harder difficulties drop more often (Normal ×1 → Inferno ×3, capped at 100%)
+    const chance = Math.min(1, rule.chance * (this.diff.gear ?? 1));
+    const res = { set, chance, missing, piece: null };
+    if (!missing.length || Math.random() >= chance) return res;
     const piece = pick(missing);
     Save.unlockGear(this.hero.id, piece.id);
     this.gearDrops.push(piece);
@@ -430,11 +458,23 @@ export class Run {
     return res;
   }
 
+  /** Vendetta / Inferno: a dead thug drops a live grenade (a telegraphed blast you have to walk out of). */
+  deathGrenade(m) {
+    const r = m.tier === 1 ? 3.2 : 2.2, dmg = (m.dmg ?? 10) * (m.tier === 1 ? 1.4 : 1.1), x = m.x, z = m.z;
+    this.telegraphs.add('circle', { x, z, r }, m.tier === 1 ? 1.3 : 1.1, (tt) => {
+      const p = this.player;
+      if (p.y < 1.6 && this.telegraphs.constructor.contains(tt, p.x, p.z, p.radius * 0.6)) this.hurtPlayer(dmg, null);
+      this.fx.telegraphPop(tt);
+      this.fx.explosion(x, z, r * 0.8, '#ff6a3a');
+    });
+  }
+
   hurtPlayer(amount, src) {
     const p = this.player;
     if (p.dead || this.ended || this.evacuating) return;
     if (Math.random() < this.stats.dodge) {
       this.fx.number(p.x, 1.8, p.z, 'dodge', '#9ad8ff');
+      for (const it of this.allItems()) it.def.onDodge?.(this, it, src);
       return;
     }
     let dmg = amount * (1 - this.stats.armor);
@@ -465,7 +505,7 @@ export class Run {
   heal(v) {
     const p = this.player;
     if (p.dead) return;
-    p.hp = Math.min(this.stats.maxHp, p.hp + v);
+    p.hp = Math.min(this.stats.maxHp, p.hp + v * (this.diff.heal ?? 1));
   }
 
   addGold(v, raw = false) {
@@ -515,7 +555,7 @@ export class Run {
   // ── choices (level-up / loot / black market) ───────────────
   offersFor(q) {
     if (q.kind === 'level') return levelOffers(this);
-    if (q.kind === 'market') return itemOffers(this, 2, 0, 'stash');
+    if (q.kind === 'market') return contraOffers(this, 2);
     return itemOffers(this, 3, q.minTier ?? 0);
   }
 
@@ -524,7 +564,7 @@ export class Run {
     if (this.contracts <= 0) return false;
     this.contracts--;
     sfx('chest');
-    this.queue.push({ kind: 'market', reason: 'Black Market: one piece of Contraband for your contract. One you already own doubles up.' });
+    this.queue.push({ kind: 'market', reason: 'Black Market: supercharge one of your abilities. Contraband you already hold doubles up.' });
     return true;
   }
 
@@ -661,7 +701,7 @@ export class Run {
     while (this.spawnAcc >= 1) {
       this.spawnAcc -= 1;
       const r = weighted(roster);
-      const elite = Math.random() < 0.004 + tm * 0.0028;
+      const elite = Math.random() < (0.004 + tm * 0.0028) * (this.diff.elite ?? 1);
       const [x, z] = this.spawnPoint();
       const pack = !elite && Math.random() < 0.22 ? Math.floor(rand(3, 6)) : 1;
       for (let i = 0; i < pack; i++) this.mobs.spawn(r.mob, x + rand(-1.5, 1.5), z + rand(-1.5, 1.5), elite);
@@ -698,7 +738,7 @@ export class Run {
       this.ui.banner(BOSSES[id].name, `BOSS — ${BOSSES[id].title}`);
       sfx('warn');
       this.bossWarn = null;
-      this.nextBoss += this.cfg.bossEvery;
+      this.nextBoss += this.cfg.bossEvery * (this.diff.boss ?? 1);
     }
 
     // chests
@@ -731,7 +771,14 @@ export class Run {
     this.stats = computeStats(this);
     const p = this.player;
     if (!p.dead) {
-      p.hp = Math.min(this.stats.maxHp, p.hp + this.stats.regen * dt + Math.min(this.leech, this.stats.maxHp * 0.06 * dt));
+      const s = this.stats, hm = this.diff.heal ?? 1, leech = this.leech * hm, capped = Math.min(leech, s.maxHp * 0.06 * dt);
+      const gain = s.regen * dt * hm + capped, room = s.maxHp - p.hp;
+      p.hp = Math.min(s.maxHp, p.hp + gain);
+      // Blood Money: healing you can't use (full HP, or over the per-second cap) tops up a shield
+      if (s.overshield) {
+        const over = leech - capped + Math.max(0, gain - room);
+        if (over > 0) p.shield = Math.max(p.shield, Math.min(s.maxHp * 0.25, p.shield + over * 0.5));
+      }
     }
 
     for (let i = this.timers.length - 1; i >= 0; i--) {

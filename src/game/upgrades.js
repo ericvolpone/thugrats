@@ -77,34 +77,65 @@ export function levelOffers(run, n = 3) {
 }
 
 /**
+ * Ability defs this run could still use: the ones you hold, plus (while you have
+ * a free ability slot) every one of the hero's you could still be offered.
+ */
+export function reachableAbilities(run) {
+  const out = run.abilities.map((a) => a.def);
+  if (run.abilities.length < MAX_ABILITIES) {
+    for (const d of run.hero.abilities) if (!run.abilityById(d.id) && !run.banished.has(d.id)) out.push(d);
+  }
+  return out;
+}
+
+/**
  * Item offer (chests, bosses): 3 different items, new ones for open slots or
  * upgrades of ones you hold. Reputations are always in the pool. minTier:
- * bosses never give grey. only = 'stash': the Black Market (Contraband only);
- * otherwise Contraband is never offered.
+ * bosses never give grey. Items that can't touch any ability you hold or could
+ * still get (def.fits) are left out. Contraband is never offered here.
  */
-export function itemOffers(run, n = 3, minTier = 0, only = null) {
+export function itemOffers(run, n = 3, minTier = 0) {
   const luck = run.stats.luck;
   const pool = [];
+  const reach = reachableAbilities(run);
   for (const def of ITEMS) {
-    if ((def.slot === 'stash') !== (only === 'stash')) continue;
     if (run.banished.has(def.id) || run.maxed.has(def.id)) continue;
-    if (def.needs && !run.abilities.some((a) => (typeof def.needs === 'function' ? def.needs(a) : a.def.tags.includes(def.needs)))) continue;
+    if (def.fits && !reach.some(def.fits)) continue;
     const ownedInst = run.findItem(def.id);
     if (itemMaxed(run, def, ownedInst)) continue;
     if (ownedInst) {
       pool.push({ def, owned: ownedInst, w: 3 });
     } else if (run.items[def.slot].length < SLOTS[def.slot]) pool.push({ def, owned: null, w: def.slot === 'rep' ? 1.4 : 1 });
   }
-  // Black Market: owned Contraband is no likelier than new (a random choice of any that fit)
-  if (only === 'stash') for (const c of pool) c.w = 1;
   // make sure at least one reputation shows up whenever one is available
-  const rep = only ? [] : shuffle(pool.filter((c) => c.def.slot === 'rep')).slice(0, 1);
+  const rep = shuffle(pool.filter((c) => c.def.slot === 'rep')).slice(0, 1);
   const cards = shuffle(pickDistinct(pool, n, rep)).map((c) => {
-    const tier = c.def.slot === 'stash' ? CONTRA_TIER : rollTier(luck, minTier);
+    const tier = rollTier(luck, minTier);
     const gain = itemGain(c.def, c.owned, tier, run);
     return { type: 'item', def: c.def, owned: c.owned, tier, gain, maxes: itemWouldMax(run, c.def, c.owned, gain) };
   });
   while (cards.length < n) cards.push({ type: 'gold', amount: 40 + run.level * 4, tier: 0 });
+  return cards;
+}
+
+/**
+ * Black Market offer: Contraband for abilities you hold (never for one you
+ * don't). The more you've levelled an ability compared with your run level, the
+ * likelier its Contraband shows up. Once both Contraband slots are full, only
+ * more copies of what you hold are offered.
+ */
+export function contraOffers(run, n = 2) {
+  const pool = [];
+  const full = run.items.stash.length >= SLOTS.stash;
+  for (const a of run.abilities) {
+    const def = run.hero.contraband?.find((c) => c.ability === a.def.id);
+    if (!def || run.banished.has(def.id)) continue;
+    const owned = run.findItem(def.id);
+    if (full && !owned) continue;
+    pool.push({ def, owned, w: 0.4 + 3 * Math.min(1.5, a.level / Math.max(1, run.level)) });
+  }
+  const cards = pickDistinct(pool, n).map((c) => ({ type: 'item', def: c.def, owned: c.owned, tier: CONTRA_TIER, gain: c.def.v, maxes: false }));
+  while (cards.length < n) cards.push({ type: 'gold', amount: 60 + run.level * 5, tier: 0 });
   return cards;
 }
 

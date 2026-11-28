@@ -129,7 +129,8 @@ export class FX {
     }
     el.textContent = typeof val === 'number' ? Math.round(val) : val;
     el.style.color = color;
-    el.style.fontSize = big ? '22px' : '15px';
+    // big: true / crit tier (1 crit, 2 double crit...): bigger the higher it goes
+    el.style.fontSize = big ? `${18 + 4 * Math.min(4, +big || 1)}px` : '15px';
     el.style.display = 'block';
     this.nums.push({ el, x: x + rand(-0.3, 0.3), y, z: z + rand(-0.3, 0.3), t: 0, life: big ? 0.9 : 0.6 });
   }

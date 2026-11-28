@@ -2,7 +2,7 @@ import { BASE_STATS } from '../heroes/index.js';
 import { Save } from '../save.js';
 import { scaledGain } from '../data/tiers.js';
 import { GEAR_SLOTS, pieceEffect, wornSets } from '../data/gear.js';
-import { MAX_LUCK } from '../data/items.js';
+import { MAX_LUCK, MAX_CRIT } from '../data/items.js';
 
 /**
  * Builds the run's permanent layer from hero base stats + talents + gear:
@@ -67,7 +67,9 @@ export function computeStats(run) {
   if (run.buffs.frenzy) { s.armor += s.frenzyArmor; s.lifesteal += s.frenzyLeech; }
   s.armor = Math.min(0.75, s.armor);
   s.dodge = Math.min(0.6, s.dodge);
-  s.crit = Math.min(1, s.crit);
+  s.crit = Math.min(MAX_CRIT, s.crit);
+  // Teething Ring: damage from max HP (after everything else has added HP)
+  if (s.hpDmg) s.dmg += s.hpDmg * s.maxHp / 100;
   s.luck = Math.min(MAX_LUCK, s.luck);
   return s;
 }
@@ -98,7 +100,7 @@ export class AbilityInst {
     const b = this.def.base[k] ?? 0;
     let inc = this.inc[k] ?? 0;
     let add = this.add[k] ?? 0;
-    for (const it of this.run.items.stash) {
+    for (const it of this.run.abilItems) {
       const r = it.def.abil?.(it.power, this, k);
       if (r) { inc += r[0]; add += r[1]; }
     }
