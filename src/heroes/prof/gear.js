@@ -43,8 +43,8 @@ export const PROF_GEAR = [
       2: { desc: (k) => `Orbital Death Ray +${r(35 * k)}% area.`, apply: (c, k) => c.abil('death_ray', 'area', 'pct', 35 * k) },
       3: { desc: () => 'Every 6th status reaction calls a free Orbital Death Ray on the thug with the most statuses.',
         apply: (c) => c.flag('reactDeathRay', 6) },
-      5: { desc: (k) => `Jackpot: every Science cast has a ${r(12 * k)}% chance (doubled while Eureka is 75%+ full) to roll again and fire a second time for free.`,
-        apply: (c, k) => c.link('#science', null, 'fire', (run) => 0.12 * k * (run.res && run.res.value >= run.res.max * 0.75 ? 2 : 1), (run, p, ev) => {
+      5: { desc: (k) => `Jackpot: every Science cast has a ${r(12 * k)}% chance (doubled during EUREKA!) to roll again and fire a second time for free.`,
+        apply: (c, k) => c.link('#science', null, 'fire', (run) => 0.12 * k * (run.buffs.eureka ? 2 : 1), (run, p, ev) => {
           const a = ev.src;
           run.fx.burst(run.player.x, 2.2, run.player.z, '#ffd23f', 10, 3, 0.5);
           run.later(0.3, () => { if (!run.player.dead && run.abilities.includes(a)) freeCast(run, a, null); });

@@ -15,12 +15,13 @@ import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, angleTo, line, nova, chain, chi
  * When a thug that already carries one element gets dosed with a different one,
  * the two REACT (see REACTIONS / react()): both are used up, a reaction goes off
  * with its own effect and a floating label, and the Prof gains Eureka
- * (PROF_RESOURCE). Reactions on a shrunk thug are amplified.
+ * (PROF_RESOURCE, rate-capped by eurekaGain). Reactions on a shrunk thug, and
+ * every reaction during EUREKA! (PROF_SIGNATURE), are amplified (MEGA).
  *
  * Talents and gear can't import this file; they reach the lab through any prof
  * ability def: `p.def.lab.dose(run, m, key, p)`, `p.def.lab.react(run, m, k1, k2, p)`.
  * Flags read here (all default off): statusDur, reactDmg, reactEureka,
- * shatterShards, reactDeathRay, brittleVuln, madGenius, stickyPudding,
+ * shatterShards, reactDeathRay, brittleVuln, madGenius, labNotes, stickyPudding,
  * deepFreeze, freezeRoot, supercharged, teslaReach, teslaFork, acidMerge,
  * singularity, robotUprising.
  */
@@ -188,10 +189,8 @@ function react(run, m, k1, k2, a, opts = {}) {
   }
   if (alive(m)) tint(run, m, R.color, 0.5);
   label(run, m, `${amp ? 'MEGA ' : ''}${R.name}!`, R.color);
-  if (opts.gain !== false) {
-    const g = (amp ? 5 : 3) * (1 + (run.flags.reactEureka ?? 0));
-    run.gainRes(g);
-  }
+  run.counters.profReacts = (run.counters.profReacts ?? 0) + 1;
+  if (opts.gain !== false) eurekaGain(run, amp ? 5 : 3);
   // Slot Machine (3): every Nth reaction calls a free Orbital Death Ray
   const every = run.flags.reactDeathRay;
   if (every && run.every('profReactRay', every)) {
@@ -202,12 +201,77 @@ function react(run, m, k1, k2, a, opts = {}) {
   return R.id;
 }
 
-/** EUREKA! A burst of inspiration: every ability recharges faster for a while. */
-function eurekaMoment(run, dur = 4) {
-  run.buffs.eureka = { t: dur, max: dur, src: 'eureka', fx: '#ffd23f', rate: 0.4, amp: !!run.flags.madGenius };
-  run.fx.ring(run.player.x, run.player.z, 3.5, '#ffd23f', 0.6);
-  run.fx.number(run.player.x, 2.6, run.player.z, 'EUREKA!', '#ffd23f', true);
-  sfx('frenzy', 0.1);
+/**
+ * Eureka from reactions is rate-capped so the meter fills every ~30-60s in a busy
+ * fight no matter how many reactions fire: a bank of EUREKA_BANK that refills at
+ * EUREKA_RATE per second (both × Catalysis). Reactions past the cap give nothing.
+ */
+const EUREKA_RATE = 2.5, EUREKA_BANK = 10;
+function eurekaGain(run, n) {
+  const c = run.counters, k = 1 + (run.flags.reactEureka ?? 0);
+  const last = c.profEurT ?? run.time;
+  c.profEurBank = Math.min(EUREKA_BANK * k, (c.profEurBank ?? EUREKA_BANK * k) + (run.time - last) * EUREKA_RATE * k);
+  c.profEurT = run.time;
+  const g = Math.min(c.profEurBank, n * k);
+  if (g <= 0) return;
+  c.profEurBank -= g;
+  run.gainRes(g);
+}
+
+/** How long EUREKA! lasts and how much Recharge Rate it gives. */
+const eurekaDur = (run) => 5 + (run.flags.madGenius ? 2 : 0);
+const EUREKA_HASTE = 0.5;
+
+/**
+ * EUREKA! A burst of inspiration: every ability recharges 50% faster and every
+ * reaction is MEGA (amplified, as if the thug were shrunk) for 5s.
+ */
+function eurekaMoment(run, dur = eurekaDur(run)) {
+  const p = run.player;
+  run.buffs.eureka = { t: dur, max: dur, src: 'eureka', fx: '#ffd23f', rate: EUREKA_HASTE, amp: true };
+  run.fx.ring(p.x, p.z, 2, '#fff3a0', 0.4);
+  run.fx.ring(p.x, p.z, 4, '#ffd23f', 0.6);
+  run.fx.ring(p.x, p.z, 7, '#ffb020', 0.8);
+  run.fx.burst(p.x, 2.2, p.z, '#ffd23f', 36, 9, 0.8);
+  run.fx.burst(p.x, 2.6, p.z, '#fff7c8', 14, 4, 0.6);
+  run.fx.number(p.x, 3.2, p.z, 'EUREKA!', '#ffd23f', true);
+  run.shake(0.3);
+  sfx('frenzy', 0.14);
+  // Mad Genius: the idea is so big it sets off a Grand Experiment on the spot
+  if (run.flags.madGenius) {
+    const ge = run.abilityById('grand_experiment');
+    if (ge) grandBurst(run, ge);
+  }
+}
+
+/**
+ * Grand Experiment: up to `count` thugs around the Prof each get two random
+ * elements at once, which react straight away, amplified (MEGA).
+ */
+function grandBurst(run, a) {
+  const p = run.player;
+  const keys = Object.keys(REACTIONS);
+  const ms = run.mobs.targets(p.x, p.z, a.stat('area'), a.stat('count'), 'nearest');
+  let n = 0;
+  depth++; // these reactions shouldn't spill doses onto others
+  try {
+    for (const m of ms) {
+      if (!alive(m)) continue;
+      run.fx.beam(p.x, p.z, m.x, m.z, '#ffd23f', 0.08, 0.25, 1.2);
+      run.hit(m, a.stat('damage'), a, { knock: 1 });
+      if (!alive(m)) continue;
+      const [k1, k2] = keys[Math.floor(Math.random() * keys.length)].split('+');
+      if (react(run, m, k1, k2, a, { amp: true, pot: potOf(a) * 2 })) n++;
+    }
+  } finally {
+    depth--;
+  }
+  // Lab Notes: every reaction it sets off writes up extra Eureka (past the cap)
+  if (run.flags.labNotes && n) run.gainRes(run.flags.labNotes * n);
+  run.fx.ring(p.x, p.z, a.stat('area'), '#ffd23f', 0.6);
+  run.fx.burst(p.x, 1.5, p.z, '#ffd23f', 24, 8, 0.6);
+  run.shake(0.2);
+  return ms.length > 0;
 }
 
 /**
@@ -237,19 +301,49 @@ function stir(run, zn, a, dt, cap) {
 const LAB = { STATUS, REACTIONS, ELEMENTS, dose, react, stir, potOf, alive, inAcid };
 
 /**
- * The Prof's resource. Reactions fill it. When it's full: EUREKA! (4s of +40%
- * Recharge Rate). If you own Grand Experiment it saves up for that instead.
+ * The Prof's resource. Reactions fill it (3 each, 5 for a MEGA one, at most
+ * ~2.5 per second: see eurekaGain). A full meter is the EUREKA! signature
+ * (PROF_SIGNATURE), which the engine fires (Auto) or waits for the button (Manual).
  */
 export const PROF_RESOURCE = {
   id: 'eureka', name: 'Eureka', icon: '💡', color: '#ffd23f', max: 100, start: 0,
-  desc: 'Status reactions build Eureka. When it fills: EUREKA! — 4s of +40% Recharge Rate. Grand Experiment spends it instead.',
-  tick(run) {
-    const r = run.res;
-    if (r.value >= r.max && !run.abilityById('grand_experiment')) {
-      run.spendRes(r.max);
-      eurekaMoment(run, 4);
-    }
+  desc: 'Eureka fills when two different statuses meet on a thug and REACT (+3 per reaction, +5 for a MEGA one; at most about 2.5 per second, so it fills every 40s or so in a big fight). When it is full, EUREKA! goes off.',
+  bonus(run) {
+    const b = run.buffs.eureka;
+    if (b) return `EUREKA! ${Math.max(0, b.t).toFixed(1)}s left`;
+    const n = run.counters.profReacts ?? 0;
+    return `${n} reaction${n === 1 ? '' : 's'}`;
   },
+};
+
+/**
+ * Signature: EUREKA! (full Eureka meter). 5s of +50% Recharge Rate on every
+ * ability, and every reaction in that window is MEGA (×1.6 power, bigger).
+ */
+export const PROF_SIGNATURE = {
+  id: 'eureka', name: 'Eureka', icon: '💡',
+  short: '+50% Recharge · every reaction MEGA',
+  desc: 'For 5 seconds every ability recharges 50% faster, and every reaction is MEGA: 60% stronger and bigger, as if the thug were shrunk.',
+  fire(run) { eurekaMoment(run); },
+};
+
+/** The hideout's Kit tab. */
+export const PROF_OVERVIEW = {
+  tagline: 'Mix two statuses on one thug and watch it react.',
+  playstyle: 'Every science ability coats thugs in a status: ⚡ Shock, ❄️ Frozen, 🧪 Acid or 🍮 Pudding. When a thug that already has one gets hit with a different one, the two REACT: both are used up and something big happens. Pick abilities that bring different statuses, and keep them landing on the same crowd.',
+  meter: '💡 Eureka fills with every reaction (about every 40 seconds in a busy fight). When it is full, EUREKA! goes off: 5 seconds of +50% Recharge Rate where every reaction is MEGA (60% stronger and bigger).',
+  tips: [
+    'Reactions: ⚡ Shock + ❄️ Frozen = SHATTER (ice blast). ⚡ Shock + 🧪 Acid = ELECTROLYSIS (arcs to every acid-soaked thug nearby). ❄️ Frozen + 🧪 Acid = BRITTLE (no armor, +30% damage taken). ❄️ Frozen + 🍮 Pudding = FLASH FLAN (frozen solid). 🧪 Acid + 🍮 Pudding = CURDLE (splashes acid around). ⚡ Shock + 🍮 Pudding = STATIC CLING (yanks thugs together and zaps them).',
+    'Two abilities with the same status never react. Bring at least two different ones; three or four is better.',
+    '🔬 Shrink Ray is a catalyst, not a status that reacts: any reaction on a shrunk thug is MEGA.',
+    'In Manual mode, save EUREKA! for a big crowd or a boss: everything recharges faster and every reaction is MEGA.',
+  ],
+  pairs: [
+    { a: 'Tesla Coil', b: 'Acid Rain', why: 'Acid soaks the crowd, then one arc sets off Electrolysis that jumps to every acid-soaked thug.' },
+    { a: 'Freeze Ray', b: 'Drone Swarm', why: 'Drones shock everything close, the ray freezes it: a Shatter on every thug in the line.' },
+    { a: 'Pudding Blaster', b: 'Slime Puddle', why: 'Pudding plus acid Curdles, and Curdle splashes more acid onto the thugs around it.' },
+    { a: 'Shrink Ray', b: 'Orbital Death Ray', why: 'The Death Ray aims at the thug carrying the most statuses; shrink it first and its reactions go MEGA.' },
+  ],
 };
 
 export const PROF_START = 'pudding_blaster';
@@ -510,37 +604,14 @@ export const PROF_ABILITIES = [
     },
   },
   {
-    id: 'grand_experiment', noStart: true, name: 'Grand Experiment', icon: '🧪', tags: ['science', 'aoe'], pot: 1,
-    desc: 'Spends a full Eureka meter: every thug around (14 at most) gets two random elements at once and they all react, amplified. Then EUREKA! (+40% Recharge Rate for a while).',
-    base: { damage: 40, cooldown: 3, area: 7, duration: 4 },
-    upgrades: [DMG, AREA, DUR],
-    ready(run, a) {
-      const cost = run.flags.madGenius ? 70 : 100;
-      if (run.res ? run.res.value < Math.min(cost, run.res.max) : (run.counters.profGrandNext ?? 0) > run.time) return null;
-      return run.crowd(a, a.stat('area'), 5) ? run.mobs.target(run.player.x, run.player.z, a.stat('area'), 'nearest') : null;
-    },
+    id: 'grand_experiment', name: 'Grand Experiment', icon: '🧪', tags: ['science', 'aoe'], pot: 1,
+    desc: 'Every few seconds, up to 8 thugs around him each get two random statuses at once, which react straight away, MEGA.',
+    base: { damage: 40, cooldown: 14, area: 7, count: 8 },
+    upgrades: [DMG, CD, AREA, addUp('count', 'Test Subjects', [1, 1, 2, 2, 3], null, 6)],
+    ready: (run, a) => (run.crowd(a, a.stat('area'), 4) ? run.mobs.target(run.player.x, run.player.z, a.stat('area'), 'nearest') : null),
     fire(run, a) {
-      const p = run.player;
-      if (run.res) { if (!run.spendRes(Math.min(run.flags.madGenius ? 70 : 100, run.res.max))) return false; }
-      else run.counters.profGrandNext = run.time + 20; // no meter wired: a 20s fallback
-      const keys = Object.keys(REACTIONS);
-      const ms = run.mobs.targets(p.x, p.z, a.stat('area'), 14, 'nearest');
-      depth++; // these reactions shouldn't spill doses onto others
-      try {
-        for (const m of ms) {
-          if (!alive(m)) continue;
-          run.fx.beam(p.x, p.z, m.x, m.z, '#ffd23f', 0.08, 0.25, 1.2);
-          run.hit(m, a.stat('damage'), a, { knock: 1 });
-          const [k1, k2] = keys[Math.floor(Math.random() * keys.length)].split('+');
-          react(run, m, k1, k2, a, { amp: true, gain: false, pot: potOf(a) * 2 });
-        }
-      } finally {
-        depth--;
-      }
-      run.fx.ring(p.x, p.z, a.stat('area'), '#ffd23f', 0.6);
-      run.fx.burst(p.x, 1.5, p.z, '#ffd23f', 24, 8, 0.6);
-      run.shake(0.25);
-      eurekaMoment(run, a.stat('duration'));
+      if (!grandBurst(run, a)) return false;
+      sfx('frenzy', 0.06);
     },
   },
 ];

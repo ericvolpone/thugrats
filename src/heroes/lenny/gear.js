@@ -36,8 +36,8 @@ export const LENNY_GEAR = [
       2: { desc: (k) => `+${r(12 * k)} luck. Make It Rain +1 cash stack.`, apply: (c, k) => { c.stat('luck', 12 * k); c.abil('make_it_rain', 'count', 'add', 1); } },
       3: { desc: () => 'Make It Rain crits have a 30% chance to drop a gold coin.',
         apply: (c) => c.link('make_it_rain', null, 'crit', 0.3, (run, p, ev) => run.pickups.coin(ev.x, ev.z, 1), { icd: 0.2 }) },
-      5: { desc: (k) => `Jackpot: Make It Rain deals +1% damage per 10 gold you're holding (up to +${r(100 * k)}%), on top of Clout.`,
-        apply: (c, k) => c.amp((run, m, a) => (a?.def?.id === 'make_it_rain' ? Math.min(k, run.gold / 1000) : 0)) },
+      5: { desc: (k) => `Jackpot: Make It Rain deals +${r(15 * k)}% damage per buy-in you've made this run, on top of the buy-in's own damage.`,
+        apply: (c, k) => c.amp((run, m, a) => (a?.def?.id === 'make_it_rain' ? 0.15 * k * (run.counters.buyIns ?? 0) : 0)) },
     },
   },
   {

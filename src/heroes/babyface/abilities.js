@@ -5,10 +5,14 @@ import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, nova,
 /**
  * Babyface Moretti — the Professional. Few, huge, guaranteed hits.
  *
- * Signature: FOCUS (run.res, see BABYFACE_RESOURCE). It builds while he goes a
- * moment without getting hurt and a hit knocks some off. Held Focus adds crit
- * chance to his precision shots; at FOCUS_COST the Sniper Rifle and Silver
- * Bullet spend it on a Focused shot: guaranteed crit, +50% damage, heavier round.
+ * Meter: FOCUS (run.res, see BABYFACE_RESOURCE). It builds while he goes a
+ * moment without getting hurt (full in ~40s) and a hit knocks some off. Nothing
+ * spends it: held Focus adds crit chance to precision shots, and at FOCUSED_AT+
+ * every FOCUS_EVERY-th Sniper Rifle volley (and every Silver Bullet) is a
+ * Focused shot: guaranteed crit, +50% damage, heavier round.
+ *
+ * Signature: DEADEYE (BABYFACE_SIGNATURE) at full Focus: 4s of rapid Sniper
+ * Rifle fire at the toughest thugs, every shot a crit that Spots its target.
  *
  * Weak spots: precision shots (abilities with `precision: true`) deal +15% to
  * elites, bosses and titans, and Spotter marks thugs 'weak' (status) so they
@@ -20,10 +24,13 @@ import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, nova,
 
 export const BABYFACE_START = 'rifle';
 
-export const FOCUS_COST = 40; // a Focused shot
-const FOCUS_RATE = 10; // Focus per second while calm
+export const FOCUSED_AT = 40; // Focus needed for Focused shots (nothing is spent)
+const FOCUS_EVERY = 3; // every Nth Sniper Rifle volley is Focused (at FOCUSED_AT+)
+const FOCUS_RATE = 2.5; // Focus per second while calm: empty → full in ~40s
 const CALM_DELAY = 1.5; // seconds unhurt before Focus builds
-const FLINCH = 20; // Focus lost when hurt
+const FLINCH = 10; // Focus lost when hurt
+const DEADEYE_DUR = 4; // seconds of Deadeye
+const DEADEYE_GAP = 0.25; // seconds between Deadeye shots
 const FOCUS_DMG = 0.5; // Focused shot bonus damage
 const BIG_WEAK = 0.15; // precision bonus vs elites / bosses / titans
 const SPOT_CRIT = 0.5; // extra crit damage on spotted thugs (precision hits)
@@ -31,9 +38,19 @@ const SPOT_DMG = 0.25; // default spotted bonus if Spotter isn't owned (talent s
 
 export const BABYFACE_RESOURCE = {
   id: 'focus', name: 'Focus', icon: '🎯', color: '#ffd23f', max: 100, start: 40,
-  desc: `Builds while you go ${CALM_DELAY}s without getting hurt (50% faster while a Body Double is out); every hit you take knocks off ${FLINCH}. `
-    + 'Held Focus gives precision shots up to +25% crit chance. '
-    + `At ${FOCUS_COST} Focus the Sniper Rifle and Silver Bullet fire a Focused shot: guaranteed crit, +${FOCUS_DMG * 100}% damage.`,
+  desc: `Fills while you avoid getting hurt: after ${CALM_DELAY}s without a hit it climbs steadily (empty to full in about ${Math.round(100 / FOCUS_RATE)}s, 50% faster while a Body Double is out). Each hit you take knocks off ${FLINCH}. Nothing spends it.\n`
+    + '• Held Focus: precision shots get extra crit chance (up to +25% when full).\n'
+    + `• ${FOCUSED_AT}+ Focus: every ${FOCUS_EVERY}rd Sniper Rifle shot and every Silver Bullet is a Focused shot (guaranteed crit, +${FOCUS_DMG * 100}% damage).\n`
+    + '• Full Focus: DEADEYE.',
+  /** What Focus is doing for you right now (HUD, next to the meter). */
+  bonus(run) {
+    if (run.buffs.deadeye) return 'Deadeye: every shot crits';
+    const crit = `+${Math.round(heldCrit(run) * 100)}% crit`;
+    if (!run.abilityById('rifle') && !run.abilityById('silver_bullet')) return crit;
+    if (focusOf(run) < FOCUSED_AT) return `${crit} · Focused shots at ${FOCUSED_AT}`;
+    const left = focusEvery(run) - 1 - (run.res.charge ?? 0);
+    return run.buffs.focus?.freeFocus || left <= 0 || !run.abilityById('rifle') ? `${crit} · Focused shot ready` : `${crit} · Focused in ${left}`;
+  },
   tick(run, dt) {
     const r = run.res, f = run.flags, p = run.player;
     if (!r.init) {
@@ -66,11 +83,23 @@ export const focusOf = (run) => (isFocus(run) ? run.res.value : 0);
 export const gainFocus = (run, n) => { if (isFocus(run)) run.gainRes(n); };
 /** Crit chance held Focus gives precision shots: Focus / 4 %, so +25% when full. */
 const heldCrit = (run) => (focusOf(run) / 400) * (1 + (run.flags.heldCrit ?? 0));
-/** Try to pay for a Focused shot. Free while Deep Breath is up. */
-export function takeFocus(run) {
+/** Every how many rifle volleys a Focused shot comes (Patience: every 2nd). */
+const focusEvery = (run) => Math.max(1, FOCUS_EVERY - (run.flags.focusEveryLess ?? 0));
+/** Silver Bullet: Focused at FOCUSED_AT+ Focus (always while Deep Breath is up). Spends nothing. */
+const silverFocused = (run) => isFocus(run) && (!!run.buffs.focus?.freeFocus || focusOf(run) >= FOCUSED_AT);
+/**
+ * Sniper Rifle: is this volley Focused? Counts volleys (run.res.charge); every
+ * focusEvery-th one is Focused at FOCUSED_AT+ Focus. If Focus is low when it comes
+ * up, the charge waits and the first volley after reaching FOCUSED_AT is Focused.
+ * Every volley is Focused while Deep Breath is up. Spends nothing.
+ */
+function rifleFocused(run) {
   if (!isFocus(run)) return false;
+  const r = run.res, n = focusEvery(run);
   if (run.buffs.focus?.freeFocus) return true;
-  return run.spendRes(Math.max(10, FOCUS_COST - (run.flags.focusDiscount ?? 0)));
+  if ((r.charge ?? 0) >= n - 1 && r.value >= FOCUSED_AT) { r.charge = 0; return true; }
+  r.charge = Math.min(n - 1, (r.charge ?? 0) + 1);
+  return false;
 }
 
 // ── weak spots ──────────────────────────────────────────────────────────────
@@ -134,19 +163,21 @@ export const listed = (run, m) => m.listedUntil > run.time;
  * One rifle round. The bullet itself does no damage (dmg 0 makes the engine's hit a
  * no-op); onHit does a precision hit so weak spots, Focus and ramps apply.
  */
-function rifleShot(run, a, t, focused = false) {
+function rifleShot(run, a, t, focused = false, deadeye = false) {
   const m = run.player.muzzlePos(), f = run.flags;
   // Held Breath: pierce everything while Deep Breath is up. Focused shots punch through 2 more.
   const pierce = f.breathPierce && run.buffs.focus ? 99 : a.stat('pierce') + (focused ? 2 : 0);
   // Wiseguy (3): each thug hit makes the rest of the shot hit harder · One Shot One Kill: execute
   const ramp = f.pierceRamp ?? 0, exec = f.oneShot ?? 0;
   const base = a.stat('damage');
+  const gold = focused || deadeye;
   let d = base, hits = 0;
-  run.shoot({ x: m.x, z: m.z, y: m.y, angle: Math.atan2(t.x - m.x, t.z - m.z), speed: focused ? 95 : 70, dmg: 0, range: a.stat('range') * 1.3,
-    pierce, size: focused ? 2.1 : 1.4, color: focused ? '#ffd23f' : '#fff2c0', ability: a, knock: 0, bounce: f.rifleRicochet ?? 0,
+  run.shoot({ x: m.x, z: m.z, y: m.y, angle: Math.atan2(t.x - m.x, t.z - m.z), speed: deadeye ? 130 : focused ? 95 : 70, dmg: 0, range: a.stat('range') * 1.3,
+    pierce, size: gold ? 2.1 : 1.4, color: gold ? '#ffd23f' : '#fff2c0', ability: a, knock: 0, bounce: f.rifleRicochet ?? 0,
     onHit: (mob, b) => {
       if (mob.dead) return;
-      precisionHit(run, mob, d, a, { focused, knock: focused ? 5 : 3, fromX: b.x - b.vx, fromZ: b.z - b.vz });
+      // Deadeye: every hit of the shot is a guaranteed crit
+      precisionHit(run, mob, d, a, { focused, forceCrit: focused || deadeye, knock: focused ? 5 : 3, fromX: b.x - b.vx, fromZ: b.z - b.vz });
       if (exec && !mob.dead && mob.tier < 3 && mob.hp / mob.maxHp < (mob.tier >= 2 ? exec / 2 : exec)) {
         run.hit(mob, mob.hp + 1, a, { noCrit: true, color: '#ff3030' });
         gainFocus(run, f.execFocus ?? 0);
@@ -167,7 +198,7 @@ function callIn(run, a, life = a.stat('duration')) {
 export const BABYFACE_ABILITIES = [
   {
     id: 'rifle', name: 'Sniper Rifle', icon: '🔭', tags: ['gun', 'projectile'], precision: true,
-    desc: `One huge shot at the toughest thug in sight, punching through the ones in front. With ${FOCUS_COST} Focus it fires a Focused shot: guaranteed crit, +50% damage, a heavier round.`,
+    desc: `One huge shot at the toughest thug in sight, punching through the ones in front. At ${FOCUSED_AT}+ Focus every ${FOCUS_EVERY}rd shot is a Focused shot: guaranteed crit, +50% damage, a heavier round.`,
     base: { damage: 62, cooldown: 1.5, range: 22, pierce: 2, count: 1, crit: 0.05 },
     upgrades: [DMG, pctUp('cooldown', 'Fire Rate', 12), addUp('pierce', 'Pierce', [0, 1, 1, 2, 2], null, 8), addUp('count', 'Extra Shot', [0, 0, 0, 1, 1], null, 3)],
     ready: (run, a) => {
@@ -182,7 +213,7 @@ export const BABYFACE_ABILITIES = [
     },
     fire(run, a, ts) {
       const n = a.stat('count');
-      const focused = takeFocus(run); // one Focused round per volley: the first
+      const focused = rifleFocused(run); // one Focused round per volley: the first
       for (let i = 0; i < n; i++) run.later(i * 0.12, () => { const t = ts[i % ts.length]; if (!t.dead) rifleShot(run, a, t, focused && i === 0); });
       setLast(run, ts[0]);
       run.player.aim(ts[0].x, ts[0].z, 0.4);
@@ -241,7 +272,7 @@ export const BABYFACE_ABILITIES = [
   },
   {
     id: 'silver_bullet', name: 'Silver Bullet', icon: '🥈', tags: ['gun'], precision: true,
-    desc: `Saved for special occasions. Massive damage to the single biggest target, +50% vs bosses and titans. Always a Focused shot if you have ${FOCUS_COST} Focus.`,
+    desc: `Saved for special occasions. Massive damage to the single biggest target, +50% vs bosses and titans. Always a Focused shot at ${FOCUSED_AT}+ Focus.`,
     base: { damage: 300, cooldown: 14, range: 24, crit: 0.05 },
     upgrades: [DMG, CD],
     ready: (run, a) => {
@@ -252,7 +283,7 @@ export const BABYFACE_ABILITIES = [
       return null;
     },
     fire(run, a, t) {
-      const m = run.player.muzzlePos(), focused = takeFocus(run);
+      const m = run.player.muzzlePos(), focused = silverFocused(run);
       run.fx.beam(m.x, m.z, t.x, t.z, focused ? '#ffd23f' : '#e6ecff', focused ? 0.26 : 0.18, 0.35, 0.9);
       precisionHit(run, t, a.stat('damage') * (t.tier >= 2 ? 1.5 : 1), a, { focused, knock: 4 });
       run.player.aim(t.x, t.z, 0.5);
@@ -278,13 +309,13 @@ export const BABYFACE_ABILITIES = [
   },
   {
     id: 'focus', name: 'Deep Breath', icon: '🫁', tags: ['buff'],
-    desc: 'In, hold, out. Fills Focus, and while it lasts every Focused shot is free and all your abilities recharge faster.',
+    desc: 'In, hold, out. +15 Focus, and while it lasts every Sniper Rifle and Silver Bullet shot is Focused and all your abilities recharge faster.',
     base: { cooldown: 16, duration: 5, power: 0.25 },
     upgrades: [DUR, scUp('power', 'Calm', 0.07, (v) => `+${Math.round(v * 100)}% recharge speed`), CD],
     useless: permanentUptime,
     ready: (run, a) => run.crowd(a, 14, 3),
     fire(run, a) {
-      gainFocus(run, run.res?.max ?? 0);
+      gainFocus(run, 15);
       buff(run, a, { fx: '#ffffff', rate: a.stat('power'), freeFocus: true });
       sfx('frenzy', 0.1);
     },
@@ -386,3 +417,76 @@ export const BABYFACE_ABILITIES = [
     },
   },
 ];
+
+// ── Signature: Deadeye ──────────────────────────────────────────────────────
+
+/** The rifle Deadeye shoots with: his own (upgrades and talents apply), or a stock one if he doesn't carry it. */
+function deadeyeGun(run) {
+  const own = run.abilityById('rifle');
+  if (own) return own;
+  if (!run.deadeyeGun) {
+    const Inst = run.abilities[0].constructor; // AbilityInst, without importing game/stats.js (it imports heroes/index.js)
+    run.deadeyeGun = new Inst(BABYFACE_ABILITIES.find((d) => d.id === 'rifle'), run);
+  }
+  return run.deadeyeGun;
+}
+const deadeyeRange = (run) => deadeyeGun(run).stat('range') * 1.25;
+
+/** One Deadeye round: Spot the toughest thug in range, then a gold tracer and a crit rifle shot into it. */
+function deadeyeShot(run) {
+  const p = run.player;
+  if (p.dead || run.ended || run.evacuating) return;
+  const a = deadeyeGun(run);
+  const t = run.mobs.target(p.x, p.z, deadeyeRange(run), 'strongest');
+  if (!t) return;
+  spot(run, run.abilityById('spotter'), t);
+  const m = p.muzzlePos();
+  run.fx.beam(m.x, m.z, t.x, t.z, '#ffd23f', 0.14, 0.18, m.y);
+  run.fx.muzzle(m.x, m.y, m.z);
+  rifleShot(run, a, t, false, true);
+  setLast(run, t);
+  p.aim(t.x, t.z, 0.3);
+  run.shake(0.06);
+  sfx('snipe', 0.03);
+}
+
+export const BABYFACE_SIGNATURE = {
+  id: 'deadeye', name: 'Deadeye', icon: '👁️',
+  short: '4s of rapid crits at the toughest thugs',
+  desc: `At full Focus: for ${DEADEYE_DUR}s the Sniper Rifle fires every ${DEADEYE_GAP}s at the toughest thug in range. Every shot is a guaranteed crit and Spots its target's weak spot. Uses your Sniper Rifle's damage and upgrades (a stock rifle if you don't carry one).`,
+  /** Full Focus and something worth shooting (so Auto never wastes it on an empty street). */
+  ready(run) {
+    const r = run.res, p = run.player;
+    if (!r || r.value < r.max || run.buffs.deadeye) return false;
+    return !!run.mobs.target(p.x, p.z, deadeyeRange(run), 'strongest');
+  },
+  fire(run) {
+    const p = run.player;
+    run.buffs.deadeye = { t: DEADEYE_DUR, max: DEADEYE_DUR, src: 'deadeye', fx: '#ffd23f' };
+    run.fx.ring(p.x, p.z, 4, '#ffd23f', 0.6);
+    for (let i = 1; i < DEADEYE_DUR; i++) run.later(i, () => { if (!p.dead) run.fx.ring(p.x, p.z, 2.5, '#ffd23f', 0.45); });
+    const n = Math.round(DEADEYE_DUR / DEADEYE_GAP);
+    for (let i = 0; i < n; i++) run.later(0.15 + i * DEADEYE_GAP, () => deadeyeShot(run));
+    sfx('bigshot', 0.05);
+  },
+};
+
+// ── Kit tab (hideout) ───────────────────────────────────────────────────────
+
+export const BABYFACE_OVERVIEW = {
+  tagline: 'few shots, all of them crits',
+  playstyle: 'Babyface hangs back and lets his guns pick off the biggest thugs in sight. Your job is to keep your distance and not get hit: staying calm fills Focus, which makes his shots crit more and eventually unleashes Deadeye.',
+  meter: `Focus fills while you avoid getting hurt: about ${Math.round(100 / FOCUS_RATE)}s from empty to full if nothing touches you. Every hit knocks off ${FLINCH}. The more you hold, the more your precision shots crit (up to +25%). At ${FOCUSED_AT}+ every ${FOCUS_EVERY}rd Sniper Rifle shot and every Silver Bullet is a Focused shot: a guaranteed crit for +50% damage. When it's full, Deadeye fires.`,
+  tips: [
+    'Keep moving and keep thugs at arm\'s length. Every hit you take costs Focus and restarts the build.',
+    'Deadeye aims at the toughest thugs, so it shines against elites, bosses and titans. In Manual mode, save it for them.',
+    'Deadeye Spots everything it shoots, so Double Tap and your other precision shots hit those thugs harder afterwards.',
+    'Body Double makes Focus build 50% faster while a lookalike is out, and it draws fire away from you.',
+  ],
+  pairs: [
+    { a: 'rifle', b: 'spotter', why: 'Spotted thugs take extra damage and much bigger crits, and the Rifle always crits when Focused.' },
+    { a: 'rifle', b: 'double_tap', why: 'Double Tap finishes whatever the Rifle (or Deadeye) just hit.' },
+    { a: 'focus', b: 'silver_bullet', why: 'Deep Breath makes every Silver Bullet and Rifle shot Focused, and speeds up their recharge.' },
+    { a: 'body_double', b: 'sawed_off', why: 'Lookalikes draw thugs off you and the Sawed-Off shoves away the rest, so Focus keeps building.' },
+  ],
+};

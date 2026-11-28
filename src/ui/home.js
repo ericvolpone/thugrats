@@ -199,21 +199,22 @@ export class HomeScreen {
       pick.appendChild(el('div', 'note', `Starts with <b>${h.abilities.find((a) => a.id === cur).name}</b>.`));
       body.appendChild(pick);
     }
-    body.appendChild(el('div', 'note', `Clear a map by killing its final Crime Titan. Progress is per hero: ${h.name.split(' ')[0]} unlocks the next map and harder difficulties by clearing them, and each map's Crime Titans drop pieces of ${h.name.split(' ')[0]}'s gear set for that map.`));
+    body.appendChild(el('div', 'note', `Kill a map's final Crime Titan to clear it. Progress is per hero; each map's titans drop pieces of ${h.name.split(' ')[0]}'s set for that map (🗿1: 25% for pieces 1–2 · 🗿2: 25% for 3–4 · 🗿3: 35% for 5).`));
     for (const m of MAPS) {
       // progress is per hero: each hero clears each map and difficulty on their own
       const locked = m.requires && Save.bestClear(h.id, m.requires) < 0;
       const best = Save.bestClear(h.id, m.id);
       const set = h.sets.find((s) => s.map === m.id);
-      const card = el('div', `map-card ${locked ? 'locked' : ''}`);
-      const owned = set ? set.pieceList.filter((p) => Save.gearTier(h.id, p.id) >= 0).length : 0;
-      const setHtml = set ? `<div class="set-drop"><div class="sd-head">${set.icon} <b>${set.name}</b> set <span class="muted">${owned}/5 · ${set.focusName}</span></div><div class="sd-row">${
-        TITAN_DROPS.map((rule, ti) => `<div class="sd-titan" title="${BOSSES[m.titans[ti]?.boss]?.name ?? 'Titan'}: ${Math.round(rule.chance * 100)}% to drop a missing piece">${rule.slots.map((si) => {
-          const p = set.pieceList[si], t = Save.gearTier(h.id, p.id);
-          return `<span class="sd-pc ${t < 0 ? 'missing' : ''}" style="border-color:${t >= 0 ? tierColor(t) : '#444'}" title="${p.name}${t < 0 ? ' (missing)' : ''}">${p.icon}</span>`;
-        }).join('')}<small>🗿${ti + 1} · ${Math.round(rule.chance * 100)}%</small></div>`).join('')}</div></div>` : '';
-      card.innerHTML = `<h3>${m.name}</h3><div class="blurb">${locked ? `🔒 Clear ${MAPS.find((x) => x.id === m.requires).name} to unlock` : m.blurb}</div>
-        <div class="meta"><span>🗿 ${m.titans.map((t) => BOSSES[t.boss].name).join(' · ')}</span></div>${setHtml}`;
+      const card = el('div', `map-card compact ${locked ? 'locked' : ''}`);
+      card.title = `${m.blurb}\nCrime Titans: ${m.titans.map((t) => BOSSES[t.boss].name).join(' · ')}`;
+      const pcs = set ? set.pieceList.map((p) => {
+        const t = Save.gearTier(h.id, p.id);
+        const ti = TITAN_DROPS.findIndex((d) => d.slots.includes(p.slotIndex));
+        return `<span class="sd-pc ${t < 0 ? 'missing' : ''}" style="border-color:${t >= 0 ? tierColor(t) : '#444'}" title="${p.name}${t < 0 ? ` — missing (Crime Titan ${ti + 1}: ${Math.round(TITAN_DROPS[ti].chance * 100)}%)` : ` (${TIERS[t].name})`}">${p.icon}</span>`;
+      }).join('') : '';
+      card.innerHTML = `<div class="mc-top"><h3>${m.name}</h3>${set ? `<span class="mc-set" title="${set.name} set · built around ${set.focusName}">${set.icon} ${set.name}</span>` : ''}</div>
+        ${locked ? `<div class="blurb">🔒 Clear ${MAPS.find((x) => x.id === m.requires).name} to unlock</div>` : ''}
+        <div class="mc-row"><div class="mc-pcs">${pcs}</div></div>`;
       const diffs = el('div', 'diffs');
       DIFFICULTIES.forEach((d, i) => {
         const ok = !locked && (i === 0 || best >= i - 1);
@@ -224,7 +225,7 @@ export class HomeScreen {
         b.onclick = () => { sfx('select'); this.onPlay(h.id, m.id, i); };
         diffs.appendChild(b);
       });
-      card.appendChild(diffs);
+      card.querySelector('.mc-row').appendChild(diffs);
       body.appendChild(card);
     }
   }
@@ -318,14 +319,14 @@ export class HomeScreen {
     const tierOf = (id) => Save.gearTier(h.id, id);
     const worn = GEAR_SLOTS.map((slot) => Save.equipped(h.id, slot));
     const sets = wornSets(h.sets, worn.filter(Boolean), tierOf);
-    body.appendChild(el('div', 'note', `Each map drops <b>${h.name.split(' ')[0]}'s</b> set for that map: its Crime Titans can drop the pieces (see the Play tab). Wear one piece per slot; 2, 3 and 5 pieces of a set turn on its bonuses, and you can mix 2 + 3 from two sets. Ascending gives <b>upgrade tokens</b>: each raises a piece one rarity.`));
+    body.appendChild(el('div', 'note', `Crime Titans drop each map's set. Wear 2 / 3 / 5 pieces of a set for its bonuses (mix 2 + 3). Ascending gives <b>upgrade tokens</b>.`));
     // worn row + active bonuses
     const top = el('div', 'gear-top');
     top.innerHTML = `<div class="gear-worn">${GEAR_SLOTS.map((slot, i) => {
       const p = worn[i] && h.pieces.find((x) => x.id === worn[i]);
       return `<div class="gw ${p ? '' : 'empty'}" title="${slot}${p ? `: ${p.name}` : ' (empty)'}" style="border-color:${p ? tierColor(tierOf(p.id)) : '#444'}">${p ? p.icon : SLOT_ICON[slot]}<small>${slot}</small></div>`;
     }).join('')}<div class="tokens" title="Gear upgrade tokens (from ascending)">✦ ${prof.tokens} token${prof.tokens === 1 ? '' : 's'}</div></div>
-      <div class="gear-bonuses">${sets.length ? sets.map((w) => `<div class="gb"><b>${w.set.icon} ${w.set.name}</b> <span class="muted">${w.count}/5 worn · bonuses ×${w.k.toFixed(2)}</span>${[2, 3, 5].map((n) => `<div class="gbl ${w.active.includes(n) ? 'on' : ''}">(${n}) ${w.set.bonus[n].desc(w.k)}</div>`).join('')}</div>`).join('') : '<div class="muted">No set pieces worn.</div>'}</div>`;
+      <div class="gear-bonuses">${sets.length ? sets.map((w) => `<div class="gb"><b>${w.set.icon} ${w.set.name}</b> <span class="muted">${w.count}/5 · ×${w.k.toFixed(2)}</span>${[2, 3, 5].map((n) => `<div class="gbl ${w.active.includes(n) ? 'on' : ''}" title="${w.set.bonus[n].desc(w.k).replace(/"/g, '&quot;')}">(${n}) ${w.set.bonus[n].desc(w.k)}</div>`).join('')}</div>`).join('') : '<div class="muted">No set pieces worn.</div>'}</div>`;
     body.appendChild(top);
     // grid: sets × slots
     const grid = el('div', 'gear-grid');
@@ -417,11 +418,36 @@ export class HomeScreen {
   renderKit(body, h) {
     const prof = Save.hero(h.id);
     const sid = prof.asc > 0 && prof.startAbility ? prof.startAbility : h.start;
-    body.appendChild(el('div', 'note', `Every run starts with <b>${h.abilities.find((a) => a.id === sid).name}</b>${prof.asc > 0 ? ' (change it in the Play tab)' : ' (ascend to choose)'}. Level-ups offer new abilities (up to 5 per run) or rarity-rolled upgrades to ones you have. Everything fires on its own — you just move.`));
-    const list = el('div', 'ab-list');
+    // pairs may name an ability by id or by its display name (or the signature move)
+    const ab = (id) => h.abilities.find((a) => a.id === id || a.name === id) ?? (h.signature && (h.signature.id === id || h.signature.name === id) ? h.signature : null);
+    const o = h.overview ?? {};
+    const res = h.resource, sig = h.signature;
+    const ov = el('div', 'kit-ov');
+    ov.innerHTML = `<div class="kv-head"><b>${h.icon} ${h.title}</b>${o.tagline ? ` <span class="muted">— ${o.tagline}</span>` : ''}</div>
+      ${o.playstyle ? `<p>${o.playstyle}</p>` : `<p>${h.blurb}</p>`}
+      ${res ? `<div class="kv-box"><b>${res.icon} ${res.name} (meter under your HP)</b><p>${o.meter ?? res.desc ?? ''}</p></div>` : ''}
+      ${sig ? `<div class="kv-box sig"><b>${sig.icon} Signature: ${sig.name}</b><p>${sig.desc}</p><p class="muted">Auto by default · Manual in the pause menu: Ⓨ / F / ★.</p></div>` : ''}
+      ${o.tips?.length ? `<details class="kv-tips"><summary><b>💡 Tips</b></summary><ul>${o.tips.map((t) => `<li>${t}</li>`).join('')}</ul></details>` : ''}
+      ${o.pairs?.length ? `<details class="kv-pairs"><summary><b>🔗 Good pairs</b> <span class="muted">${o.pairs.map((p) => `${ab(p.a)?.icon ?? ''}${ab(p.b)?.icon ?? ''}`).join('  ')}</span></summary>${o.pairs.map((p) => `<div class="kv-pair"><span>${ab(p.a)?.icon ?? ''}${ab(p.b)?.icon ?? ''}</span><span><b>${ab(p.a)?.name ?? p.a} + ${ab(p.b)?.name ?? p.b}</b> — ${p.why}</span></div>`).join('')}</details>` : ''}`;
+    body.appendChild(ov);
+    body.appendChild(el('div', 'note', `Starts with <b>${ab(sid)?.name ?? ''}</b>${prof.asc > 0 ? ' (change it in the Play tab)' : ' (ascend to choose)'}. Level-ups offer new abilities (up to 5 per run) or upgrades. Everything fires on its own; you move.`));
+    // compact ability chips; tap one to read it (keeps the tab on one screen)
+    const list = el('div', 'ab-chips');
+    const info = el('div', 'talent-info ab-info');
+    const show = (a) => {
+      this.selAbility = a.id;
+      info.innerHTML = `<b>${a.icon} ${a.name}</b> <span class="muted">${a.tags.join(' · ')}</span><div style="margin-top:4px">${a.desc}</div>`;
+      list.querySelectorAll('.ab-chip').forEach((c) => c.classList.toggle('sel', c.dataset.id === a.id));
+    };
     for (const a of h.abilities) {
-      list.appendChild(el('div', 'ab-item', `<span class="ic">${a.icon}</span><div><b>${a.name}</b><span>${a.desc}</span></div>`));
+      const c = el('button', 'ab-chip', `<span class="ic">${a.icon}</span><span>${a.name}</span>`);
+      c.dataset.id = a.id;
+      c.title = a.desc;
+      c.onclick = () => { sfx('click'); show(a); };
+      list.appendChild(c);
     }
     body.appendChild(list);
+    body.appendChild(info);
+    show(h.abilities.find((a) => a.id === this.selAbility) ?? ab(sid) ?? h.abilities[0]);
   }
 }

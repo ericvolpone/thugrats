@@ -6,7 +6,7 @@ import { chill, addStatus, statusN, clearStatus, tint } from '../common.js';
  * pairings (`pair` = the partner ability that must be owned this run, wired
  * with ctx.link / ctx.amp, see game/stats.js) and row 7 is a second capstone:
  *   Assassin — Shuriken → Knives, Caltrops → Knives, Executes → Cloak; Death by a Thousand Cuts
- *   Shadow   — Tripwire → Smoke, Decoy → Caltrops, Cloak → Garrote; Vanish
+ *   Shadow   — Tripwire → Smoke, Decoy → Caltrops, Cloak → Garrote; Escape Artist
  *   Gadgets  — Poison Dart → Sleeping Gas, Knives → Poison Dart, Executes → Tripwire; Puppet Master
  *
  * This file also holds the core of Lucy's signature mechanic, MARKS, because
@@ -17,16 +17,20 @@ import { chill, addStatus, statusN, clearStatus, tint } from '../common.js';
 // ── Marks ───────────────────────────────────────────────────────────────────
 // Stacks on a thug (m.st.mark, see addStatus). Poison, traps and Shuriken Ring
 // put them on; executes (Garrote, Shadow Step, Curtain Call) cash them in for a
-// higher execute line and bonus damage, and Lucy gains Shadow for each one.
+// higher execute line and bonus damage, and Lucy gains Shadow for each one
+// (full Shadow = her signature, Vanish, in abilities.js).
 // Flags (all off by default): markMax +n max stacks, markDur +s duration,
 // markExec +f execute line per Mark, markHeal HP per Mark cashed,
 // cashCd seconds of cooldown refunded per Mark cashed, trapMarks +n per trap mark,
-// poisonMark chance of +1 Mark on poison marks.
+// poisonMark chance of +1 Mark on poison marks, shadowGain +f Shadow fill rate.
 
 export const MARK_COLOR = '#b05cff';
 export const MARK_EXEC = 0.04; // execute line per Mark
 export const MARK_DMG = 0.2; // bonus damage per Mark when it doesn't execute
-export const MARK_SHADOW = 6; // Shadow per Mark cashed
+export const MARK_SHADOW = 1.5; // Shadow per Mark cashed...
+export const SHADOW_RATE = 2.8; // ...but never more than this per second on average (100 Shadow ≈ 36s at best)
+export const SHADOW_BANK = 12; // short bursts may go over the rate by this much
+export const shadowGain = (run) => 1 + (run.flags.shadowGain ?? 0);
 
 export const markMax = (run) => 5 + (run.flags.markMax ?? 0);
 export const markDur = (run) => 6 + (run.flags.markDur ?? 0);
@@ -51,11 +55,21 @@ export function markMob(run, m, n = 1, o = {}) {
  * Cash in every Mark on thug m (ability `a` did it): clears them, gives Shadow,
  * pays the flag rewards. Returns how many there were.
  */
+/** Shadow from cashed Marks, drawn from the rate-limit bank (refilled by GHOST_RESOURCE.tick). Not during Vanish. */
+function gainShadow(run, v) {
+  const r = run.res;
+  if (!r || r.id !== 'shadow' || r.hold > run.time) return;
+  const bank = r.bank ?? SHADOW_BANK;
+  const got = Math.min(v, bank);
+  r.bank = bank - got;
+  if (got > 0) run.gainRes(got);
+}
+
 export function cashMarks(run, m, a) {
   const n = clearStatus(run, m, 'mark');
   if (m.tintColor?.getHexString?.() === MARK_COLOR.slice(1)) m.tintUntil = 0;
   if (n <= 0) return 0;
-  run.gainRes(n * MARK_SHADOW);
+  gainShadow(run, n * MARK_SHADOW * shadowGain(run));
   if (run.flags.markHeal) run.heal(run.flags.markHeal * n);
   if (run.flags.cashCd && a) {
     // fire() runs before the cooldown is set, so take the refund off a frame later
@@ -84,7 +98,8 @@ export const GHOST_TALENTS = [
     desc: (r) => `Each Mark cashed in raises the execute line by another +${r}%. Melee hits heal you for ${3 * r}% of their damage.`,
     apply: (c, r) => { c.flagAdd('markExec', 0.01 * r); c.stat('meleeLeech', 0.03 * r); } },
   { id: 'g_bounce', tree: 'assassin', row: 2, col: 0, max: 1, name: 'Twin Shadows', icon: '👥',
-    desc: () => 'Shadow Step strikes one more thug.', apply: (c) => c.abil('shadow_step', 'count', 'add', 1) },
+    desc: () => 'Shadow Step strikes one more thug, and Vanish chains through up to 4 more Marked thugs.',
+    apply: (c) => { c.abil('shadow_step', 'count', 'add', 1); c.flagAdd('vanishCount', 4); } },
   { id: 'g_big', tree: 'assassin', row: 2, col: 2, max: 3, name: 'Contract Killer', icon: '📜',
     desc: (r) => `+${8 * r}% damage to elites, bosses and titans.`, apply: (c, r) => c.stat('bigDmg', 0.08 * r) },
   { id: 'g_knives', tree: 'assassin', row: 3, col: 1, max: 2, name: 'Knife Collection', icon: '🔪',
@@ -104,7 +119,7 @@ export const GHOST_TALENTS = [
       c.amp((run, m, a) => (a?.def?.id === 'knives' && (m.slowT > 0 || m.rootT > 0) && run.abilityById('caltrops') ? 0.15 * r : 0));
     } },
   { id: 'g_clean_getaway', tree: 'assassin', row: 6, col: 1, max: 3, name: 'Clean Getaway', icon: '🫥', pair: 'cloak',
-    desc: (r) => `Kills by executes (Garrote, Shadow Step, Curtain Call) add ${(0.4 * r).toFixed(1)}s to Cloak, or put up a ${(0.5 * r).toFixed(1)}s Cloak if it isn't on.`,
+    desc: (r) => `Kills by executes (Garrote, Shadow Step, Curtain Call, Vanish) add ${(0.4 * r).toFixed(1)}s to Cloak, or put up a ${(0.5 * r).toFixed(1)}s Cloak if it isn't on.`,
     apply: (c, r) => c.link('#execute', 'cloak', 'kill', 1, (run, p) => {
       const b = run.buffs.cloak;
       if (b) { b.t = Math.min(b.max + 3, b.t + 0.4 * r); }
@@ -141,9 +156,11 @@ export const GHOST_TALENTS = [
   { id: 'g_decoy', tree: 'shadow', row: 2, col: 2, max: 2, name: 'Better Cardboard', icon: '🎭',
     desc: (r) => `Cardboard Decoy explodes for +${40 * r}% damage.`, apply: (c, r) => c.abil('decoy', 'damage', 'pct', 40 * r) },
   { id: 'g_pickup', tree: 'shadow', row: 3, col: 1, max: 2, name: 'Long Shadows', icon: '🌒',
-    desc: (r) => `Marks last ${2 * r}s longer, and every Mark cashed in heals ${r} HP.`, apply: (c, r) => { c.flagAdd('markDur', 2 * r); c.flagAdd('markHeal', r); } },
+    desc: (r) => `Marks last ${2 * r}s longer, every Mark cashed in heals ${r} HP, and Shadow fills ${10 * r}% faster.`,
+    apply: (c, r) => { c.flagAdd('markDur', 2 * r); c.flagAdd('markHeal', r); c.flagAdd('shadowGain', 0.1 * r); } },
   { id: 'g_ghost', tree: 'shadow', row: 4, col: 1, max: 1, name: 'Ghost Protocol', icon: '👻', capstone: true,
-    desc: () => '+12% dodge and +1 reroll every run.', apply: (c) => { c.stat('dodge', 0.12); c.stat('rerolls', 1); } },
+    desc: () => '+12% dodge and +1 reroll every run. Vanish Cloaks you 2s longer.',
+    apply: (c) => { c.stat('dodge', 0.12); c.stat('rerolls', 1); c.flagAdd('vanishCloak', 2); } },
   { id: 'g_smoke_signal', tree: 'shadow', row: 5, col: 0, max: 3, name: 'Smoke Signal', icon: '🪢', pair: 'smoke',
     desc: (r) => `Tripwires that spring have a ${25 * r}% chance to puff a Smoke Bomb cloud there (Smoke's size ×0.7, half its duration; slows thugs).`,
     apply: (c, r) => c.link('tripwire', 'smoke', 'hit', (run) => {
@@ -166,8 +183,8 @@ export const GHOST_TALENTS = [
   { id: 'g_from_shadows', tree: 'shadow', row: 6, col: 1, max: 3, name: 'From the Shadows', icon: '🥷', pair: 'garrote',
     desc: (r) => `When Cloak runs out, Lucy Garrotes the nearest thug for free (executes as usual, otherwise ×${(1 + 0.5 * r).toFixed(1)} damage).`,
     apply: (c, r) => c.flag('cloakBreak', 1 + 0.5 * r) },
-  { id: 'g_vanish', tree: 'shadow', row: 7, col: 1, max: 1, name: 'Vanish', icon: '🎩', capstone: true, pair: 'cloak',
-    desc: () => 'When a hit drops you under 35% HP, you vanish: Cloak goes up for free, thugs within 6 lose you (frozen 1.5s) and Smoke Bomb pops if you have it. Once every 30s.',
+  { id: 'g_vanish', tree: 'shadow', row: 7, col: 1, max: 1, name: 'Escape Artist', icon: '🎩', capstone: true, pair: 'cloak',
+    desc: () => 'When a hit drops you under 35% HP, you slip away: Cloak goes up for free, thugs within 6 lose you (frozen 1.5s) and Smoke Bomb pops if you have it. Once every 30s.',
     apply: (c) => c.link('*', 'cloak', 'hurt', (run, ev) => { const h = run.player.hp - ev.dmg; return h > 0 && h < run.stats.maxHp * 0.35 ? 1 : 0; }, (run, p) => {
       const pl = run.player;
       p.def.wrap(run, p);
@@ -207,7 +224,7 @@ export const GHOST_TALENTS = [
       markMob(run, ev.m, 1, { poison: true });
     }, { icd: 0.05 }) },
   { id: 'g_laser_wire', tree: 'gadgets', row: 6, col: 1, max: 3, name: 'Body Trap', icon: '🪤', pair: 'tripwire',
-    desc: (r) => `Kills by executes (Garrote, Shadow Step, Curtain Call) have a ${20 * r}% chance to string a Tripwire on the body (doesn't count toward the wire limit).`,
+    desc: (r) => `Kills by executes (Garrote, Shadow Step, Curtain Call, Vanish) have a ${20 * r}% chance to string a Tripwire on the body (doesn't count toward the wire limit).`,
     apply: (c, r) => c.link('#execute', 'tripwire', 'kill', 0.2 * r, (run, p, ev) => {
       if (ev.x != null) p.def.place(run, p, ev.x, ev.z, { extra: true });
     }, { icd: 0.6 }) },

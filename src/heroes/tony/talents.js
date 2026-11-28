@@ -7,7 +7,9 @@ import { nova } from '../common.js';
  * Row r needs 3·r points already spent in that branch. Rows 5-7 (0-based) are pairing
  * talents: `pair` names the partner ability that must be in your run for them
  * to do anything (see ctx.link in game/stats.js). Procs use the partner's stats
- * and credit the damage to it.
+ * and credit the damage to it. Short Temper and Let It Out tune the signature
+ * move, Berserk (flags read in TONY_SIGNATURE.fire / ready): Short Temper has no
+ * partner because the signature is always there.
  */
 
 /** A Ground Pound (partner `p`) at (x, z), `size`/`dmg` scale its area/damage. */
@@ -98,21 +100,14 @@ export const TONY_TALENTS = [
       c.flag('tonyBellyBank', 0.3 * r);
       c.link('*', 'clap_back', 'hurt', 1, (run, p, ev) => { run.counters.tonyBank = (run.counters.tonyBank ?? 0) + ev.dmg; }, { icd: 0 });
     } },
-  { id: 't_short_temper', tree: 'iron', row: 5, col: 2, max: 3, name: 'Short Temper', icon: '🌋', pair: 'meltdown',
-    desc: (r) => `Getting hit has a ${15 * r}% chance to make Tony blow his top early: with 50+ Rage, Total Meltdown goes off right away and spends what he has (damage scales with it). At most once every 3s.`,
-    apply: (c, r) => c.link('*', 'meltdown', 'hurt', 0.15 * r, (run, p) => {
-      // counts as casting it, so Let It Out and the like still trigger
-      if ((run.res?.value ?? 0) >= 50 && p.def.meltdown?.(run, p)) run.emit('fire', p, { x: run.player.x, z: run.player.z });
-    }, { icd: 3 }) },
+  { id: 't_short_temper', tree: 'iron', row: 5, col: 2, max: 3, name: 'Short Temper', icon: '🌋',
+    desc: (r) => `Tony blows his top early: Berserk is ready at ${100 - 10 * r} Rage instead of 100 (the stomps and the fury are just as strong).`,
+    apply: (c, r) => c.flagAdd('tonyShortTemper', 10 * r) },
   { id: 't_let_it_out', tree: 'iron', row: 6, col: 1, max: 3, name: 'Let It Out', icon: '😮‍💨', pair: 'iron_belly',
-    desc: (r) => `Total Meltdown refills Iron Belly's shield to ${35 * r}% of its size, and Iron Belly recharges ${10 * r}% faster.`,
+    desc: (r) => `Going Berserk refills Iron Belly's shield to ${35 * r}% of its size, and Iron Belly recharges ${10 * r}% faster.`,
     apply: (c, r) => {
       c.abil('iron_belly', 'cooldown', 'pct', 10 * r);
-      c.link('meltdown', 'iron_belly', 'fire', 1, (run, p) => {
-        const sh = p.stat('power') * 0.35 * r;
-        if (run.player.shield < sh) run.player.shield = sh;
-        run.fx.ring(run.player.x, run.player.z, 1.6, '#9ad8ff', 0.4);
-      }, { icd: 0 });
+      c.flagAdd('tonyLetItOut', 0.35 * r); // read in TONY_SIGNATURE.fire
     } },
   { id: 't_immovable', tree: 'iron', row: 7, col: 1, max: 1, name: 'Immovable', icon: '🗿', capstone: true, pair: 'iron_belly',
     desc: () => 'Iron Belly shields are 50% stronger. While you stand still, melee abilities deal +25% damage and every melee hit tops your shield up by 2% of Iron Belly\'s shield (up to its full size).',

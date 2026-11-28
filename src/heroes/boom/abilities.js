@@ -13,8 +13,12 @@ import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, angleTo } from '../common.js';
  * Fire spreads too: burning thugs pass the flames to their neighbours, and a
  * charge sitting in Napalm cooks off.
  *
- * FUSE (BOOM_RESOURCE): +8 per chain link. Every point is +0.3% damage on his
- * explosions; the Detonator cashes the whole meter in (+1% per point).
+ * FUSE (BOOM_RESOURCE): fills from chain links (+8), his own blasts (+2, small
+ * pops +0.4) and kills (+0.4), throttled by a fill budget (~100 per 30s) so a
+ * busy fight fills it every ~30-60s. Every point is +0.3% explosion damage. At a
+ * full meter the signature, BIG RED BUTTON (BOOM_SIGNATURE), sets off every
+ * charge on the map and flings a ring of gum-bombs that chain. The Detonator is
+ * a plain cooldown ability (no Fuse needed).
  *
  * While a chained blast goes off, run.counters.boomLink holds its link number
  * (0 = the blast that started it), so talent links / amps on 'explode' can
@@ -28,17 +32,43 @@ const CHAIN_BONUS = 0.2; // damage per link
 const MAX_LINK = 6;
 const CHAIN_HOP = 0.12; // seconds for the blast to reach the next charge
 const FUSE_PER_LINK = 8;
+const FUSE_PER_BLAST = 2; // any big blast of his
+const FUSE_PER_POP = 0.4; // small blasts (firecrackers, rockets, split fuses)
+const FUSE_PER_KILL = 0.4;
+const FUSE_RATE = 100 / 30; // fill budget per second: a full meter takes at least ~30s
+const FUSE_BANK = 12; // budget that can pile up (a big chain lands at once)
 const FUSE_DMG = 0.003; // per Fuse point on every explosion
+const FUSE_QUIET = 2; // seconds after the Big Red Button during which nothing builds Fuse
 
 export const BOOM_START = 'dynamite_stick';
 
-export const BOOM_RESOURCE = {
-  id: 'fuse', name: 'Fuse', icon: '⛓️', color: '#ffb02e', max: 100, start: 0, decay: 10, decayDelay: 3,
-  desc: 'Builds +8 every time one of his blasts sets off another charge (a chain link). Each point is +0.3% explosion damage; the Detonator cashes the whole meter in for +1% damage per point.',
-};
-
 const noop = () => {};
 const fuseVal = (run) => (run.res?.id === 'fuse' ? run.res.value : 0);
+
+/** Add Fuse, throttled by the fill budget (so it can't refill in a couple of seconds late-game). */
+function gainFuse(run, n) {
+  const r = run.res;
+  if (!r || r.id !== 'fuse' || n <= 0 || run.time < (r.quiet ?? 0)) return;
+  const g = Math.min(n * (1 + (run.flags.fuseGain ?? 0)), r.budget ?? FUSE_BANK);
+  if (g <= 0) return;
+  r.budget = (r.budget ?? FUSE_BANK) - g;
+  run.gainRes(g);
+}
+
+export const BOOM_RESOURCE = {
+  id: 'fuse', name: 'Fuse', icon: '⛓️', color: '#ffb02e', max: 100, start: 0, decay: 3, decayDelay: 5,
+  desc: 'Fuse fills while things blow up: +8 every time one of your blasts sets off another of your charges (a chain link), plus a little for every blast and every kill. '
+    + 'Each point gives +0.3% damage to your explosions (up to +30% when full). When it is full, the Big Red Button goes off and the meter starts over. '
+    + 'It drains slowly after 5s without a blast.',
+  bonus: (run) => `+${Math.round(fuseVal(run) * FUSE_DMG * 100)}% blast dmg`,
+  tick(run, dt) {
+    const r = run.res;
+    r.budget = Math.min(FUSE_BANK, (r.budget ?? FUSE_BANK) + FUSE_RATE * (1 + 0.5 * (run.flags.fuseGain ?? 0)) * dt);
+    const k = run.kills - (r.kills ?? run.kills);
+    r.kills = run.kills;
+    if (k > 0) gainFuse(run, k * FUSE_PER_KILL);
+  },
+};
 
 // ── the charge network (per run) ────────────────────────────────────────────
 
@@ -128,8 +158,9 @@ function boom(run, a, x, z, o = {}) {
   const prev = run.counters.boomLink ?? 0;
   run.counters.boomLink = link;
   try { run.explode(x, z, r, dmg, a, { small, color }); } finally { run.counters.boomLink = prev; }
+  gainFuse(run, small ? FUSE_PER_POP : FUSE_PER_BLAST);
   if (link > 0) {
-    run.gainRes(FUSE_PER_LINK * (1 + (run.flags.fuseGain ?? 0)));
+    gainFuse(run, FUSE_PER_LINK);
     run.fx.number(x, 2.4, z, `CHAIN ×${link + 1}`, '#ffb02e', link >= 3);
   }
   if (!small && run.flags.napalmBlasts && Math.random() < 0.35) {
@@ -371,9 +402,10 @@ export const BOOM_ABILITIES = [
     stick,
   },
   {
+    // noStart: it only sets off charges other abilities put down, so it can't open a run
     id: 'detonator', noStart: true, name: 'Detonator', icon: '🔌', tags: ['explosive'],
-    desc: 'Leans on the plunger: every charge he has out goes off at once with an extra blast of its own, +10% damage for each other charge wired in, and the whole Fuse meter is cashed in (+1% damage per point).',
-    base: { damage: 30, cooldown: 8, area: 2.6, range: 24 },
+    desc: 'Leans on the plunger: every charge he has out nearby goes off at once, each with an extra blast of its own, +10% damage for each other charge wired in (up to +100%). No Fuse needed.',
+    base: { damage: 30, cooldown: 8, area: 2.6, range: 14 },
     upgrades: [DMG, CD, AREA],
     ready(run, a) {
       const p = run.player, R = a.stat('range');
@@ -384,9 +416,8 @@ export const BOOM_ABILITIES = [
     fire(run, a, list) {
       list = (Array.isArray(list) ? list : []).filter((c) => c.blow && !c.done); // freeCast may slip a mob in
       if (!list.length) return false;
-      const fuse = fuseVal(run);
-      if (fuse > 0) run.spendRes(fuse);
-      const mult = (1 + 0.1 * Math.min(10, list.length - 1)) * (1 + 0.01 * fuse);
+      const mult = 1 + 0.1 * Math.min(10, list.length - 1);
+      const link = run.flags.wiredNet ? 1 : 0; // Wired Network: the plunger counts as a chain link
       const p = run.player;
       run.fx.ring(p.x, p.z, 1.6, '#ffd23f', 0.4);
       list.forEach((c, i) => {
@@ -394,11 +425,10 @@ export const BOOM_ABILITIES = [
         c.lit = true;
         run.later(0.08 + i * 0.02, () => {
           if (c.done) return;
-          detonate(run, c, 0, mult);
-          boom(run, a, c.x, c.z, { mult: 1 + 0.01 * fuse, noChain: true });
+          detonate(run, c, link, mult);
+          boom(run, a, c.x, c.z, { noChain: true });
         });
       });
-      if (fuse >= 50) run.fx.number(p.x, 2.6, p.z, `FUSE ${Math.floor(fuse)}!`, '#ffb02e', true);
       sfx('bigshot', 0.1);
     },
     /** A chain-aware blast with partner `a`'s stats (for talents): sets off charges it reaches. */
@@ -535,3 +565,97 @@ export const BOOM_ABILITIES = [
     },
   },
 ];
+
+// ── signature: Big Red Button ───────────────────────────────────────────────
+
+const RING = 8; // gum-bombs flung around him
+const RING_FLAT = 110 * 0.7; // ring damage aims at ~70% of a base Sticky Bomb, whatever lends its stats
+
+/** The ability the Button's ring borrows stats from: Sticky Bomb if he has it, else his hardest-hitting explosive. */
+function ringSource(run) {
+  const sticky = run.abilityById('sticky_bomb');
+  if (sticky) return sticky;
+  const boomers = run.abilities.filter((o) => o.def.tags.includes('explosive'));
+  const pool = boomers.length ? boomers : run.abilities;
+  return pool.reduce((b, o) => (!b || o.stat('damage') > b.stat('damage') ? o : b), null);
+}
+
+/** Fling the ring of gum-bombs; they land and go off one after another around him, each a link further down the chain. */
+function buttonRing(run) {
+  const a = ringSource(run);
+  if (!a) return;
+  const p = run.player, base = a.def.base ?? {};
+  const mult = Math.max(0.7, RING_FLAT / Math.max(1, base.damage ?? RING_FLAT));
+  const rMult = Math.min(1.6, Math.max(0.9, 3.4 / Math.max(1, base.area ?? 3.4)));
+  // Gum on the Wire (with Sticky Bomb): extra gum in the ring
+  const n = RING + (run.abilityById('sticky_bomb') ? (run.flags.ringGum ?? 0) : 0);
+  const off = rand(0, TAU), cx = p.x, cz = p.z;
+  for (let i = 0; i < n; i++) {
+    const ang = off + (i / n) * TAU, d = rand(3.5, 5);
+    run.lob({ x: cx, z: cz, tx: cx + Math.sin(ang) * d, tz: cz + Math.cos(ang) * d, dur: 0.35, kind: 'sticky', small: true, color: '#ff8fd0',
+      onLand: (x, z) => {
+        // stick to a thug right there if there is one, else the gum sits on the street
+        const m = run.mobs.target(x, z, 1.6, 'nearest');
+        const c = addCharge(run, { kind: 'sticky', a, mob: m && !m.dead ? m : null, x, z, ring: true,
+          blow: (link, k) => boom(run, a, c.x, c.z, { link, mult: k * mult, rMult }) });
+        run.fx.ring(x, z, 0.8, '#ff8fd0', 0.3);
+        // it goes round the ring like a lit fuse: each gum-bomb is one more link down the chain
+        run.later(0.12 + i * 0.07, () => detonate(run, c, Math.min(MAX_LINK, 1 + i)));
+      } });
+  }
+}
+
+export const BOOM_SIGNATURE = {
+  id: 'big_red_button', name: 'Big Red Button', icon: '🔴',
+  short: 'Every charge on the map blows at once',
+  desc: 'Slams the Big Red Button: every charge he has out, anywhere on the map, goes off at once with an extra blast of its own, '
+    + '+50% damage plus +15% for each other charge wired in (up to +200%). Then he flings a ring of 8 gum-bombs around himself '
+    + 'that go off one after another, each a link further down the chain. Fires when Fuse is full.',
+  fire(run) {
+    const p = run.player, s = state(run);
+    if (run.res) run.res.quiet = run.time + FUSE_QUIET; // the Button's own chain doesn't refill the meter
+    const fuse = 100 * FUSE_DMG; // the meter was full: keep its damage bonus for this blast
+    const list = s.charges.filter((c) => !c.done && c.blow);
+    const mult = (1.5 + 0.15 * Math.min(10, Math.max(0, list.length - 1))) * (1 + fuse);
+    run.fx.ring(p.x, p.z, 2.4, '#ff3030', 0.5);
+    run.fx.explosion(p.x, p.z, 1.6, '#ff3030');
+    run.shake(0.4);
+    sfx('bigshot', 0.1);
+    list.forEach((c, i) => {
+      follow(c);
+      c.lit = true;
+      run.fx.beam(p.x, p.z, c.x, c.z, '#ff3030', 0.06, 0.3, 0.35);
+      run.later(0.1 + Math.min(i, 24) * 0.025, () => {
+        if (c.done) return;
+        detonate(run, c, 0, mult);
+        if (i < 20 && c.a) boom(run, c.a, c.x, c.z, { mult: 0.6 * mult, noChain: true }); // the extra blast
+      });
+    });
+    if (list.length >= 3) run.fx.number(p.x, 2.8, p.z, `${list.length} CHARGES!`, '#ff5030', true);
+    buttonRing(run);
+  },
+};
+
+/** Hideout Kit tab. */
+export const BOOM_OVERVIEW = {
+  tagline: 'Nothing he lights goes off alone.',
+  playstyle: 'Boom-Boom leaves charges all over the street: Dynamite, Pipe Bombs, C4 bricks and gum-bombs stuck on thugs. '
+    + 'Any of his blasts sets off the charges near it a moment later, and every hop of that chain hits harder. '
+    + 'Line your charges up in the crowd and let one bang set off the rest.',
+  meter: 'Fuse fills as things blow up, fastest when one blast sets off another (a chain link). '
+    + 'Each point is a little extra explosion damage. When it is full, the Big Red Button goes off: '
+    + 'every charge on the map blows at once, then a ring of gum-bombs pops around you. '
+    + 'In Manual mode you press it yourself (Y / F / ★), so you can wait until the street is full of charges.',
+  tips: [
+    'More charges out means a bigger Button: C4, Pipe Bombs and Sticky Bombs all count, anywhere on the map.',
+    'The ring of gum-bombs lands right around you, so the Button is also your panic button when you get swarmed.',
+    'Chains build Fuse much faster than single blasts. Put charges close together so one bang reaches the next.',
+    'The Detonator is separate from the Button: it sets off nearby charges on its own cooldown, no Fuse needed.',
+  ],
+  pairs: [
+    { a: 'c4', b: 'detonator', why: 'C4 never goes off on its own, so it piles up for the Detonator and the Big Red Button to cash in.' },
+    { a: 'sticky_bomb', b: 'big_red_button', why: 'With Sticky Bomb in the run the Button\'s ring hits as hard as real gum-bombs (and Gum on the Wire adds more).' },
+    { a: 'napalm', b: 'pipe_bomb', why: 'Charges sitting in fire cook off as chain links, so a pipe in a puddle is free Fuse.' },
+    { a: 'mortar', b: 'c4', why: 'The spotter aims the first shells at your charges, so every strike chains your bricks.' },
+  ],
+};

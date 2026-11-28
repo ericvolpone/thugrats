@@ -1,7 +1,7 @@
 import { sfx } from '../../audio.js';
 import { TAU, rand } from '../../util.js';
 import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, nova, buff, AURA_UPS } from '../common.js';
-import { MARK_COLOR, MARK_DMG, markMob, cashMarks, marksOn, markExec } from './talents.js';
+import { MARK_COLOR, MARK_DMG, SHADOW_RATE, SHADOW_BANK, markMob, cashMarks, marksOn, markExec, shadowGain } from './talents.js';
 
 /**
  * Lucy "The Ghost" — the Assassin: stealth, poison, execute.
@@ -10,8 +10,11 @@ import { MARK_COLOR, MARK_DMG, markMob, cashMarks, marksOn, markExec } from './t
  * traps (Caltrops, Tripwire) and Shuriken Ring stack Marks on thugs (purple
  * tint). Executes (Shadow Step, Garrote, Curtain Call) cash them in: every Mark
  * raises the execute line (+4%) or, when it doesn't execute, adds +20% damage,
- * and gives SHADOW (the hero resource): it boosts crit damage, and Cloak and
- * Shadow Step spend it. While Cloaked, every Mark source adds one more Mark.
+ * and builds SHADOW (the hero resource, ~30–60s to fill; +crit damage while it
+ * builds). A full meter fires her signature, VANISH (GHOST_SIGNATURE): Cloak,
+ * then Shadow Step strikes chained through every Marked thug on screen, then
+ * 3 Marks on everyone left. While Cloaked, every Mark source adds one more Mark
+ * and Shadow Step strikes one more thug.
  *
  * Talent / gear hooks (run.flags, all off by default):
  *   execChain     n   — Garrote executes jump to up to n more wounded thugs (Back Alley 5pc)
@@ -23,7 +26,9 @@ import { MARK_COLOR, MARK_DMG, markMob, cashMarks, marksOn, markExec } from './t
  *   ambush        b   — Smoke Bomb gives crit and Marks thugs in the smoke (Ambush)
  *   poisonTips    b   — Knives and Shuriken poison and Mark (Poison Tips)
  *   execElite     f   — elites can be executed below f × the execute line
- *   + the Mark flags listed in talents.js (markMax, markDur, markExec, markHeal, cashCd, trapMarks, poisonMark)
+ *   vanishCloak   s   — Vanish's Cloak lasts s seconds longer (Ghost Protocol)
+ *   vanishCount   n   — Vanish chains through n more Marked thugs (Twin Shadows)
+ *   + the Mark / Shadow flags listed in talents.js (markMax, markDur, markExec, markHeal, cashCd, trapMarks, poisonMark, shadowGain)
  *
  * Pairings reach the helpers below through the partner's def (talents.js and
  * gear.js stay free of browser imports): caltrops/tripwire.place(run, a, x, z, o)
@@ -34,16 +39,122 @@ export const GHOST_START = 'shadow_step';
 
 const SHADOW_CRIT = 0.003; // +0.3% crit damage per point of Shadow
 
-/** Lucy's resource: built by cashing in Marks, spent by Cloak and Shadow Step. */
+/**
+ * Lucy's resource. Cashing in Marks builds it (talents.js: cashMarks → MARK_SHADOW
+ * per Mark, but never faster than SHADOW_RATE/s on average, so it takes 30–60s
+ * however many Marks are flying). Full = Vanish. Nothing spends it any more.
+ */
 export const GHOST_RESOURCE = {
-  id: 'shadow', name: 'Shadow', icon: '🌑', color: MARK_COLOR, max: 100, start: 0, decay: 4, decayDelay: 6,
-  desc: 'Cashing in Marks builds Shadow (6 per Mark). Every point is +0.3% crit damage. Cloak spends it to last longer, Shadow Step spends 25 for an extra strike. Fades when you stop cashing in.',
-  tick(run) {
-    const v = run.res?.value ?? 0;
+  id: 'shadow', name: 'Shadow', icon: '🌑', color: MARK_COLOR, max: 100, start: 0, decay: 2, decayDelay: 8,
+  desc: 'Shadow fills up when you cash in Marks: Shadow Step, Garrote and Curtain Call cash in the Marks on the thugs they hit. When it is full, Lucy uses VANISH. While it fills, every point is +0.3% crit damage (+30% when full). It slowly fades if you go 8s without cashing in a Mark.',
+  bonus: (run) => `+${Math.round((run.res?.value ?? 0) * SHADOW_CRIT * 100)}% crit dmg`,
+  tick(run, dt = 0) {
+    const r = run.res;
+    if (!r) return;
+    // the rate limiter: cashMarks draws Shadow from this bank, which refills at SHADOW_RATE/s
+    r.bank = Math.min(SHADOW_BANK, (r.bank ?? SHADOW_BANK) + SHADOW_RATE * shadowGain(run) * dt);
+    const v = r.value;
     if (v <= 0) { delete run.buffs.shadow_meter; return; }
     // a hidden, constantly refreshed buff carries the crit damage into computeStats
     run.buffs.shadow_meter = { t: 0.5, max: 0.5, stats: (s) => { s.critDmg += (run.res?.value ?? 0) * SHADOW_CRIT; } };
   },
+};
+
+// ── Vanish (signature) ──────────────────────────────────────────────────────
+
+const VANISH_DEF = {
+  id: 'vanish', name: 'Vanish', icon: '🌑', tags: ['melee', 'execute'],
+  base: { damage: 60, execute: 0.15, range: 16, count: 12, power: 0.3, duration: 3, area: 10 },
+};
+
+/**
+ * The run's Vanish damage source: enough of an ability (def, stat) for run.hit,
+ * damage credit ('vanish') and the #execute / #melee talent links. Not owned,
+ * so it never levels; damage follows run.stats.dmg like any ability.
+ */
+function vanishSrc(run) {
+  if (run._vanish?.run !== run) {
+    run._vanish = { def: VANISH_DEF, run, level: 1, cd: 0, cdMax: 0, wait: 0, history: [],
+      stat: (k) => (VANISH_DEF.base[k] ?? 0) * (k === 'damage' ? run.stats.dmg : 1) };
+  }
+  return run._vanish;
+}
+
+/** Thugs Vanish would chain through: Marked, alive, in range, nearest-first path from Lucy. */
+function vanishChain(run, src) {
+  const p = run.player, n = src.stat('count') + (run.flags.vanishCount ?? 0);
+  const pool = run.mobs.near(p.x, p.z, src.stat('range')).filter((m) => !m.dead && m.spawnT >= 0.3 && marksOn(run, m) > 0);
+  const out = [];
+  let x = p.x, z = p.z;
+  while (out.length < n && pool.length) {
+    let bi = 0, bd = Infinity;
+    pool.forEach((m, i) => { const d = (m.x - x) ** 2 + (m.z - z) ** 2; if (d < bd) { bd = d; bi = i; } });
+    const m = pool.splice(bi, 1)[0];
+    out.push(m);
+    x = m.x; z = m.z;
+  }
+  return out;
+}
+
+export const GHOST_SIGNATURE = {
+  id: 'vanish', name: 'Vanish', icon: '🌑',
+  short: 'Cloak + strike every Marked thug',
+  desc: 'When Shadow is full, Lucy vanishes: she is Cloaked for 3s, her shadow strikes every Marked thug on screen (up to 12) and cashes in their Marks (executes under the line, +4% per Mark, heavy damage otherwise), then every thug left nearby gets 3 Marks.',
+  // full meter and someone to hit
+  ready: (run) => run.res.value >= run.res.max && run.mobs.count(run.player.x, run.player.z, 14) > 0,
+  fire(run) {
+    const p = run.player, src = vanishSrc(run);
+    const cloak = run.abilityById('cloak');
+    cloakBuff(run, cloak ?? src, src.stat('duration') + (run.flags.vanishCloak ?? 0));
+    run.fx.burst(p.x, 0.8, p.z, '#bfc8ff', 28, 5, 0.9, 2, -1);
+    run.fx.ring(p.x, p.z, 3, MARK_COLOR, 0.35);
+    sfx('frenzy', 0.1);
+    // as hard as Shadow Step (×1.5) when she has it, so it keeps up with the run
+    const step = run.abilityById('shadow_step');
+    const dmg = Math.max(src.stat('damage'), step ? step.stat('damage') * 1.5 : 0);
+    const chain = vanishChain(run, src), gap = 0.07;
+    const end = chain.length * gap + 0.1;
+    run.res.hold = run.time + end + 0.2; // cashing in its own Marks doesn't refill the meter
+    let x = p.x, z = p.z;
+    chain.forEach((m, i) => {
+      const fx = x, fz = z;
+      x = m.x; z = m.z;
+      run.later(i * gap, () => {
+        if (run.ended || m.dead) return;
+        const d = Math.hypot(m.x - fx, m.z - fz);
+        run.combat.shadow({ x: fx, z: fz, angle: Math.atan2(m.x - fx, m.z - fz), len: Math.max(0, d - 0.7), dur: 0.14, color: MARK_COLOR });
+        run.fx.burst(m.x, 1, m.z, MARK_COLOR, 10, 4);
+        assassinate(run, src, m, dmg);
+        sfx('select', 0.04);
+      });
+    });
+    // then everyone still standing nearby gets 3 Marks (Cloak's +1 included)
+    run.later(end, () => {
+      if (run.ended) return;
+      const n = run.buffs.cloak ? 2 : 3;
+      for (const m of run.mobs.near(run.player.x, run.player.z, src.stat('area'))) markMob(run, m, n);
+      run.fx.ring(run.player.x, run.player.z, src.stat('area'), MARK_COLOR, 0.45);
+    });
+  },
+};
+
+/** Lucy's Kit tab (hideout). */
+export const GHOST_OVERVIEW = {
+  tagline: 'Mark them, cash them in, vanish.',
+  playstyle: 'Lucy tags thugs with Marks, then finishes them with executes. She is fragile: let poison, traps and stars do the tagging while Shadow Step and Garrote pick off the tagged.',
+  meter: 'Marks are purple stacks on a thug (up to 5, they wear off after 6s). Poison Dart, Sleeping Gas, Caltrops, Tripwire, Shuriken Ring, Decoy and Shadow Step put them on. Executes (Shadow Step, Garrote, Curtain Call) cash them in: each Mark raises the kill-outright line by 4% or adds +20% damage. Every Mark cashed in fills Shadow (about 30–60s to fill, +crit damage as it grows). Full Shadow = VANISH: a 3s Cloak, a shadow strike on every Marked thug on screen, and 3 fresh Marks on everyone left.',
+  tips: [
+    'Stack Marks before you cash in: a thug with 5 Marks is executed under 30%+ HP instead of 10%.',
+    'Vanish only strikes Marked thugs, so let your Mark sources tag the whole pack first. In Manual mode, hold it for a big crowd (a full meter waits and keeps its crit bonus).',
+    'Everything Marks one extra time while Cloaked, so Vanish leaves the pack ready for your next executes.',
+    'Elites and bosses can\'t be executed (Marks still add damage), so save the cash-ins for packs of regulars.',
+  ],
+  pairs: [
+    { a: 'Poison Dart', b: 'Garrote', why: 'Darts leave 2 Marks on the toughest thugs; Garrote cashes them in for a near-certain execute.' },
+    { a: 'Shuriken Ring', b: 'Shadow Step', why: 'The stars tag everything around you nonstop, and Shadow Step blinks through the most Marked.' },
+    { a: 'Cloak', b: 'Shadow Step', why: 'While Cloaked, Shadow Step strikes one more thug and every Mark source adds an extra Mark.' },
+    { a: 'Tripwire', b: 'Curtain Call', why: 'A sprung wire Marks a whole pack; Curtain Call pops the most Marked thug and spreads its Marks to the rest.' },
+  ],
 };
 
 // ── shared pieces, also used by talents.js / gear.js pairings ───────────────
@@ -209,13 +320,13 @@ function tipPoison(run, m, dmg) {
 export const GHOST_ABILITIES = [
   {
     id: 'shadow_step', name: 'Shadow Step', icon: '🌘', tags: ['melee', 'execute'],
-    desc: 'Her shadow blinks between the most Marked (or most wounded) thugs nearby and strikes each, cashing in its Marks: executes regular thugs under the line (+4% per Mark), heavy damage otherwise. A thug with no Marks gets 2, and every landing slashes and Marks those close by. Spends 25 Shadow, when she has it, to strike one more.',
+    desc: 'Her shadow blinks between the most Marked (or most wounded) thugs nearby and strikes each, cashing in its Marks: executes regular thugs under the line (+4% per Mark), heavy damage otherwise. A thug with no Marks gets 2, and every landing slashes and Marks those close by. While Cloaked she strikes one more thug.',
     base: { damage: 40, cooldown: 1.2, range: 9, execute: 0.1, count: 2 },
     upgrades: [DMG, CD, pctUp('range', 'Reach', 15), addUp('count', 'Steps', [0, 0, 1, 0, 1], null, 4)],
     ready: (run, a) => pickPrey(run, a, run.player.x, run.player.z, a.stat('range'), a.stat('count')),
     fire(run, a, ts) {
       const p = run.player, hit = new Set();
-      let x = p.x, z = p.z, n = a.stat('count');
+      let x = p.x, z = p.z, n = a.stat('count') + (run.buffs.cloak ? 1 : 0);
       const list = ts.filter((t) => !t.dead);
       if (!list.length) return false;
       for (let i = 0; i < n; i++) {
@@ -225,11 +336,6 @@ export const GHOST_ABILITIES = [
         hit.add(t);
         stepStrike(run, a, x, z, t);
         x = t.x; z = t.z;
-        // Shadow: one more strike, paid for from the meter
-        if (i === n - 1 && run.res?.value >= 25) {
-          const more = pickPrey(run, a, x, z, a.stat('range') * 0.8, 1, hit)[0];
-          if (more && run.spendRes(25)) n++;
-        }
       }
       p.aim(list[0].x, list[0].z, 0.2);
       sfx('select', 0.05);
@@ -340,15 +446,13 @@ export const GHOST_ABILITIES = [
   },
   {
     id: 'cloak', name: 'Cloak', icon: '🫥', tags: ['buff'],
-    desc: 'Turns nearly invisible. Huge crit chance and crit damage while it lasts, and every Mark source adds one more Mark. Burns stored Shadow to last longer (+0.75s per 25).',
-    base: { cooldown: 15, duration: 4, power: 0.3 },
+    desc: 'Turns nearly invisible. Huge crit chance and crit damage while it lasts, and every Mark source adds one more Mark. Shadow Step strikes one more thug while it lasts.',
+    base: { cooldown: 15, duration: 4.5, power: 0.3 },
     upgrades: [DUR, CD, scUp('power', 'Lethality', 0.08, (v) => `+${Math.round(v * 100)}% cloak crit`)],
     useless: permanentUptime,
     ready: (run, a) => run.crowd(a, 10, 3),
     fire(run, a) {
-      const chunks = Math.floor((run.res?.value ?? 0) / 25);
-      const extra = chunks && run.spendRes(chunks * 25) ? chunks * 0.75 : 0;
-      cloakBuff(run, a, a.stat('duration') + extra);
+      cloakBuff(run, a);
       sfx('frenzy', 0.1);
     },
     wrap: cloakBuff, // (run, a, seconds) for pairings
@@ -397,28 +501,28 @@ export const GHOST_ABILITIES = [
   },
   {
     id: 'curtain_call', noStart: true, name: 'Curtain Call', icon: '🥀', tags: ['execute', 'aoe'],
-    desc: 'A snap of the fingers: every Marked thug around her has all its Marks cashed in at once. Each Mark is a stab of damage, and regular thugs left under the line (+4% per Mark) drop dead. Fires when enough Marks are out.',
-    base: { damage: 20, cooldown: 7, range: 10, execute: 0.04 },
-    upgrades: [DMG, CD, pctUp('range', 'Reach', 15), addUp('execute', 'Execute', [0.02, 0.03, 0.04, 0.05, 0.06], (v) => `+${Math.round(v * 100)}% execute threshold`, 0.25)],
+    desc: 'A snap of the fingers at the most Marked thug in reach: its Marks are cashed in (each one a stab of damage; regular thugs under the line, +4% per Mark, drop dead) and scatter like petals: every thug within 3.5 of it gets that many Marks (up to 3).',
+    base: { damage: 22, cooldown: 4.5, range: 10, execute: 0.08, area: 3.5 },
+    upgrades: [DMG, CD, AREA, addUp('execute', 'Execute', [0.02, 0.03, 0.04, 0.05, 0.06], (v) => `+${Math.round(v * 100)}% execute threshold`, 0.3)],
     ready(run, a) {
-      const p = run.player;
-      let total = 0;
-      run.mobs.each(p.x, p.z, a.stat('range'), (m) => { total += marksOn(run, m); });
-      const want = Math.max(1, Math.ceil(12 * Math.max(0.2, 1 - (a.wait ?? 0) / 5)));
-      return total >= want;
+      // wants a thug with 3+ Marks, settles for fewer the longer it waits
+      const t = pickPrey(run, a, run.player.x, run.player.z, a.stat('range'), 1)[0];
+      const want = Math.max(1, Math.ceil(3 * Math.max(0.2, 1 - (a.wait ?? 0) / 4)));
+      return t && marksOn(run, t) >= want ? t : null;
     },
-    fire(run, a) {
-      const p = run.player;
-      const marked = run.mobs.near(p.x, p.z, a.stat('range')).filter((m) => marksOn(run, m) > 0);
-      if (!marked.length) return false;
-      for (const m of marked) {
-        if (m.dead) continue;
-        const n = cashMarks(run, m, a);
-        run.fx.beam(p.x, p.z, m.x, m.z, MARK_COLOR, 0.08, 0.2, 1);
-        if (canExecute(run, m, a.stat('execute') + n * markExec(run))) executeMob(run, a, m);
-        else run.hit(m, a.stat('damage') * n, a, { knock: 0.5 });
+    fire(run, a, t) {
+      if (!t || t.dead) return false;
+      const p = run.player, x = t.x, z = t.z;
+      const n = cashMarks(run, t, a);
+      run.fx.beam(p.x, p.z, x, z, MARK_COLOR, 0.08, 0.2, 1);
+      if (canExecute(run, t, a.stat('execute') + n * markExec(run))) executeMob(run, a, t);
+      else run.hit(t, a.stat('damage') * Math.max(1, n), a, { knock: 0.5 });
+      const spread = Math.min(3, n);
+      if (spread > 0) {
+        for (const m of run.mobs.near(x, z, a.stat('area'))) if (m !== t) markMob(run, m, spread);
       }
-      run.fx.ring(p.x, p.z, a.stat('range'), MARK_COLOR, 0.4);
+      run.fx.ring(x, z, a.stat('area'), MARK_COLOR, 0.35);
+      run.fx.burst(x, 1, z, '#d0306a', 10 + n * 3, 4);
       sfx('snipe', 0.08);
     },
   },

@@ -3,18 +3,21 @@
 A browser roguelite auto-shooter (Megabonk / Azeroth Survivors style) where every
 hero is a baby with a criminal trope and one signature mechanic:
 
-| Hero | Identity | Signature |
+| Hero | Identity | Meter → Signature move |
 | --- | --- | --- |
-| **Lenny "Nickles"** | The Boss: money and crew | **Clout**: gold you hold powers your abilities |
-| **Tiny Tony Two-Fists** | The Brawler: no guns, ever | **Rage** meter, wall slams, Headlock, Total Meltdown |
-| **Boom-Boom Bianchi** | The Fuse | **Chains**: every blast sets off your placed charges; Detonator |
-| **Lucy "The Ghost"** | The Assassin | **Marks** stack on thugs; Shadow Step / Garrote executes cash them in |
-| **Babyface Moretti** | The Professional | **Focus**: hold it for crits, spend it on Focused shots; Spotter weak spots |
-| **Professor Pudding** | The Mad Scientist | **Reactions**: shock / frozen / acid / pudding combine; shrunk amplifies |
+| **Lenny "Nickles"** | The Boss: money and crew | **Buy In**: gold fills toward a price; spend it for a permanent damage stack (price ×1.5 each time) |
+| **Tiny Tony Two-Fists** | The Brawler: no guns, ever | **Rage** (+dmg) → **Berserk**: Meltdown stomps + 6 s of wall slams |
+| **Boom-Boom Bianchi** | The Fuse | **Fuse** (chain links, +blast dmg) → **Big Red Button**: every charge on the map blows |
+| **Lucy "The Ghost"** | The Assassin | **Shadow** (cashed Marks, +crit dmg) → **Vanish**: Cloak + strike every Marked thug |
+| **Babyface Moretti** | The Professional | **Focus** (not getting hit, +crit) → **Deadeye**: 4 s of rapid guaranteed crits |
+| **Professor Pudding** | The Mad Scientist | **Eureka** (status reactions) → **EUREKA!**: +50% Recharge, every reaction MEGA |
 
 Each has 11–13 abilities, three 8-row talent trees and five 5-piece gear sets (one per
-map). A hero's meter (Clout, Rage, Fuse, Shadow, Focus, Eureka) shows under your HP.
-The design notes are in [docs/hero-identity.md](docs/hero-identity.md).
+map). The meter shows under your HP with what it's giving you right now; when it's full
+it pulses **READY** and the signature move fires on its own (**Auto**, default) or when
+you press **Ⓨ / F / ★** (**Manual**, set in the pause menu). The hideout's **Kit** tab
+explains each hero: playstyle, meter, signature move, tips and good ability pairs.
+Design notes: [docs/hero-identity.md](docs/hero-identity.md).
 
 Three.js (WebGL 2) + Vite. All art is procedural low-poly geometry, swappable for
 Blender `.glb` files at runtime (see [public/models/README.md](public/models/README.md)).
@@ -35,6 +38,7 @@ Abilities fire on their own; you move, turn the camera and jump.
 | Turn camera | Q / E, or drag the mouse | right stick | drag on the right part |
 | Jump | Space | A | JUMP button |
 | Menus & cards | click, 1/2/3, R reroll, B banish | D-pad/stick + A, X reroll, Y banish, B back, LB/RB tabs | tap |
+| Signature move (Manual mode) | F | Y | ★ button |
 | Pause | Esc / P | Start | ❚❚ |
 
 Jumping clears ground telegraphs and enemy shots if timed right, and lands you on
@@ -101,6 +105,8 @@ hero are cut away with a dithered see-through hole, so they never hide the fight
   drop one 5% of the time and any thug about 1 in 800. Biscuit fetches magnets first.
 - **Bosses** spawn every 2:30 at a pad shown on the minimap (30 s warning) and
   give a full level plus a guaranteed loot pick.
+- **Titan loot card:** when a Crime Titan dies a card shows what it left: the gear piece
+  it dropped, or that it didn't (and which pieces it still owes you).
 - **Crime Titans (3 per map)** are summoned by standing in their altar's beam once their
   conditions are met (reach level X, bribe N gold, kill bosses, kill the other
   titans). Killing the **final Crime Titan** clears the map (the clear is banked on
@@ -180,8 +186,9 @@ stop making progress) they follow a flow field around buildings and fences
 | 💸 Make It Rain | Always-on aura of orbiting cash |
 | 📜 Hit Contract | Marks the biggest target; a sniper collects (a favour) |
 
-**Clout:** every 10 gold held gives +1% damage (favours 1.5×), up to a cap talents raise.
-**Talents:** Trigger Man (guns → *Akimbo*, *Marked for Death*), Racketeering (Clout,
+**Buy In:** gold fills the meter toward a price (100, then ×1.5); spend it for a permanent
++8% damage stack (favours +12%). Chests and buy-ins compete for the same gold.
+**Talents:** Trigger Man (guns → *Akimbo*, *Marked for Death*), Racketeering (buy-ins,
 shakedowns and fear → *Untouchable*, *The Vig*), Family Business (the crew → *The
 Godfather*, *Family Reunion*).
 **Gear sets:** The Don's Finest (Little Italy, Snub-Nose: golden bullets), Dockworkers'

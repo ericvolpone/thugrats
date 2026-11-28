@@ -10,13 +10,10 @@ import { freeCast, explodeAt, ringShot, statusN } from '../common.js';
  * can't import that one, so it reaches the lab through a partner's def:
  * p.def.lab.dose(run, m, key, p) and p.def.lab.react(run, m, k1, k2, p, opts).
  * Flags read there: singularity, robotUprising, supercharged, deepFreeze,
- * stickyPudding, statusDur, reactDmg, reactEureka, madGenius.
+ * stickyPudding, statusDur, reactDmg, reactEureka, madGenius, labNotes.
  */
 
 const alive = (m) => m && !m.dead && m.hp > 0;
-const ELEMENTS = ['shock', 'frozen', 'acid', 'pudding', 'shrunk'];
-/** Does thug `m` carry any lab status? */
-const dosed = (run, m) => ELEMENTS.some((k) => statusN(run, m, k) > 0);
 
 /** The live Slime Puddle zone thug `m` is standing in, if any. */
 const puddleAt = (run, m) => run.combat.zones.find((zn) => zn.ability?.def?.id === 'slime' && zn.t < zn.life && Math.hypot(zn.x - m.x, zn.z - m.z) < zn.r + m.radius);
@@ -128,7 +125,7 @@ export const PROF_TALENTS = [
   { id: 'p_area2', tree: 'brain', row: 2, col: 2, max: 3, name: 'Big Ideas', icon: '💡',
     desc: (r) => `+${5 * r}% area.`, apply: (c, r) => c.stat('area', 0.05 * r) },
   { id: 'p_brain', tree: 'brain', row: 3, col: 1, max: 3, name: 'Catalysis', icon: '⚗️',
-    desc: (r) => `Reactions deal +${12 * r}% damage and give +${10 * r}% Eureka.`, apply: (c, r) => { c.flagAdd('reactDmg', 0.12 * r); c.flagAdd('reactEureka', 0.1 * r); } },
+    desc: (r) => `Reactions deal +${12 * r}% damage and fill Eureka ${10 * r}% faster.`, apply: (c, r) => { c.flagAdd('reactDmg', 0.12 * r); c.flagAdd('reactEureka', 0.1 * r); } },
   { id: 'p_sticky', tree: 'brain', row: 4, col: 1, max: 1, name: 'Sticky Pudding', icon: '🍮', capstone: true,
     desc: () => 'Pudding Blaster splashes stick: everything in the splash gets PUDDING and is slowed 35%, and pudding lasts twice as long.', apply: (c) => c.flag('stickyPudding', true) },
   { id: 'p_puddle', tree: 'brain', row: 5, col: 0, max: 3, name: 'Galvanic Goo', icon: '🔋', pair: 'slime',
@@ -144,11 +141,8 @@ export const PROF_TALENTS = [
       }
     }, { icd: 0.8 }) },
   { id: 'p_eureka', tree: 'brain', row: 5, col: 2, max: 3, name: 'Lab Notes', icon: '📓', pair: 'grand_experiment',
-    desc: (r) => `Science kills on thugs carrying a status have a ${10 * r}% chance to give +4 Eureka.`,
-    apply: (c, r) => c.link('#science', 'grand_experiment', 'kill', (run, ev) => (dosed(run, ev.m) ? 0.1 * r : 0), (run, p, ev) => {
-      run.gainRes(4);
-      run.fx.burst(ev.x, 1.2, ev.z, '#ffd23f', 4, 2, 0.4);
-    }, { icd: 0.15 }) },
+    desc: (r) => `Every reaction Grand Experiment sets off gives +${r} extra Eureka (on top of the usual, and past the usual speed limit), so EUREKA! comes sooner.`,
+    apply: (c, r) => c.flagAdd('labNotes', r) },
   { id: 'p_shrink_hole', tree: 'brain', row: 6, col: 1, max: 3, name: 'Quantum Squeeze', icon: '🔬', pair: 'black_hole',
     desc: (r) => `Shrink Ray hits have a ${15 * r}% chance to open a mini Pocket Black Hole on the shrunk thug (half its size and duration) that stirs statuses like the real one.`,
     apply: (c, r) => c.link('shrink_ray', 'black_hole', 'hit', 0.15 * r, (run, p, ev) => {
@@ -156,6 +150,6 @@ export const PROF_TALENTS = [
         onTick: (zn, dt) => p.def.lab.stir(run, zn, p, dt, 4) });
     }, { icd: 1.5 }) },
   { id: 'p_genius', tree: 'brain', row: 7, col: 1, max: 1, name: 'Mad Genius', icon: '🧑‍🔬', capstone: true, pair: 'grand_experiment',
-    desc: () => 'Grand Experiment only needs 70 Eureka, and during the EUREKA! that follows every reaction is amplified, as if the thug were shrunk.',
+    desc: () => 'EUREKA! lasts 2s longer (7s), and the moment it goes off it also sets off a free Grand Experiment around you.',
     apply: (c) => c.flag('madGenius', true) },
 ];

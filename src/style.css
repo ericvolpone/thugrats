@@ -45,7 +45,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 
 /* ── HOME ─────────────────────────────── */
-#home { position: fixed; inset: 0; z-index: 10; display: grid; grid-template-columns: 300px 1fr 420px; grid-template-rows: auto 1fr; pointer-events: none; padding: calc(12px + var(--sat)) calc(14px + var(--sar)) calc(12px + var(--sab)) calc(14px + var(--sal)); gap: 12px; }
+#home { position: fixed; inset: 0; z-index: 10; display: grid; grid-template-columns: 260px 1fr minmax(440px, 34vw); grid-template-rows: auto 1fr; pointer-events: none; padding: calc(12px + var(--sat)) calc(14px + var(--sar)) calc(12px + var(--sab)) calc(14px + var(--sal)); gap: 12px; }
 #home > * { pointer-events: auto; min-width: 0; }
 .home-title { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; }
 .home-title h1 { font-size: 40px; color: var(--gold); text-shadow: 0 3px 0 #6b3d05, 0 0 30px rgba(242,192,55,0.3); }
@@ -450,3 +450,67 @@ body.hl-lift .hud-bottom { z-index: 41; }
 #resbar i { position: absolute; inset: 0; width: 0; transition: width 0.1s; }
 #resbar span { position: absolute; inset: 0; text-align: center; font: 12px/13px 'Lilita One'; color: #fff; text-shadow: 0 1px 2px #000; }
 #resbar.full { box-shadow: 0 0 10px rgba(255,255,255,0.6); }
+
+/* signature moves */
+#resbar.ready { box-shadow: 0 0 14px rgba(255,230,120,0.95); animation: sigpulse 0.6s ease-in-out infinite alternate; }
+@keyframes sigpulse { from { filter: brightness(1); } to { filter: brightness(1.45); } }
+#sig-btn { display: none; position: fixed; right: calc(104px + var(--sar)); bottom: calc(96px + var(--sab)); width: 58px; height: 58px; border-radius: 50%; z-index: 21;
+  background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.35); color: #fff; font-size: 26px; padding: 0; }
+#sig-btn.ready { background: rgba(242,192,55,0.6); border-color: #ffe27a; box-shadow: 0 0 16px rgba(255,220,100,0.9); }
+body.touch #sig-btn:not(.hidden) { display: block; }
+.sig-setting { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 8px 0; font-size: 14px; }
+.sig-setting.hidden { display: none; }
+
+/* compact map rows */
+.map-card.compact { padding: 8px 10px; margin-bottom: 6px; }
+.map-card.compact h3 { font-size: 17px; }
+.map-card.compact .blurb { margin: 2px 0 4px; font-size: 12px; }
+.mc-top { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+.mc-set { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-row { display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-wrap: wrap; margin-top: 4px; }
+.mc-pcs { display: flex; gap: 3px; }
+.map-card.compact .diffs { gap: 4px; }
+.map-card.compact .diff-btn { padding: 5px 9px; font-size: 13px; }
+/* gear bonus lines: one line each, full text on hover */
+.gear-bonuses .gbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (hover: none) { .gear-bonuses .gbl.on { white-space: normal; } }
+/* kit overview */
+.kit-ov { font-size: 13px; line-height: 1.4; margin-bottom: 8px; }
+.kit-ov p { margin: 4px 0; }
+.kit-ov .muted { color: var(--muted); }
+.kv-head { font-size: 15px; }
+.kv-head b { color: var(--gold); }
+.kv-box { background: rgba(0,0,0,0.25); border-radius: 10px; padding: 7px 10px; margin: 6px 0; border-left: 3px solid #6a5a8a; }
+.kv-box.sig { border-left-color: var(--gold); }
+.kv-tips ul { margin: 4px 0 4px 18px; padding: 0; }
+.kv-pair { display: flex; gap: 8px; margin: 3px 0; align-items: baseline; }
+.kv-pair > span:first-child { flex: none; width: 40px; }
+.ab-item small { font-size: 10px; }
+
+/* titan loot card */
+#loot-card { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); z-index: 45; pointer-events: none; width: min(440px, 92vw);
+  background: linear-gradient(180deg, rgba(40,26,50,0.95), rgba(20,12,26,0.95)); border: 2px solid var(--gold); border-radius: 16px; padding: 12px 16px; box-shadow: 0 0 40px rgba(242,192,55,0.4); }
+#loot-card.hidden { display: none; }
+#loot-card.show { animation: lootin 0.35s cubic-bezier(.2,1.6,.4,1); }
+@keyframes lootin { from { transform: translate(-50%, -50%) scale(0.6); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+#loot-card h3 { color: var(--gold); font-size: 20px; text-align: center; margin: 0 0 8px; }
+.lc-gear { display: flex; gap: 10px; align-items: center; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 8px 10px; }
+.lc-gear.got { border: 1px solid var(--green); background: rgba(40,120,60,0.25); }
+.lc-gear .ic { font-size: 30px; }
+.lc-gear small { display: block; color: var(--muted); font-size: 12px; }
+.lc-row { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; font-size: 13px; margin-top: 8px; }
+
+.ab-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.ab-chip { display: flex; gap: 5px; align-items: center; text-align: left; font-size: 11px; padding: 4px 6px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid transparent; color: var(--text); min-width: 0; }
+.ab-chip span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-chip .ic { font-size: 15px; flex: none; }
+.ab-chip.sel { border-color: var(--gold); background: rgba(242,192,55,0.12); }
+.ab-info { min-height: 0; margin-top: 6px; }
+
+.kit-ov details { background: rgba(0,0,0,0.18); border-radius: 8px; padding: 5px 9px; margin: 5px 0; }
+.kit-ov summary { cursor: pointer; }
+.kit-ov details[open] summary .muted { display: none; }
+
+.kit-ov { font-size: 12.5px; line-height: 1.35; }
+.kv-box { margin: 4px 0; padding: 5px 9px; }
+.kit-ov p { margin: 3px 0; }

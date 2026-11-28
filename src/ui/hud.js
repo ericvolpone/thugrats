@@ -17,7 +17,7 @@ import { upgradeText } from '../game/stats.js';
 import { CHEST_LIFE } from '../game/pickups.js';
 import { banishKind } from '../game/upgrades.js';
 import { fmtTime, fmtNum, el } from '../util.js';
-import { heroXpToNext } from '../save.js';
+import { heroXpToNext, Save } from '../save.js';
 import { sfx } from '../audio.js';
 
 /**
@@ -39,6 +39,7 @@ export class Hud {
       const act = e.target.dataset?.act;
       if (act === 'resume') this.togglePause(false);
       if (act === 'quit') { this.togglePause(false); this.run?.end('quit'); }
+      if (act === 'sig-auto' || act === 'sig-manual') { Save.setSigManual(act === 'sig-manual'); this.syncSigSetting(); }
     });
     this.$('choice-reroll').addEventListener('click', () => this.run?.reroll());
     this.$('choice-skip').addEventListener('click', () => this.run?.choose(null));
@@ -80,6 +81,7 @@ export class Hud {
     this.api = {
       toast: (m) => this.toast(m),
       banner: (t, s, big) => this.banner(t, s, big),
+      loot: (o) => this.loot(o),
       hurtFlash: () => {
         const h = this.$('hurt');
         h.classList.add('on');
@@ -183,6 +185,17 @@ export class Hud {
     this.$('pause').classList.toggle('hidden', !on);
     this.highlight([]);
     if (on) this.$('pause-build').innerHTML = this.buildHtml(r);
+    this.syncSigSetting();
+  }
+
+  /** Auto / Manual buttons for signature moves (pause menu). */
+  syncSigSetting() {
+    const manual = Save.sigManual();
+    const box = document.querySelector('.sig-setting');
+    if (!box) return;
+    box.classList.toggle('hidden', !this.run?.hero.signature);
+    box.querySelector('[data-act="sig-auto"]').classList.toggle('ghost', manual);
+    box.querySelector('[data-act="sig-manual"]').classList.toggle('ghost', !manual);
   }
 
   toast(msg) {
@@ -191,6 +204,26 @@ export class Hud {
     box.appendChild(t);
     while (box.children.length > 4) box.firstChild.remove();
     setTimeout(() => t.remove(), 3300);
+  }
+
+  /** Titan loot card: a few seconds in the middle of the screen (doesn't pause). */
+  loot({ title, gear, final, gold }) {
+    const c = this.$('loot-card');
+    let g = '';
+    if (gear?.piece) {
+      g = `<div class="lc-gear got"><span class="ic">${gear.piece.icon}</span><div><b>🎁 ${gear.piece.name}</b><small>${gear.piece.slot} · ${gear.set.icon} ${gear.set.name} set · wear it in the hideout</small></div></div>`;
+    } else if (gear && gear.missing.length) {
+      g = `<div class="lc-gear"><span class="ic">🎲</span><div><b>No gear this time</b><small>${Math.round(gear.chance * 100)}% chance · this titan still owes you: ${gear.missing.map((p) => `${p.icon} ${p.name}`).join(', ')}</small></div></div>`;
+    } else if (gear) {
+      g = `<div class="lc-gear"><span class="ic">✅</span><div><b>Pieces collected</b><small>You already own everything this titan drops from ${gear.set.icon} ${gear.set.name}.</small></div></div>`;
+    }
+    c.innerHTML = `<h3>🗿 ${title}</h3>${g}<div class="lc-row"><span>⬆️ Free level</span><span>💰 ~${gold} gold</span>${final ? '<span>🏁 Map cleared · 🚁 evac inbound</span>' : '<span>📜 Contract → Black Market</span>'}</div>`;
+    c.classList.remove('hidden');
+    c.classList.remove('show');
+    void c.offsetWidth;
+    c.classList.add('show');
+    clearTimeout(this.lootT);
+    this.lootT = setTimeout(() => c.classList.add('hidden'), gear?.piece ? 6000 : 4500);
   }
 
   banner(title, sub = '', big = false) {
@@ -252,9 +285,17 @@ export class Hud {
       const k = r.res.value / r.res.max;
       rb.querySelector('i').style.width = `${k * 100}%`;
       rb.querySelector('i').style.background = r.res.color;
+      const sig = r.hero.signature;
+      const ready = sig && r.sigReady();
       rb.classList.toggle('full', k >= 0.999);
-      rb.querySelector('span').textContent = `${r.res.icon} ${r.res.name} ${Math.floor(r.res.value)} / ${r.res.max}`;
-      rb.title = r.res.desc ?? '';
+      rb.classList.toggle('ready', !!ready);
+      const bonus = r.res.bonus?.(r);
+      const label = r.res.label?.(r) ?? `${Math.floor(r.res.value)} / ${r.res.max}`;
+      rb.querySelector('span').textContent = ready
+        ? `${sig.icon} ${sig.name.toUpperCase()} READY${Save.sigManual() ? ' — Ⓨ / F' : ''}`
+        : `${r.res.icon} ${r.res.name} ${label}${bonus ? ` · ${bonus}` : ''}`;
+      rb.title = `${r.res.desc ?? ''}${sig ? `\n\n${sig.icon} ${sig.name}: ${sig.desc}` : ''}`;
+      this.$('sig-btn').classList.toggle('ready', !!ready);
     }
     this.$('hud-gold').textContent = `💰 ${Math.floor(r.gold)}`;
     const cc = this.$('hud-chest'), cost = r.chestCost();
@@ -337,6 +378,8 @@ export class Hud {
   // ── live damage meter (bottom right) ───────────────────
   /** Name + icon for a damage source id (ability id, 'burn', 'godfather'). */
   dmgSource(id, run = this.run) {
+    const sig = run.hero.signature;
+    if (sig && (id === sig.id || id === `sig_${sig.id}`)) return { name: sig.name, icon: sig.icon };
     return run.hero.abilities.find((a) => a.id === id) ?? { name: id === 'burn' ? 'Burning' : id === 'godfather' ? 'Godfather Bodyguard' : id, icon: id === 'burn' ? '🔥' : '🤵' };
   }
 

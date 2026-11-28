@@ -27,8 +27,8 @@ export const BABYFACE_GEAR = [
     bonus: {
       2: { desc: (k) => `Double Tap +${r(30 * k)}% damage and +${r(15 * k)}% Recharge Rate.`,
         apply: (c, k) => { c.abil('double_tap', 'damage', 'pct', 30 * k); c.abil('double_tap', 'cooldown', 'pct', 15 * k); } },
-      3: { desc: (k) => `Double Tap goes for Spotted thugs when its last target is gone, and every Double Tap hit on a Spotted thug restores ${r(4 * k)} Focus. Spotter +1 target.`,
-        apply: (c, k) => { c.flag('tapSpotted', true); c.flagAdd('tapFocus', r(4 * k)); c.abil('spotter', 'count', 'add', 1); } },
+      3: { desc: (k) => `Double Tap goes for Spotted thugs when its last target is gone, and every Double Tap hit on a Spotted thug restores ${r(k)} Focus. Spotter +1 target.`,
+        apply: (c, k) => { c.flag('tapSpotted', true); c.flagAdd('tapFocus', r(k)); c.abil('spotter', 'count', 'add', 1); } },
       5: { desc: (k) => `Confirm the Kill: Double Tap fires a third shot, any Double Tap kill readies the next one within 0.5s, and precision hits on Spotted thugs deal +${r(25 * k)}% more crit damage.`,
         apply: (c, k) => { c.flag('tapThird', true); c.flag('tapReset', true); c.flagAdd('spotCrit', 0.25 * k); } },
     },

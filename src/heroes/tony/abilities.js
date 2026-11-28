@@ -6,6 +6,8 @@ import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, cone,
  * Tiny Tony Two-Fists — the Brawler. No guns, ever. Up close and personal: big
  * swings, knockback into walls (slams), throws, and a Rage meter that fills as
  * he gives and takes a beating. See heroes/lenny/abilities.js for the format.
+ * A full meter fires his signature move, Berserk (TONY_SIGNATURE): the Total
+ * Meltdown stomps, then 6s of fury where every hit can slam.
  *
  * Flags read here (talents / gear, all default off):
  *   tonyRageGain   +x Rage gained          tonyRageDmg   extra damage per Rage point
@@ -16,6 +18,8 @@ import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, cone,
  *   tonyGrabReach  ×x Headlock grab reach   tonyThrowSlam thrown thugs slam for double
  *   tonyLandWave   Headlock landings knock everything in 2× area away (x of its damage)
  *   tonyDoubleGrab Headlock throws two thugs
+ *   tonyShortTemper Berserk is ready this much Rage early (Short Temper)
+ *   tonyLetItOut   Berserk refills Iron Belly's shield to x of its size (Let It Out)
  *   + the older ones: tonyCombo, tonyShockwave, tonyWideSwing, tonyRageSpin, tonyQuake,
  *     tonyRushStun, tonyQuakeTrail, tonyWreckingBall, tonyBellyBank, tonyThorns, tonyTagTeam
  */
@@ -23,13 +27,26 @@ import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, permanentUptime, angleTo, cone,
 // ── Rage ────────────────────────────────────────────────────────────────────
 
 /** Add Rage (talent bonus, doubled while Juice Box Rage is up). */
+/** Rage fill cap: about one full meter per RAGE_FILL_S seconds at most, with a small burst bank. */
+const RAGE_FILL_S = 35, RAGE_BANK = 15;
 function rage(run, n) {
-  if (run.res?.id !== 'rage' || !(n > 0)) return;
-  run.gainRes(n * (1 + (run.flags.tonyRageGain ?? 0)) * (run.buffs.roid_rage ? 2 : 1));
+  if (run.res?.id !== 'rage' || !(n > 0) || run.buffs.tony_berserk) return;
+  const c = run.counters;
+  c.rageBank ??= RAGE_BANK;
+  const want = n * (1 + (run.flags.tonyRageGain ?? 0)) * (run.buffs.roid_rage ? 2 : 1);
+  const got = Math.min(want, c.rageBank);
+  c.rageBank -= got;
+  run.gainRes(got);
 }
 
 /** Damage per Rage point (0.2% each → +20% at full). */
 const rageDmg = (run) => 0.002 + (run.flags.tonyRageDmg ?? 0);
+
+/** Is Berserk (the signature's 6s fury) running? */
+const berserk = (run) => !!run.buffs.tony_berserk;
+
+/** Rage that counts for the passive bonus: all of it while Berserk. */
+const rageNow = (run) => (berserk(run) ? run.res.max : run.res.value);
 
 /**
  * Per-frame Rage upkeep: rage from damage taken (HP lost + shield soaked), from
@@ -38,6 +55,8 @@ const rageDmg = (run) => 0.002 + (run.flags.tonyRageDmg ?? 0);
  */
 function rageTick(run, dt) {
   const r = run.res, c = run.counters, p = run.player, f = run.flags;
+  // the fill cap refills over time (faster with Short Fuse / Juice Box)
+  c.rageBank = Math.min(RAGE_BANK, (c.rageBank ?? RAGE_BANK) + dt * (100 / RAGE_FILL_S) * (1 + (f.tonyRageGain ?? 0) * 0.5) * (run.buffs.roid_rage ? 2 : 1));
   r.decayDelay = f.tonyGrudge ? 6 : 3;
   r.decay = f.tonyGrudge ? 4 : 8;
   if (run.buffs.roid_rage) r.idle = 0; // juiced: no draining
@@ -61,34 +80,50 @@ function rageTick(run, dt) {
       c[key] = v;
     }
   }
-  // the meter is power: +damage per point, and less damage taken at full
+  // the meter is power: +damage per point, and less damage taken at full (or Berserk)
   if (!run.buffs._tonyRage) {
     run.buffs._tonyRage = {
       t: Infinity, max: Infinity,
       stats: (s, b, rr) => {
         const res = rr.res;
         if (!res) return;
-        s.dmg += res.value * rageDmg(rr);
-        if (res.value >= res.max) s.armor += 0.1;
+        s.dmg += rageNow(rr) * rageDmg(rr);
+        if (rageNow(rr) >= res.max) s.armor += 0.1;
       },
     };
   }
-  // seeing red: a full meter steams
-  if (r.value >= r.max && Math.random() < dt * 10) run.fx.burst(p.x, 1.6, p.z, '#ff3b2a', 1, 2, 0.4, 0.7, -3);
+  // seeing red: a full meter steams, Berserk glows
+  if (berserk(run)) {
+    if (Math.random() < dt * 25) run.fx.burst(p.x + rand(-0.5, 0.5), rand(0.4, 1.8), p.z + rand(-0.5, 0.5), '#ff2a1a', 2, 3, 0.5, 0.8, -3);
+  } else if (r.value >= r.max && Math.random() < dt * 10) run.fx.burst(p.x, 1.6, p.z, '#ff3b2a', 1, 2, 0.4, 0.7, -3);
+}
+
+/** What Rage gives right now, for the HUD (under the HP bar). */
+function rageBonus(run) {
+  const r = run.res;
+  if (!r) return '';
+  const pct = Math.round(rageNow(run) * rageDmg(run) * 100);
+  const full = rageNow(run) >= r.max;
+  return `+${pct}% dmg${full ? ' · -10% dmg taken' : ''}`;
 }
 
 export const TONY_START = 'haymaker';
 
 export const TONY_RESOURCE = {
   id: 'rage', name: 'Rage', icon: '💢', color: '#ff3b2a', max: 100, start: 0, decay: 8, decayDelay: 3,
-  desc: 'Fills when Tony lands hits, slams thugs into walls and takes damage; drains when he stops fighting. Every point is +0.2% damage (+20% at full) and a full meter means 10% less damage taken. Total Meltdown dumps it all, Folding Chair spends it, Juice Box Rage tops it up.',
+  desc: 'Rage fills when Tony lands hits, slams thugs into walls and gets hurt. It drains if he stops fighting for 3s. '
+    + 'While it fills, every point gives +0.2% damage (+20% at 100). '
+    + 'At 100 Rage he goes BERSERK: stomps that fling everything into the walls, then 6s at full Rage power where every hit can slam. '
+    + 'Folding Chair can spend some Rage on a Chair Shot; Juice Box Rage tops it up.',
+  label: (run) => (berserk(run) ? `BERSERK ${Math.ceil(run.buffs.tony_berserk.t)}s` : `${Math.floor(run.res.value)} / ${run.res.max}`),
+  bonus: rageBonus,
   tick: rageTick,
 };
 
 // ── slams and throws ────────────────────────────────────────────────────────
 
 /** Knockback with Heavy Hands. */
-const kn = (run, k) => k * (1 + (run.flags.tonyKnock ?? 0));
+const kn = (run, k) => k * (1 + (run.flags.tonyKnock ?? 0)) * (berserk(run) ? BERSERK_KNOCK : 1);
 
 /**
  * Wall slam: after a knockback hit, `frac` of `a`'s damage if the thug then hits a
@@ -96,8 +131,15 @@ const kn = (run, k) => k * (1 + (run.flags.tonyKnock ?? 0));
  */
 function slam(run, m, a, frac, window = 0.5) {
   if (!m || m.dead || m.tier >= 2) return;
+  slamFor(run, m, a, a.stat('damage') * frac, window);
+}
+
+/** Wall slam for a flat `base` damage (Brick Wall applies); Berserk widens the window. */
+function slamFor(run, m, a, base, window = 0.5) {
+  if (!m || m.dead || m.tier >= 2) return;
   const f = run.flags;
-  const dmg = a.stat('damage') * frac * (1 + (f.tonySlamPct ?? 0));
+  const dmg = base * (1 + (f.tonySlamPct ?? 0));
+  if (berserk(run)) window = Math.max(window, 1);
   slamOnWall(run, m, a, dmg, window, (mm) => {
     rage(run, 3);
     if (f.tonySlamStun && !mm.dead) mm.rootT = Math.max(mm.rootT, f.tonySlamStun * (mm.tier >= 1 ? 0.5 : 1));
@@ -220,7 +262,7 @@ function landAt(run, a, t, mult) {
   rage(run, 4 + Math.min(n, 6));
 }
 
-// ── Folding Chair / Meltdown helpers (also used by pairings via def) ────────
+// ── Folding Chair helper (also used by pairings via def) ────────────────────
 
 const CHAIR_NEED = 50, CHAIR_COST = 20;
 
@@ -244,32 +286,6 @@ function chairOn(run, a, t, mult = 1, free = false) {
   run.player.aim(t.x, t.z, 0.3);
   run.shake(shot ? 0.25 : 0.15);
   sfx('bigshot');
-  return true;
-}
-
-/**
- * Total Meltdown: dump the whole Rage meter into stomps around Tony. Damage
- * scales with how full it was. False if there's under 25 Rage.
- */
-function meltdown(run, a) {
-  const res = run.res;
-  if (res?.id !== 'rage' || res.value < 25) return false;
-  const v = res.value;
-  run.spendRes(v);
-  const k = v / res.max;
-  const n = a.stat('count');
-  for (let i = 0; i < n; i++) {
-    run.later(i * 0.3, () => {
-      const p = run.player;
-      if (p.dead) return;
-      nova(run, a, { r: a.stat('area'), dmg: a.stat('damage') * k, knock: kn(run, 12), root: a.stat('duration'), color: '#ff3b2a',
-        onHit: (m) => slam(run, m, a, 0.6 * k, 0.6) });
-      run.fx.burst(p.x, 0.3, p.z, '#ff6a4a', 26, 8);
-      run.fx.ring(p.x, p.z, a.stat('area') * 0.6, '#ffd27a', 0.3);
-      run.shake(0.3);
-      sfx('tantrum');
-    });
-  }
   return true;
 }
 
@@ -411,27 +427,18 @@ export const TONY_ABILITIES = [
   },
   {
     id: 'roid_rage', name: 'Juice Box Rage', icon: '🧃', tags: ['buff'],
-    desc: 'Downs a juice box: +40 Rage on the spot, then for a while he hits harder, takes less damage, heals, gains Rage twice as fast and his Rage doesn\'t drain.',
+    desc: 'Downs a juice box: +25 Rage on the spot, then for a while he hits harder, takes less damage, heals, gains Rage twice as fast and his Rage doesn\'t drain.',
     base: { cooldown: 18, duration: 6, power: 0.3 },
     upgrades: [DUR, scUp('power', 'Juice', 0.08, (v) => `+${Math.round(v * 100)}% juiced damage`), CD],
     useless: permanentUptime,
     ready: (run, a) => run.crowd(a, 8, 4),
     fire(run, a) {
-      run.gainRes(40 + (run.flags.tonyJuiceRage ?? 0)); // before the buff: not doubled
+      run.gainRes(25 + (run.flags.tonyJuiceRage ?? 0)); // before the buff: not doubled
       const pw = a.stat('power');
       buff(run, a, { fx: '#ff7a3a', stats: (s) => { s.dmg += pw; s.armor += 0.15; s.regen += 3 + pw * 10; } });
       run.fx.ring(run.player.x, run.player.z, 3, '#ff7a3a', 0.5);
       sfx('frenzy');
     },
-  },
-  {
-    id: 'meltdown', noStart: true, name: 'Total Meltdown', icon: '🤬', tags: ['melee', 'aoe', 'control'],
-    desc: 'The Rage dump. When the Rage meter is full, Tony loses it completely: spends all of it on a string of stomps that stun everything around him and fling it into the walls.',
-    base: { damage: 55, cooldown: 2, area: 5.5, duration: 1, count: 2 },
-    upgrades: [DMG, AREA, pctUp('duration', 'Stun', 20), addUp('count', 'Extra Stomp', [0, 0, 1, 1, 1], null, 4)],
-    ready: (run, a) => run.res?.id === 'rage' && run.res.value >= run.res.max && run.crowd(a, a.stat('area'), 4),
-    fire: (run, a) => meltdown(run, a),
-    meltdown, // for pairings (Short Temper)
   },
   {
     id: 'lariat', name: 'Spinning Lariat', icon: '🌀', tags: ['melee', 'orbit', 'aura'],
@@ -512,3 +519,116 @@ function soaked(run) {
   c.tonyShieldMark = sh;
   return d;
 }
+
+// ── signature: Berserk ──────────────────────────────────────────────────────
+
+const BERSERK_TIME = 6, BERSERK_KNOCK = 1.5, BERSERK_RATE = 0.4, BERSERK_SLAM = 0.5;
+
+/**
+ * The stomps aren't an owned ability, so they hit through this stand-in: it has
+ * the stat() an ability has (scaled by run level and Tony's stats), and its id
+ * credits the damage to the signature in the damage meter.
+ */
+const STOMP_DEF = {
+  id: 'berserk', name: 'Berserk', icon: '🤬', tags: ['melee', 'aoe', 'control'],
+  base: { damage: 55, area: 5.5, duration: 1, count: 3 },
+};
+function stomper(run) {
+  if (!run.tonyStomp) {
+    run.tonyStomp = {
+      def: STOMP_DEF, run, level: 1, inc: {}, add: {},
+      stat(k) {
+        const b = STOMP_DEF.base[k] ?? 0, s = run.stats;
+        switch (k) {
+          case 'damage': return b * (1 + 0.05 * (run.level - 1)) * s.dmg;
+          case 'area': return b * (1 + s.area);
+          case 'duration': return b * (1 + s.duration);
+          default: return b;
+        }
+      },
+    };
+  }
+  return run.tonyStomp;
+}
+
+/**
+ * Berserk's "every hit slams": a run-wide hit pairing, added the first time Tony
+ * goes Berserk. While it's up, any hit that doesn't already have a slam lined up
+ * gets one for BERSERK_SLAM of the hit's damage.
+ */
+function hookBerserkSlams(run) {
+  if (run.tonyBerserkHook) return;
+  run.tonyBerserkHook = true;
+  run.loadout.links.hit.push({ from: '*', to: null, chance: 1, icd: 0, next: 0, proc: (rr, p, ev) => {
+    const m = ev.m;
+    if (!berserk(rr) || !m || m.dead || m.tier >= 2 || !(ev.dmg > 0)) return;
+    if (m.slam && m.slam.until >= rr.time) return;
+    slamFor(rr, m, ev.src, ev.dmg * BERSERK_SLAM, 1);
+  } });
+}
+
+/** Rage Berserk needs: 100, less with Short Temper. */
+const berserkAt = (run) => run.res.max - (run.flags.tonyShortTemper ?? 0);
+
+export const TONY_SIGNATURE = {
+  id: 'berserk', name: 'Berserk', icon: '🤬',
+  short: 'Meltdown stomps + 6s of wall slams',
+  desc: `At full Rage, Tony loses it. Total Meltdown: 3 stomps around him that stun and fling everything into the walls. `
+    + `Then ${BERSERK_TIME}s of Berserk: Rage counts as full (+20% damage, -10% damage taken), knockback is 50% stronger, `
+    + `every hit can wall-slam, and all his abilities recharge 40% faster. The meter starts refilling right away.`,
+  ready: (run) => run.res?.id === 'rage' && run.res.value >= berserkAt(run) && !berserk(run),
+  fire(run) {
+    const a = stomper(run), f = run.flags;
+    hookBerserkSlams(run);
+    // the fury: buff fx gives the red glow, rate speeds up every cooldown
+    run.buffs.tony_berserk = { t: BERSERK_TIME, max: BERSERK_TIME, src: 'berserk', fx: '#ff3b2a', rate: BERSERK_RATE };
+    // Total Meltdown: the stomps
+    const n = a.stat('count');
+    for (let i = 0; i < n; i++) {
+      run.later(i * 0.3, () => {
+        const p = run.player;
+        if (p.dead) return;
+        nova(run, a, { r: a.stat('area'), dmg: a.stat('damage'), knock: kn(run, 12), root: a.stat('duration'), color: '#ff3b2a',
+          onHit: (m) => slam(run, m, a, 0.6, 1) });
+        run.fx.burst(p.x, 0.3, p.z, '#ff6a4a', 26, 8);
+        run.fx.ring(p.x, p.z, a.stat('area') * 0.6, '#ffd27a', 0.3);
+        run.shake(0.3);
+        sfx('tantrum');
+      });
+    }
+    // Let It Out: blowing off steam refills Iron Belly's shield
+    const belly = f.tonyLetItOut && run.abilityById('iron_belly');
+    if (belly) {
+      const sh = belly.stat('power') * f.tonyLetItOut;
+      if (run.player.shield < sh) run.player.shield = sh;
+      run.counters.rageShield = run.player.shield; // a refill isn't a soaked hit
+      if (f.tonyBellyBank) run.counters.tonyShieldMark = run.player.shield;
+      run.fx.ring(run.player.x, run.player.z, 1.6, '#9ad8ff', 0.4);
+    }
+    run.fx.ring(run.player.x, run.player.z, 3.5, '#ff3b2a', 0.5);
+    sfx('frenzy');
+  },
+};
+
+export const TONY_OVERVIEW = {
+  tagline: 'A huge, angry baby who punches thugs into walls.',
+  playstyle: 'Get in close and stay there. Tony has no guns: his swings, throws and stomps knock thugs back, '
+    + 'and a thug knocked into a wall takes a big extra hit (a wall slam). Fight near walls and corners, '
+    + 'let the crowd come to you, and keep swinging to keep your Rage up.',
+  meter: 'Rage (💢, under your HP) fills when you land hits, slam thugs into walls and take damage, and drains if you stop fighting for 3s. '
+    + 'Every point is +0.2% damage, shown next to the bar. At 100 Rage Tony goes BERSERK: three stomps that fling everything into the walls, '
+    + 'then 6s where every hit can slam, knockback is stronger and abilities recharge faster. '
+    + 'In Auto mode it goes off by itself; in Manual mode press Y / F / ★ when the bar says READY.',
+  tips: [
+    'Walls are your friend: fight with your back near a wall or in a narrow street so knocked-back thugs slam.',
+    'Getting hit builds Rage too. Iron Belly shields let you soak hits and get mad without dying.',
+    'In Manual mode, save Berserk for a big pack or a Crime Titan: a full meter waiting for you doesn\'t drain.',
+    'Juice Box Rage gives +25 Rage on the spot: drink it near full to go Berserk sooner.',
+  ],
+  pairs: [
+    { a: 'Headlock', b: 'Ground Pound', why: 'Throw a thug into the crowd, then belly-flop where he lands (Pile On talent).' },
+    { a: 'Iron Belly', b: 'Clap Back', why: 'The shield soaks hits and builds Rage; Clap Back stuns the crowd that hit you (Belly Bounce talent, Bouncer set).' },
+    { a: 'Haymaker', b: 'Juice Box Rage', why: 'While juiced, Haymaker swings all the way around you and Rage fills twice as fast (Juiced Swing talent).' },
+    { a: 'Bull Rush', b: 'Ground Pound', why: 'The charge bowls a line of thugs into the walls and can end in a free Ground Pound (Trample talent).' },
+  ],
+};

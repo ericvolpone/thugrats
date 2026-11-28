@@ -92,11 +92,18 @@ export class Input {
     const up = () => jb.classList.remove('on');
     jb.addEventListener('pointerup', up);
     jb.addEventListener('pointercancel', up);
+    const sb = document.getElementById('sig-btn');
+    sb.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.sigQueued = true;
+    });
   }
 
   setTouchEnabled(on) {
     document.getElementById('touch-zone').classList.toggle('hidden', !on);
     document.getElementById('jump-btn').classList.toggle('hidden', !on);
+    document.getElementById('sig-btn').classList.toggle('hidden', !on);
     if (!on) {
       this.stick = null;
       this.look = null;
@@ -174,7 +181,17 @@ export class Input {
     return this.pressed.has(code);
   }
 
+  /** True once per signature-move press: F, gamepad Y, or the touch SIG button. */
+  signature() {
+    const padY = this.pads().some((p) => p.buttons[3]?.pressed);
+    const hit = this.sigQueued || this.pressed.has('KeyF') || (padY && !this.prevPadSig);
+    this.sigQueued = false;
+    return hit;
+  }
+
   endFrame() {
     this.pressed.clear();
+    // track Y every frame (menus included) so a Y used on a card screen can't fire a move
+    this.prevPadSig = this.pads().some((p) => p.buttons[3]?.pressed);
   }
 }

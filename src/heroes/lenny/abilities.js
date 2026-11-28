@@ -14,38 +14,50 @@ import { TAU, rand } from '../../util.js';
  *           whole-number upgrades like extra bullets. `max` caps the total.
  * useless(a, stat) — return true to stop offering a stat that no longer helps.
  *
- * Signature — CLOUT (gold is power): every 10 gold Lenny is holding gives his
- * abilities +1% damage, up to +20% at 200 gold (talents raise the cap / rate).
- * Favours (Hired Goon, Drive-By, Hit Contract, the Godfather's bodyguards) get
- * 1.5× Clout. Spending gold on chests spends your Clout too.
+ * Meter — BUY IN (gold is power): the meter shows the gold you hold toward the
+ * next buy-in price. Lenny's signature, Buy In, spends that price for a
+ * permanent damage stack (+8% to all his abilities for the rest of the run;
+ * favours — Hired Goon, Drive-By, Hit Contract, the Godfather's bodyguards —
+ * get 1.5× that). Each buy-in raises the next price ×1.5, so gold is a real
+ * choice: chests now, or a buy-in that pays off for the whole run.
  *
  * Thug statuses (common.addStatus):
  *   racket  shaken down by Protection Racket: takes +Racket `vuln` damage.
  *   afraid  terrified by Make an Example: slowed, takes +Example `power` damage.
- * Both, and Clout, are one damage amp (lennyAmp) that ensureLenny() installs
- * into the run the first time any Lenny ability polls (or the Clout meter ticks).
+ * Both, and buy-in stacks, are one damage amp (lennyAmp) that ensureLenny()
+ * installs into the run the first time any Lenny ability polls (or the meter ticks).
  */
 import { pctUp, scUp, addUp, DMG, CD, AREA, DUR, AURA_UPS, permanentUptime, chill, addStatus, statusN, tint } from '../common.js';
 
-// ── Clout ───────────────────────────────────────────────────────────────────
-export const CLOUT_GOLD = 200; // gold for full Clout (before talents)
+// ── Buy In ──────────────────────────────────────────────────────────────────
+export const BUYIN_PRICE = 100;  // gold for the first buy-in (before talents)
+export const BUYIN_GROWTH = 1.5; // each buy-in raises the next price this much
+export const BUYIN_DMG = 0.08;   // damage per buy-in stack (before talents)
+export const FAVOUR_MULT = 1.5;  // favours get this much of every stack
 const FAVOURS = new Set(['goon', 'driveby', 'contract', 'godfather']);
 let OWN = null; // ability ids of this kit (filled below)
 
-/** Gold that still counts toward Clout. */
-export const cloutCap = (run) => CLOUT_GOLD + (run.flags.cloutCap ?? 0);
-/** Clout as a damage fraction (0.2 = +20%) for a normal ability. */
-export function clout(run) {
-  return (Math.min(Math.max(0, run.gold), cloutCap(run)) / 1000) * (1 + (run.flags.cloutMult ?? 0));
+/** Buy-ins bought so far this run. */
+export const buyIns = (run) => run.counters.buyIns ?? 0;
+/** Gold the next buy-in costs (talents: buyInDiscount, a fraction off every price). */
+export function buyInPrice(run) {
+  const off = Math.min(0.6, run.flags.buyInDiscount ?? 0);
+  return Math.max(1, Math.round(BUYIN_PRICE * BUYIN_GROWTH ** buyIns(run) * (1 - off)));
 }
-/** 0..1: how full the Clout meter is. */
-export const cloutFrac = (run) => Math.min(1, Math.max(0, run.gold) / cloutCap(run));
+/** Damage one stack gives a normal ability (talents: buyInDmg adds to it). */
+export const stackDmg = (run) => BUYIN_DMG + (run.flags.buyInDmg ?? 0);
+/** Total buy-in damage for a normal ability (0.24 = +24%). */
+export const buyInBonus = (run) => buyIns(run) * stackDmg(run);
+/** Armour from buy-ins (Untouchable): buyInArmor per stack, up to buyInArmorCap. */
+export const buyInArmor = (run) => Math.min(run.flags.buyInArmorCap ?? 0.15, buyIns(run) * (run.flags.buyInArmor ?? 0));
 
-/** Damage amp for every hit in a Lenny run: Clout, shakedowns and terror. */
+const pct = (v) => Math.round(v * 100);
+
+/** Damage amp for every hit in a Lenny run: buy-ins, shakedowns and terror. */
 function lennyAmp(run, m, a) {
   let v = 0;
   const id = a?.def?.id;
-  if (id && OWN.has(id)) v += clout(run) * (FAVOURS.has(id) ? 1.5 : 1);
+  if (id && OWN.has(id)) v += buyInBonus(run) * (FAVOURS.has(id) ? FAVOUR_MULT : 1);
   if (m.st) {
     if (statusN(run, m, 'racket')) v += run.abilityById('racket')?.stat('vuln') ?? 0.15;
     if (statusN(run, m, 'afraid')) v += run.abilityById('make_example')?.stat('power') ?? 0.15;
@@ -53,35 +65,67 @@ function lennyAmp(run, m, a) {
   return v;
 }
 
-/** Hook Lenny's amp (and the Untouchable Boss armour) into this run, once. */
+/** Hook Lenny's amp (and the Untouchable buy-in armour) into this run, once. */
 export function ensureLenny(run) {
   if (run.counters._lenny) return;
   run.counters._lenny = 1;
   run.loadout.amps.push(lennyAmp);
-  // Untouchable (Racketeering capstone): Clout also reduces damage taken
-  if (run.flags.cloutArmor) {
-    run.buffs.lenny_clout = { t: Infinity, max: Infinity, stats: (s, b, r) => { s.armor += cloutFrac(r) * r.flags.cloutArmor; } };
+  // Untouchable (Racketeering capstone): every buy-in also cuts the damage you take
+  if (run.flags.buyInArmor) {
+    run.buffs.lenny_buyin = { t: Infinity, max: Infinity, stats: (s, b, r) => { s.armor += buyInArmor(r); } };
   }
 }
 
-/** Clout meter: shows the current Clout bonus in %, out of the max. */
+/** Buy-In meter: gold held toward the next buy-in price. */
 export const LENNY_RESOURCE = {
-  id: 'clout', name: 'Clout', icon: '💰', color: '#f2c037', max: 20, start: 0,
-  desc: 'Clout = gold you are holding. Every 10 gold gives your abilities +1% damage (up to +20% at 200 gold); favours (Hired Goon, Drive-By, Hit Contract) get 1.5× that. Spend gold and you spend Clout.',
+  id: 'buyin', name: 'Buy In', icon: '💰', color: '#f2c037', max: BUYIN_PRICE, start: 0,
+  desc: 'Buy In: the bar is your gold toward the next buy-in price. When you can afford it, Lenny buys in: he pays that price and every ability deals +8% damage for the rest of the run (favours — Hired Goon, Drive-By, Hit Contract — get +12%). Each buy-in costs 1.5× the last. Gold spent on chests is gold not spent on buy-ins, so choose. In Manual mode you decide when to buy in.',
   tick(run) {
     ensureLenny(run);
     const r = run.res;
     if (!r) return;
-    r.max = Math.max(1, Math.round((cloutCap(run) / 10) * (1 + (run.flags.cloutMult ?? 0))));
-    r.value = clout(run) * 100;
+    r.max = buyInPrice(run);
+    r.value = Math.min(r.max, Math.max(0, Math.floor(run.gold)));
+  },
+  label: (run) => `${Math.max(0, Math.floor(run.gold))} / ${buyInPrice(run)} 💰`,
+  bonus(run) {
+    const n = buyIns(run);
+    if (!n) return `next buy-in: +${pct(stackDmg(run))}% dmg`;
+    const arm = buyInArmor(run);
+    return `${n} buy-in${n > 1 ? 's' : ''} · +${pct(buyInBonus(run))}% dmg${arm ? ` · -${pct(arm)}% dmg taken` : ''}`;
   },
 };
 
+/** Signature: Buy In — pay the price, keep a damage stack for the rest of the run. */
+export const LENNY_SIGNATURE = {
+  id: 'buy_in', name: 'Buy In', icon: '💰',
+  short: 'Paid up: permanent +damage',
+  desc: 'When you hold enough gold, Lenny pays the buy-in price for a permanent stack: +8% damage to all his abilities for the rest of the run (favours get +12%). The next buy-in costs 1.5× more. Auto buys in as soon as you can afford it; Manual lets you save gold for chests and buy in on Y / F / ★.',
+  keepMeter: true,
+  ready: (run) => run.gold >= buyInPrice(run),
+  fire(run) {
+    ensureLenny(run);
+    const price = buyInPrice(run);
+    if (run.gold < price) return;
+    run.gold -= price;
+    run.counters.buyIns = buyIns(run) + 1;
+    const n = buyIns(run);
+    const p = run.player;
+    // a shower of coins and a gold ring: the whole street sees the Boss pay up
+    run.fx.burst(p.x, 1.2, p.z, '#ffd23f', 34, 7, 0.8, 1.3);
+    run.fx.burst(p.x, 0.4, p.z, '#fff3b0', 14, 4, 0.5, 0.9, 4);
+    run.fx.ring(p.x, p.z, 4.5, '#f2c037', 0.6);
+    run.fx.ring(p.x, p.z, 2.2, '#ffd700', 0.4);
+    run.fx.number(p.x, 2.6, p.z, `-${price} 💰  +${pct(stackDmg(run))}% dmg (×${n})`, '#ffd700', true);
+    if (run.res) run.res.max = buyInPrice(run);
+    run.shake?.(0.12);
+    sfx('chest');
+  },
+};
 export const LENNY_START = 'pistol';
 
-/** Clout note for descs. */
-const CLOUT = ' Scales with Clout.';
-const FAVOUR = ' Favour: Clout counts 1.5×.';
+/** Favour note for descs. */
+const FAVOUR = ' Favour: buy-ins count 1.5× for it.';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -129,7 +173,7 @@ function shake(run, a, m, dur) {
 export const LENNY_ABILITIES = [
   {
     id: 'pistol', name: 'Snub-Nose .38', icon: '🔫', tags: ['gun', 'projectile'],
-    desc: 'Pops the toughest thug in range.' + CLOUT,
+    desc: 'Pops the toughest thug in range.',
     base: { damage: 14, cooldown: 0.5, range: 15, speed: 38, count: 1, pierce: 0 },
     upgrades: [DMG, pctUp('cooldown', 'Fire Rate', 12), addUp('pierce', 'Pierce', [0, 0, 1, 1, 2], null, 5), addUp('count', 'Extra Bullet', [0, 0, 0, 1, 1], null, 3)],
     ready: (run, a) => run.mobs.targets(run.player.x, run.player.z, a.stat('range'), a.stat('count') + (run.flags.akimbo ? 1 : 0), 'strongest'),
@@ -173,7 +217,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'power_shot', name: 'Hollow Point', icon: '💥', tags: ['gun', 'projectile'],
-    desc: 'A huge slug that punches through every thug in a line. Aims for the biggest one.' + CLOUT,
+    desc: 'A huge slug that punches through every thug in a line. Aims for the biggest one.',
     base: { damage: 60, cooldown: 4.2, range: 20, speed: 55, count: 1, pierce: 99, area: 1 },
     upgrades: [pctUp('damage', 'Damage', 24), CD, pctUp('area', 'Slug Size', 18), addUp('count', 'Extra Slug', [0, 0, 0, 1, 1], null, 3)],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'strongest'),
@@ -192,7 +236,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'tommy', name: 'Chicago Typewriter', icon: '🎻', tags: ['gun', 'projectile'],
-    desc: 'Pulls a tommy gun out of a violin case and sprays a cone of lead.' + CLOUT,
+    desc: 'Pulls a tommy gun out of a violin case and sprays a cone of lead.',
     base: { damage: 7, cooldown: 3.2, range: 13, speed: 40, count: 8, spread: 0.55, pierce: 0 },
     upgrades: [DMG, { ...scUp('count', 'Bullets', 2), int: true }, CD],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
@@ -212,7 +256,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'racket', name: 'Protection Racket', icon: '🤝', tags: ['aura', 'control'],
-    desc: 'Every second, thugs near you get shaken down: a slap, a slight slow, and they take +15% damage from everything. The crowd pays: a chance per thug to cough up a gold coin.' + CLOUT,
+    desc: 'Every second, thugs near you get shaken down: a slap, a slight slow, and they take +15% damage from everything. The crowd pays: a chance per thug to cough up a gold coin.',
     base: { damage: 4, cooldown: 1, area: 4.2, vuln: 0.15, payout: 0.05, duration: 1.4 },
     upgrades: [AREA,
       scUp('vuln', 'Shakedown', 0.05, (v) => `+${Math.round(v * 100)}% damage taken`),
@@ -246,7 +290,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'make_example', name: 'Make an Example', icon: '😠', tags: ['aoe', 'control'],
-    desc: 'Picks the toughest thug nearby and makes an example of him (×3 damage), then blasts everyone close back. Survivors are terrified for 2.5s: slowed 40% and take +20% damage. If the example dies, the terror lasts 50% longer.' + CLOUT,
+    desc: 'Picks the toughest thug nearby and makes an example of him (×3 damage), then blasts everyone close back. Survivors are terrified for 2.5s: slowed 40% and take +20% damage. If the example dies, the terror lasts 50% longer.',
     base: { damage: 18, cooldown: 6, area: 4.8, knock: 9, duration: 2.5, power: 0.2 },
     upgrades: [DMG, AREA, CD, scUp('power', 'Terror', 0.05, (v) => `+${Math.round(v * 100)}% damage taken while terrified`)],
     useless: (a, stat) => stat === 'power' && a.stat('power') >= 0.6,
@@ -276,7 +320,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'cement', name: 'Cement Shoes', icon: '🪣', tags: ['thrown', 'control'],
-    desc: 'Dumps quick-dry cement: roots everything for a moment, then slows.' + CLOUT,
+    desc: 'Dumps quick-dry cement: roots everything for a moment, then slows.',
     base: { damage: 16, cooldown: 7, range: 12, area: 3.6, duration: 3 },
     upgrades: [AREA, DUR, CD, DMG],
     ready: (run, a) => run.mobs.target(run.player.x, run.player.z, a.stat('range'), 'cluster'),
@@ -305,7 +349,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'made_men', name: 'Made Men', icon: '🕴️', tags: ['summon', 'gun'],
-    desc: 'Two made men in sharp suits step out of the shadows and work the crowd with their pistols for 9s.' + CLOUT,
+    desc: 'Two made men in sharp suits step out of the shadows and work the crowd with their pistols for 9s.',
     base: { damage: 12, cooldown: 16, duration: 9, count: 2, range: 7, pierce: 0 },
     upgrades: [DMG, DUR, addUp('count', 'Extra Made Man', [0, 0, 0, 1, 1], null, 2), CD],
     ready: (run, a) => run.mobs.count(run.player.x, run.player.z, 14) > 0,
@@ -342,7 +386,7 @@ export const LENNY_ABILITIES = [
   },
   {
     id: 'make_it_rain', name: 'Make It Rain', icon: '💸', tags: ['orbit', 'aura'],
-    desc: 'Stacks of cash whirl around you nonstop, smacking anyone who gets close.' + CLOUT,
+    desc: 'Stacks of cash whirl around you nonstop, smacking anyone who gets close.',
     base: { damage: 5, count: 2, area: 2.8 },
     upgrades: AURA_UPS('Cash Stacks'),
     aura: { model: 'cash', color: '#3da35a', spark: '#7be495', spin: 3.6, knock: 3 },
@@ -382,3 +426,22 @@ for (const d of LENNY_ABILITIES) {
   const ready = d.ready;
   d.ready = (run, a) => { ensureLenny(run); return ready(run, a); };
 }
+
+/** Kit overview for the hideout's Kit tab. */
+export const LENNY_OVERVIEW = {
+  tagline: 'The Boss: money is muscle, and the crew owes him favours.',
+  playstyle: 'Lenny stands his ground and lets his guns and his crew do the work: Protection Racket and Make an Example soften up the crowd so everything else hits harder. Pick up every coin you can, because gold is how the Boss grows: open chests for new items, or buy in for permanent damage.',
+  meter: 'Buy In fills with the gold you are holding, toward the next buy-in price. When you can afford it, Lenny pays it for a permanent +8% damage stack (favours get +12%). Each buy-in costs 1.5× the last, so the first few come fast and later ones are a real investment.',
+  tips: [
+    'Chests or buy-ins? Early chests give you new tools; buy-ins pay off more the longer the run goes.',
+    'In Auto, Lenny buys in the moment he can afford it. Switch to Manual in the pause menu if you want to save gold for a chest first.',
+    'Protection Racket shakes coins out of the crowd. Stand in the thick of it to fund your next buy-in.',
+    'Favours (Hired Goon, Drive-By, Hit Contract) get 1.5× every buy-in stack, so they grow fastest of all.',
+  ],
+  pairs: [
+    { a: 'racket', b: 'make_it_rain', why: 'Racket keeps thugs close and shaken down while the cash stacks spin through them, and the coins it drops fund your buy-ins.' },
+    { a: 'make_example', b: 'cement', why: 'Cement roots the crowd in place so Make an Example catches them all, and terrified thugs take extra damage from everything.' },
+    { a: 'contract', b: 'power_shot', why: 'Both pick the biggest thug: Hollow Point softens him up and the Contract finishes him for a gold bounty.' },
+    { a: 'goon', b: 'driveby', why: 'Two favours that both get 1.5× buy-ins: the goons hold the line while Sal mows down the crowd they gather.' },
+  ],
+};

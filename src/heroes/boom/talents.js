@@ -11,6 +11,8 @@ import { explodeAt, fireAt, freeCast } from '../common.js';
  * fuseGain, shortFuse, pipeTrigger, fireSpreadChance. While a chained blast
  * goes off, run.counters.boomLink is its link number. Charge helpers come from
  * the partner defs (sticky_bomb.def.stick, c4.def.plant, detonator.def.chainAt).
+ * Signature flags (Big Red Button / Detonator): wiredNet (Detonator sets charges off
+ * as chain links), ringGum (extra gum-bombs in the Button's ring, needs Sticky Bomb).
  */
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -133,7 +135,7 @@ export const BOOM_TALENTS = [
   { id: 'b_traps', tree: 'sapper', row: 0, col: 0, max: 3, name: 'Well Stocked', icon: '📦',
     desc: (r) => `C4 Charges: +${r} max charges.`, apply: (c, r) => c.abil('c4', 'count', 'add', r) },
   { id: 'b_luck', tree: 'sapper', row: 0, col: 2, max: 3, name: 'Live Wire', icon: '✂️',
-    desc: (r) => `Chain links build ${20 * r}% more Fuse, and +${3 * r} luck.`,
+    desc: (r) => `Fuse builds ${20 * r}% more from everything and fills up to ${10 * r}% faster, and +${3 * r} luck.`,
     apply: (c, r) => { c.flagAdd('fuseGain', 0.2 * r); c.stat('luck', 3 * r); } },
   { id: 'b_pickup', tree: 'sapper', row: 1, col: 0, max: 2, name: 'Hair Trigger', icon: '🪤',
     desc: (r) => `Pipe Bombs go off when a thug gets within ${30 * r}% more distance, and +${15 * r}% pickup range.`,
@@ -149,8 +151,11 @@ export const BOOM_TALENTS = [
   { id: 'b_mortar', tree: 'sapper', row: 4, col: 1, max: 1, name: 'Artillery Support', icon: '🎯', capstone: true,
     desc: () => 'Mortar Strike fires 4 more shells and gets +25% Recharge Rate.', apply: (c) => { c.abil('mortar', 'count', 'add', 4); c.abil('mortar', 'cooldown', 'pct', 25); } },
   { id: 'b_wired', tree: 'sapper', row: 5, col: 0, max: 3, name: 'Wired Network', icon: '🔌', pair: 'detonator',
-    desc: (r) => `When a chain reaches its third link, ${10 * r}% chance the Detonator goes off for free (no cooldown used, 4s between).`,
-    apply: (c, r) => c.link('#explosive', 'detonator', 'explode', (run) => ((run.counters.boomLink ?? 0) >= 2 ? 0.1 * r : 0), (run, p) => freeCast(run, p), { icd: 4 }) },
+    desc: (r) => `Charges set off by the Detonator count as chain links (+20% damage, and they build Fuse). When a chain reaches its third link, ${10 * r}% chance the Detonator goes off for free (no cooldown used, 4s between).`,
+    apply: (c, r) => {
+      c.flag('wiredNet', true);
+      c.link('#explosive', 'detonator', 'explode', (run) => ((run.counters.boomLink ?? 0) >= 2 ? 0.1 * r : 0), (run, p) => freeCast(run, p), { icd: 4 });
+    } },
   { id: 'b_warmup', tree: 'sapper', row: 5, col: 2, max: 3, name: 'Warm-Up Lap', icon: '🏁', pair: 'big_one',
     desc: (r) => `RC Car Bomb explosions take ${(0.5 * r).toFixed(1)}s off The Big One's cooldown, and The Big One needs ${2 * r} fewer thugs around to go off.`,
     apply: (c, r) => {
@@ -158,16 +163,19 @@ export const BOOM_TALENTS = [
       c.link('rc_car', 'big_one', 'explode', 1, (run, p) => { p.cd = Math.max(0, p.cd - 0.5 * r); }, { icd: 0.25 });
     } },
   { id: 'b_wired_gum', tree: 'sapper', row: 6, col: 1, max: 3, name: 'Gum on the Wire', icon: '🍬', pair: 'sticky_bomb',
-    desc: (r) => `Each time the Detonator goes off, it also slaps a Sticky Bomb on the ${r === 1 ? 'toughest thug' : `${r} toughest thugs`} near your charges (Sticky Bomb's damage ×0.8, 1s fuse), ready for the next chain.`,
-    apply: (c, r) => c.link('detonator', 'sticky_bomb', 'fire', 1, (run, p, ev) => {
-      const list = Array.isArray(ev.tgt) ? ev.tgt : [];
-      const used = new Set();
-      for (const ch of list) {
-        if (used.size >= r) break;
-        const t = stickNear(run, p, ch.x, ch.z, 5, { dmg: 0.8, fuse: 1, skip: used });
-        if (t) used.add(t);
-      }
-    }, { icd: 0 }) },
+    desc: (r) => `Each time the Detonator goes off, it also slaps a Sticky Bomb on the ${r === 1 ? 'toughest thug' : `${r} toughest thugs`} near your charges (Sticky Bomb's damage ×0.8, 1s fuse), ready for the next chain. The Big Red Button flings ${2 * r} more gum-bombs in its ring.`,
+    apply: (c, r) => {
+      c.flagAdd('ringGum', 2 * r);
+      c.link('detonator', 'sticky_bomb', 'fire', 1, (run, p, ev) => {
+        const list = Array.isArray(ev.tgt) ? ev.tgt : [];
+        const used = new Set();
+        for (const ch of list) {
+          if (used.size >= r) break;
+          const t = stickNear(run, p, ch.x, ch.z, 5, { dmg: 0.8, fuse: 1, skip: used });
+          if (t) used.add(t);
+        }
+      }, { icd: 0 });
+    } },
   { id: 'b_doomsday', tree: 'sapper', row: 7, col: 1, max: 1, name: 'Doomsday', icon: '☢️', capstone: true, pair: 'big_one',
     desc: () => 'The Big One gets +25% area, goes off a second time 1s later (60% damage), and its blast instantly recharges every other explosive ability.',
     apply: (c) => {

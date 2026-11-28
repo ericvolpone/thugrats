@@ -53,6 +53,7 @@
         <div class="dm-foot">bar: total since reset · right: DPS (last 30s)</div>
       </div>
       <div id="banner"><h1></h1><p></p></div>
+      <div id="loot-card" class="hidden"></div>
       <div id="toasts"></div>
       <div id="hurt"></div>
     </div>
@@ -60,6 +61,7 @@
     <div id="touch-zone" class="hidden"></div>
     <div id="stick"><div class="knob"></div></div>
     <button id="jump-btn" class="hidden" aria-label="Jump">JUMP</button>
+    <button id="sig-btn" class="hidden" aria-label="Signature move">★</button>
 
     <div id="choice" class="hidden overlay">
       <div class="panel wide">
@@ -81,6 +83,7 @@
         <h2>Paused</h2>
         <div id="pause-build"></div>
         <p class="note" style="text-align:center">Move: WASD / left stick / drag left side · Turn camera: Q E / right stick / drag · Jump: Space / Ⓐ / JUMP button</p>
+        <div class="sig-setting"><span>Signature move</span><button class="btn small" data-act="sig-auto">Auto</button><button class="btn small" data-act="sig-manual">Manual (Ⓨ / F / ★)</button></div>
         <div class="row">
           <button class="btn" data-act="resume">Resume</button>
           <button class="btn ghost" data-act="quit">Abandon Run</button>

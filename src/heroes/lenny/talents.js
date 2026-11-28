@@ -16,7 +16,7 @@ import { freeCast, boltFrom, ringShot, addStatus, statusN, tint } from '../commo
  */
 export const LENNY_TREES = [
   { id: 'trigger', name: 'Trigger Man', icon: '🔫', color: '#ff6b5a', blurb: 'Guns, crits and a whole lot of lead.' },
-  { id: 'rackets', name: 'Racketeering', icon: '🤝', color: '#f2c037', blurb: 'Clout, shakedowns and fear. Gold is power.' },
+  { id: 'rackets', name: 'Racketeering', icon: '🤝', color: '#f2c037', blurb: 'Buy-ins, shakedowns and fear. Gold is power.' },
   { id: 'family', name: 'Family Business', icon: '🤵', color: '#6fd0ff', blurb: 'Luck, the crew, and friends who owe you favours.' },
 ];
 
@@ -58,9 +58,9 @@ export const LENNY_TALENTS = [
       }, { icd: 0.5 });
     } },
 
-  // ── Racketeering (Clout = gold held, Protection Racket, Make an Example) ──
+  // ── Racketeering (Buy In, Protection Racket, Make an Example) ──
   { id: 'deep_pockets', tree: 'rackets', row: 0, col: 0, max: 5, name: 'Deep Pockets', icon: '👛',
-    desc: (r) => `Clout counts ${40 * r} more gold (max Clout +${4 * r}%).`, apply: (c, r) => c.flagAdd('cloutCap', 40 * r) },
+    desc: (r) => `Buy-ins cost ${6 * r}% less gold.`, apply: (c, r) => c.flagAdd('buyInDiscount', 0.06 * r) },
   { id: 'collection_day', tree: 'rackets', row: 0, col: 2, max: 3, name: 'Collection Day', icon: '📒',
     desc: (r) => `Protection Racket: +${20 * r}% coin chance and +${8 * r}% radius.`,
     apply: (c, r) => { c.abil('racket', 'payout', 'pct', 20 * r); c.abil('racket', 'area', 'pct', 8 * r); } },
@@ -79,9 +79,11 @@ export const LENNY_TALENTS = [
   { id: 'muscle', tree: 'rackets', row: 2, col: 2, max: 3, name: 'Muscle', icon: '💪',
     desc: (r) => `Thugs shaken down by Protection Racket take +${4 * r}% more damage.`, apply: (c, r) => c.abil('racket', 'vuln', 'add', 0.04 * r) },
   { id: 'compound_interest', tree: 'rackets', row: 3, col: 1, max: 3, name: 'Compound Interest', icon: '📈',
-    desc: (r) => `Clout is ${15 * r}% stronger (every 10 gold gives +${(1 + 0.15 * r).toFixed(2)}% damage).`, apply: (c, r) => c.flagAdd('cloutMult', 0.15 * r) },
+    desc: (r) => `Each buy-in stack gives +${(1.5 * r).toFixed(1)}% more damage (+${(8 + 1.5 * r).toFixed(1)}% per stack, favours +${((8 + 1.5 * r) * 1.5).toFixed(1)}%).`,
+    apply: (c, r) => c.flagAdd('buyInDmg', 0.015 * r) },
   { id: 'untouchable_boss', tree: 'rackets', row: 4, col: 1, max: 1, name: 'Untouchable', icon: '🎩', capstone: true,
-    desc: () => 'Nobody hits the Boss: Clout also cuts the damage you take, up to 12% at full Clout.', apply: (c) => c.flag('cloutArmor', 0.12) },
+    desc: () => 'Nobody hits the Boss: every buy-in also cuts the damage you take by 3% (up to 15%).',
+    apply: (c) => { c.flag('buyInArmor', 0.03); c.flag('buyInArmorCap', 0.15); } },
   { id: 'pay_up', tree: 'rackets', row: 5, col: 0, max: 3, name: 'Pay Up', icon: '🫴', pair: 'racket',
     desc: (r) => `Make an Example shakes down everything it hits for ${r + 1}s (Protection Racket's extra damage), and each thug it hits has a ${5 * r}% chance to cough up a coin.`,
     apply: (c, r) => c.link('make_example', 'racket', 'hit', 1, (run, p, ev) => {

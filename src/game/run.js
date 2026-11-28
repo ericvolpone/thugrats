@@ -147,6 +147,27 @@ export class Run {
     r.value -= n;
     return true;
   }
+  /** Is the hero's signature move ready? (hero.signature.ready, or a full meter) */
+  sigReady() {
+    const sig = this.hero.signature;
+    if (!sig || !this.res || this.player.dead || this.sigLock > this.time) return false;
+    return sig.ready ? sig.ready(this) : this.res.value >= this.res.max;
+  }
+  /**
+   * Fire the hero's signature move (hero.signature.fire). By default it empties the
+   * meter; signatures that manage the meter themselves set keepMeter.
+   */
+  useSignature() {
+    if (!this.sigReady()) return false;
+    const sig = this.hero.signature;
+    this.sigLock = this.time + 0.6;
+    if (!sig.keepMeter) this.res.value = 0;
+    sig.fire(this);
+    this.sigUses = (this.sigUses ?? 0) + 1;
+    this.ui.banner(`${sig.icon} ${sig.name.toUpperCase()}!`, sig.short ?? '', false);
+    this.log.push('signature', { id: sig.id });
+    return true;
+  }
   /** Count up a named counter; true every `n`th call (set bonuses like "every 10th shot"). */
   every(key, n) {
     const c = (this.counters[key] = (this.counters[key] ?? 0) + 1);
@@ -361,18 +382,19 @@ export class Run {
         this.world.altars[t.i].beam.material.opacity = 0;
       }
       for (let i = 0; i < 25; i++) this.pickups.coin(m.x + rand(-3, 3), m.z + rand(-3, 3), 4);
-      if (t) this.rollGearDrop(t.i);
+      const gear = t ? this.rollGearDrop(t.i) : null;
       this.addXp(this.xpNext - this.xp + 0.01, true);
+      // loot card: what the titan left (always shown, so you know the gear roll happened)
+      this.ui.loot?.({ title: `${def.name} has fallen!`, gear, final: !!def.final, gold: def.final ? 100 : 140 });
+      this.choiceHold = this.time + 2.5; // let the loot card show before the free level's cards
       if (def.final) {
         // the clear is banked now; the run goes on until you evacuate (or don't make it)
         this.clearedAt = this.time;
         Save.recordClear(this.hero.id, this.map.id, this.diffIndex);
-        this.ui.banner(`${def.name} has fallen!`, 'Map cleared — evac chopper inbound');
         this.toast('🚁 Get to the chopper (H on the minimap) to get out with a bonus — or stay and see how long you last against the Feds.');
         sfx('victory');
         this.later(2.5, () => { if (!this.ended) this.evac = new Evac(this); });
       } else {
-        this.ui.banner(`${def.name} has fallen!`, 'Contract complete — cash it in at the Black Market');
         this.contracts++;
         this.pickups.market.open = true;
         this.toast('📜 Contract complete! Take it to the Black Market ($ on the minimap) for Contraband.');
@@ -388,18 +410,24 @@ export class Run {
     }
   }
 
-  /** A Crime Titan died: maybe drop a missing piece of this hero's set for this map (TITAN_DROPS). */
+  /**
+   * A Crime Titan died: maybe drop a missing piece of this hero's set for this map
+   * (TITAN_DROPS). Returns {set, piece?, chance, missing[]} for the loot card.
+   */
   rollGearDrop(titanIndex) {
     const rule = TITAN_DROPS[titanIndex];
     const set = this.hero.sets?.find((s) => s.map === this.map.id);
-    if (!rule || !set) return;
+    if (!rule || !set) return null;
     const missing = rule.slots.map((i) => set.pieceList[i]).filter((p) => Save.gearTier(this.hero.id, p.id) < 0);
-    if (!missing.length || Math.random() >= rule.chance) return;
+    const res = { set, chance: rule.chance, missing, piece: null };
+    if (!missing.length || Math.random() >= rule.chance) return res;
     const piece = pick(missing);
     Save.unlockGear(this.hero.id, piece.id);
     this.gearDrops.push(piece);
-    this.ui.banner(`🎁 GEAR DROP: ${piece.name}`, `${set.name} · ${piece.slot}`, true);
+    res.piece = piece;
+    res.missing = missing.filter((p) => p !== piece);
     sfx('levelup');
+    return res;
   }
 
   hurtPlayer(amount, src) {
@@ -694,7 +722,7 @@ export class Run {
 
   // ── main loop ──────────────────────────────────────────────
   update(dt) {
-    if (!this.paused && !this.choice && this.queue.length && !this.player.dead && !this.ended) this.openNextChoice();
+    if (!this.paused && !this.choice && this.queue.length && !this.player.dead && !this.ended && this.time >= (this.choiceHold ?? 0)) this.openNextChoice();
     if (this.paused || this.ended) {
       this.updateCamera(0);
       return;
@@ -764,8 +792,13 @@ export class Run {
     if (this.res) {
       const r = this.res;
       r.idle += dt;
-      if (r.decay && r.idle > (r.decayDelay ?? 2)) r.value = Math.max(0, r.value - r.decay * dt);
+      if (r.decay && r.idle > (r.decayDelay ?? 2) && !(this.hero.signature && this.sigReady() && Save.sigManual())) {
+        r.value = Math.max(0, r.value - r.decay * dt); // a full meter waiting on a manual press doesn't drain
+      }
       r.tick?.(this, dt);
+      // signature move: on its own at a full meter (Auto), or on Y / F / ★ (Manual)
+      const press = this.input.signature?.();
+      if (this.hero.signature && this.sigReady() && (!Save.sigManual() || press)) this.useSignature();
     }
 
     this.updateDirector(dt);

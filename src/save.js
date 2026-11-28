@@ -189,6 +189,9 @@ export const Save = {
     return true;
   },
   settings() { return data.settings; },
+  /** Signature moves fire on their own at a full meter unless set to manual (Y / F / ★). */
+  sigManual() { return !!data.settings.sigManual; },
+  setSigManual(on) { data.settings.sigManual = !!on; write(); },
   saveSettings() { write(); },
   wipe() {
     data = { v: 3, heroes: {}, clears: {}, rep: 0, repTotal: 0, account: {}, settings: data.settings };

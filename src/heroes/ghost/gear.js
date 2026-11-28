@@ -6,7 +6,7 @@ import { boltFrom } from '../common.js';
  * average tier of the pieces you wear from the set. The 5-piece behaviours are
  * flags read in ghost/abilities.js (execChain, trapRearm, knifeReturn,
  * cloakOutCrit, and the Mark flags cashCd / trapMarks in talents.js) or links
- * (Fun House Mirror).
+ * (Fun House Mirror). Shadow Clan's Cloak hooks also fire on Vanish's Cloak.
  */
 const r = (v) => Math.round(v);
 
@@ -63,7 +63,7 @@ export const GHOST_GEAR = [
         apply: (c, k) => { c.abil('#buff', 'duration', 'pct', 25 * k); c.abil('#buff', 'cooldown', 'pct', 10 * k); } },
       3: { desc: () => 'Smoke Bomb also wraps you in a 2s Cloak (needs Cloak in the run; extends one already up).',
         apply: (c) => c.link('smoke', 'cloak', 'fire', 1, (run, p) => p.def.wrap(run, p, 2), { icd: 0 }) },
-      5: { desc: (k) => `Strike from nowhere: for ${(1 + k).toFixed(1)}s after Cloak ends, every hit you land is a crit.`,
+      5: { desc: (k) => `Strike from nowhere: for ${(1 + k).toFixed(1)}s after Cloak ends, every hit you land is a crit (Vanish's Cloak counts).`,
         apply: (c, k) => c.flag('cloakOutCrit', 1 + k) },
     },
   },
